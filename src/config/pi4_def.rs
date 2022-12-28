@@ -17,7 +17,7 @@ use super::{
 #[rustfmt::skip]
 pub fn mvm_config_init() {
     println!("mvm_config_init() init config for VM0, which is manager VM");
-    
+
     vm_cfg_set_config_name("pi4-default");
 
     // vm0 emu
@@ -164,9 +164,9 @@ pub fn mvm_config_init() {
         cmdline:
         // String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/nvme0n1p2 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),
         String::from("coherent_pool=1M snd_bcm2835.enable_compat_alsa=0 snd_bcm2835.enable_hdmi=1 snd_bcm2835.enable_headphones=1 console=ttyAMA0,115200n8 root=/dev/sda1 rootfstype=ext4 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),
-        
+
         image: Arc::new(Mutex::new(VmImageConfig {
-            kernel_img_name: None,
+            kernel_img_name: Some("Raspi4"),
             kernel_load_ipa: 0x280000,
             kernel_load_pa: 0,
             kernel_entry_point: 0x280000,
@@ -182,7 +182,7 @@ pub fn mvm_config_init() {
             allocate_bitmap: 0b0001,
             master: 0,
         })),
-        vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList{emu_dev_list: emu_dev_config,})),
+        vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config })),
         vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
         vm_dtb_devs: Arc::new(Mutex::new(VMDtbDevConfigList::default())),
     };
