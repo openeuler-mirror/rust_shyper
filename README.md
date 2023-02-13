@@ -15,7 +15,7 @@ The list of supported (and work in progress) platforms is presented below:
 - [x] Raspberry Pi 4 Model B
 - [ ] QEMU (still work in progress)
 
-## Hot to Build
+## How to Build
 
 Simply run `make`
 
@@ -183,4 +183,4 @@ then you can interact with the guest VM.
 
 ## References
 
-1. Shen, Yicong, et al. "Shyper: An embedded hypervisor applying hierarchical resource isolation strategies for mixed-criticality systems." 2022 Design, Automation & Test in Europe Conference & Exhibition (DATE). IEEE, 2022.
+1. Li, Siran, et al. "VM Migration and Live-Update for Reliable Embedded Hypervisor." Dependable Software Engineering. Theories, Tools, and Applications: 8th International Symposium, SETTA 2022, Beijing, China, October 27-29, 2022, Proceedings. Cham: Springer Nature Switzerland, 2022.
