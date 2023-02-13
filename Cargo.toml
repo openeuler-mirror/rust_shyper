@@ -1,5 +1,5 @@
 [package]
-name = "rust_hypervisor"
+name = "rust_shyper"
 version = "0.1.0"
 authors = ["Siran Li <953760237@qq.com>"]
 edition = "2021"

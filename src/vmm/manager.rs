@@ -206,7 +206,8 @@ pub fn vmm_boot_vm(vm_id: usize) {
             }
             Some(vcpu) => {
                 gicc_clear_current_irq(true);
-                current_cpu().scheduler().wakeup(vcpu);
+                // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
+                current_cpu().scheduler().yield_to(vcpu);
                 vmm_boot();
             }
         };
