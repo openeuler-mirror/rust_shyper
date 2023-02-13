@@ -13,7 +13,7 @@ The list of supported (and work in progress) platforms is presented below:
 **aarch64**
 - [x] NVIDIA Jetson TX2
 - [x] Raspberry Pi 4 Model B
-- [ ] QEMU
+- [ ] QEMU (still work in progress)
 
 ## Hot to Build
 

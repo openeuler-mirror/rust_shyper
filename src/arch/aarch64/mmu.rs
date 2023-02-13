@@ -22,6 +22,9 @@ global_asm!(include_str!("start_update.S"));
 #[cfg(not(feature = "update"))]
 global_asm!(include_str!("start_pi4.S"));
 
+#[cfg(feature = "qemu")]
+global_asm!(include_str!("start_qemu.S"));
+
 // const PHYSICAL_ADDRESS_LIMIT_GB: usize = BOARD_PHYSICAL_ADDRESS_LIMIT >> 30;
 // const PAGE_SIZE: usize = 4096;
 // const PAGE_SHIFT: usize = 12;
@@ -194,6 +197,10 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         }
         // 0x8_0000_0000 + 0x0_c000_0000
         lvl1_pt.lvl1[32 + 3] = BlockDescriptor::table(lvl2_base);
+    }
+    #[cfg(feature = "qemu")]
+    {
+        todo!()
     }
 }
 

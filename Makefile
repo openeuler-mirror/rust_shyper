@@ -15,11 +15,11 @@ IMAGE=rust_shyper
 
 qemu_debug:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-qemu.json --features qemu
-	${OBJDUMP} --demangle -d target/aarch64/debug/${IMAGE} > target/aarch64/debug/t.txt
+	${OBJDUMP} --demangle -d target/aarch64-qemu/debug/${IMAGE} > target/aarch64-qemu/debug/t.txt
 
 qemu_release:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-qemu.json --features qemu --release
-	${OBJDUMP} --demangle -d target/aarch64/release/${IMAGE} > target/aarch64/release/t.txt
+	${OBJDUMP} --demangle -d target/aarch64-qemu/release/${IMAGE} > target/aarch64-qemu/release/t.txt
 
 tx2:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2.json --features tx2
