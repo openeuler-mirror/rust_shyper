@@ -320,7 +320,6 @@ pub fn migrate_data_abort_handler(emu_ctx: &EmuContext) {
         // vm.show_pagetable(emu_ctx.address);
         let vm_id = vm.id();
 
-        // emu_ctx.address here is pa, not ipa
         let (pa, len) = vm.pt_set_access_permission(emu_ctx.address, PTE_S2_FIELD_AP_RW);
         // println!(
         //     "migrate_data_abort_handler: emu_ctx addr 0x{:x}, write pa {:x}, len 0x{:x}",

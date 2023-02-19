@@ -487,19 +487,11 @@ impl Vm {
     }
 
     // ap: access permission
-    pub fn pt_set_access_permission(&self, pa: usize, ap: usize) -> (usize, usize) {
+    pub fn pt_set_access_permission(&self, ipa: usize, ap: usize) -> (usize, usize) {
         let vm_inner = self.inner.lock();
         match &vm_inner.pt {
             Some(pt) => {
-                for i in 0..vm_inner.mem_region_num {
-                    let start = vm_inner.pa_region[i].pa_start;
-                    let end = start + vm_inner.pa_region[i].pa_length;
-                    if pa >= start && pa < end {
-                        let ipa_start = (pa as isize + vm_inner.pa_region[i].offset) as usize;
-                        return pt.access_permission(ipa_start, PAGE_SIZE, ap);
-                    }
-                }
-                panic!("pt_set_access_permission illegal pa 0x{:x}", pa);
+                return pt.access_permission(ipa, PAGE_SIZE, ap);
             }
             None => {
                 panic!("pt_set_access_permission: vm{} pt is empty", vm_inner.id);
