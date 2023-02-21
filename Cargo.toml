@@ -1,8 +1,9 @@
 [package]
 name = "rust_shyper"
 version = "0.1.0"
-authors = ["Siran Li <953760237@qq.com>"]
+authors = ["Rust-Shyper Team"]
 edition = "2021"
+description = "A Reliable Embedded Hypervisor Supporting VM Migration and Hypervisor Live-Update"
 build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
