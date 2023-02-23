@@ -1,0 +1,51 @@
+[package]
+name = "rust_shyper"
+version = "0.1.0"
+authors = [
+    "Siran Li <ohmrlsr@buaa.edu.cn>",
+    "Ce Mo <moce4917@buaa.edu.cn>",
+    "Keyang Hu <hky1999@buaa.edu.cn>",
+    "Bo Jiang <jiangbo@buaa.edu.cn>",
+    "Lei Wang <wanglei@buaa.edu.cn>",
+]
+edition = "2021"
+description = "A Reliable Embedded Hypervisor Supporting VM Migration and Hypervisor Live-Update"
+build = "build.rs"
+license = "MulanPSL-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+lto = true
+panic = "abort"
+debug = true
+
+[dependencies]
+vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
+#nostd_async = "0.6.0"
+#woke = "0.0.2"
+fdt = { path = "libfdt-binding" }
+log = { version = "0.4", features = [
+    "max_level_trace",
+    "release_max_level_info",
+] }
+#volatile = "0.4.4"
+spin = { version = "0.9.4", features = ["use_ticket_mutex"] }
+cortex-a = "7.4.0"
+buddy_system_allocator = "0.8.0"
+
+[dependencies.tock-registers]
+version = "0.7.0"
+default-features = false
+features = ["register_types"]
+
+[features]
+tx2 = []
+qemu = []
+pi4 = []
+update = []
+ramdisk = []
+static-config = []
