@@ -6,9 +6,9 @@ A Reliable Embedded Hypervisor Supporting VM Migration and Hypervisor Live-Updat
 
 ## Introduction
 
-**Rust-Shyper** is an embedded type-1 hypervisor built with Rust, which has both high performance and high reliability. We have proposed low overhead VM migration and hypervisor live-update mechanisms to enable Rust-Shyper to tolerate hardware faults at runtime and dynamically fix hypervisor bugs.
+**Rust-Shyper** is an embedded type-1 hypervisor built with Rust, which has both high performance and high reliability. Designed for embedded platform, Rust-Shyper provides a small TCB and ensures isolation between different VMs. Furthermore, it can offer differentiated services for VMs such that the real-time performance of critical VMs are guaranteed. We have proposed low overhead VM migration and hypervisor live-update mechanisms to enable Rust-Shyper to tolerate hardware faults at runtime and dynamically fix hypervisor bugs. 
 
-Rust-Shyper can offer strong isolation between VMs and provides differentiated services for mixed-criticality systems. Rust-Shyper offers differentiated services for different VMs. Memory is statically assigned using 2-stage translation; virtual interrupts are managed by hypervisor through GIC; for device models, emulated devices, virtio devices and pass-through devices are offered; and it implements vCPU scheduling for shared physical CPU cores. For real-time virtualization, we apply GIC partial pass-though (GPPT) to minimize interrupt latency in virtualized environments. For critical VMs, physical CPUs are assigned to vCPU 1-1 to guarantee the real-time performance.
+Rust-Shyper was developed by the OS research team of the School of Computer Science and Engineering(SCSE), Beihang University(BUAA) with a funding of Huawei Technologies Co.,Ltd.
 
 ## Supported Platforms
 
@@ -20,6 +20,8 @@ The list of supported (and work in progress) platforms is presented below:
 - [ ] QEMU (still work in progress)
 
 ## How to Build
+
+Tools for compiling: please install [aarch64-none-elf toolchain](https://developer.arm.com/downloads/-/gnu-a) and [cargo-binutils](https://crates.io/crates/cargo-binutils/0.3.6)
 
 Simply run `make`
 
@@ -185,10 +187,18 @@ sudo tools/shyper vm boot <VMID>
 
 then you can interact with the guest VM.
 
-## References
+## Publications
 
-1. Li, Siran, et al. "VM Migration and Live-Update for Reliable Embedded Hypervisor." Dependable Software Engineering. Theories, Tools, and Applications: 8th International Symposium, SETTA 2022, Beijing, China, October 27-29, 2022, Proceedings. Cham: Springer Nature Switzerland, 2022.
+1. Siran Li, Lei Wang, Keyang Hu, Ce Mo, Bo Jiang. - [VM Migration and Live-Update for Reliable Embedded Hypervisor](https://link.springer.com/chapter/10.1007/978-3-031-21213-0_4)
 
+#### About Us
+
+The developers of Rust-Shyper come from the OS research team of the School of Computer Science and Engineering, Beihang University. If you have any questions, please contact us via e-mail.
+- Lei Wang: Professor, [Homepage](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn
+- Bo Jiang: Associate Professor, [Homepage](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
+- Siran Li: Postgraduate student, ohmrlsr@buaa.edu.cn
+- Keyang Hu: Postgraduate student, hky1999@buaa.edu.cn
+- Ce Mo: Postgraduate student, moce4917@buaa.edu.cn
 
 #### Contribution
 

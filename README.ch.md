@@ -6,7 +6,9 @@ A Reliable Embedded Hypervisor Supporting VM Migration and Hypervisor Live-Updat
 
 ## 介绍
 
-**Rust-Shyper** 是一个使用高级语言Rust编写的面向嵌入式场景的Type-1型虚拟机监视器（Hypervisor）。其设计目标在于提高资源利用率的同时，同时保障虚拟机实时性、隔离性与可靠性的需求。为达成上述目的，首先Rust-Shyper选用Rust作为编程语言，利用语言本身的安全特性提升代码质量，从语言层面保障系统软件的可靠性。其次，为了保障虚拟机的隔离性需求，Rust-Shyper针对CPU、中断、设备、内存等公共资源实现了有效的隔离策略，保证了同一资源被不同虚拟机共享的同时，虚拟机无法越界访问不属于当前虚拟机的资源。另外，为了保障虚拟机实时性需求，Rust-Shyper实现了中断部分直通机制以及中介传递设备模型，有效缩减虚拟化对实时性能的影响。最后，为了进一步保障监视器可靠性，本文实现了虚拟机迁移（VM migration）以及监视器动态升级（Hypervisor Live-update）两种热更新机制修复虚拟机监视器可能存在的代码漏洞。
+**Rust-Shyper** 是一个使用高级语言Rust编写的面向嵌入式场景的Type-1型虚拟机监视器（Hypervisor）。其设计目标在于提高资源利用率的同时，同时保障虚拟机实时性、隔离性与可靠性的需求。为达成上述目的，首先Rust-Shyper选用Rust作为编程语言，利用语言本身的安全特性提升代码质量，从语言层面保障系统软件的可靠性。其次，为了保障虚拟机的隔离性需求，Rust-Shyper针对CPU、中断、设备、内存等公共资源实现了有效的隔离策略，保证了同一资源被不同虚拟机共享的同时，虚拟机无法越界访问不属于当前虚拟机的资源。另外，为了保障虚拟机实时性需求，Rust-Shyper实现了中断部分直通机制以及中介传递设备模型，有效缩减虚拟化对实时性能的影响。最后，为了进一步保障监视器可靠性，本项目实现了虚拟机迁移（VM migration）以及监视器动态升级（Hypervisor Live-update）两种热更新机制修复虚拟机监视器可能存在的代码漏洞。
+
+Rust-Shyper是由北航计算机学院操作系统研究团队，在华为技术有限公司资助下开发完成。
 
 ## 目前支持的硬件平台
 
@@ -18,6 +20,8 @@ A Reliable Embedded Hypervisor Supporting VM Migration and Hypervisor Live-Updat
 - [ ] QEMU (still work in progress)
 
 ## 如何编译
+
+需要的额外工具：[aarch64-none-elf的编译工具链](https://developer.arm.com/downloads/-/gnu-a)以及[cargo-binutils](https://crates.io/crates/cargo-binutils/0.3.6)
 
 只需要使用`make`工具即可
 
@@ -189,10 +193,18 @@ sudo tools/shyper vm boot <VMID>
 
 然后就可以和客户虚拟机进行交互了
 
-## 参考文献
+## 发表文献
 
-1. Li, Siran, et al. "VM Migration and Live-Update for Reliable Embedded Hypervisor." Dependable Software Engineering. Theories, Tools, and Applications: 8th International Symposium, SETTA 2022, Beijing, China, October 27-29, 2022, Proceedings. Cham: Springer Nature Switzerland, 2022.
+1. Siran Li, Lei Wang, Keyang Hu, Ce Mo, Bo Jiang. - [VM Migration and Live-Update for Reliable Embedded Hypervisor](https://link.springer.com/chapter/10.1007/978-3-031-21213-0_4)
 
+#### 关于我们
+
+Rust-Shyper的开发者来自北京航空航天大学计算机学院操作系统研究团队。如果有什么问题，请您通过电子邮件联系我们。
+- 王雷：教授，博士生导师。[个人主页](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn。
+- 姜博：副教授，博士生导师。[个人主页](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
+- 李思然：硕士研究生 ohmrlsr@buaa.edu.cn
+- 胡柯洋：硕士研究生 hky1999@buaa.edu.cn
+- 莫策：硕士研究生 moce4917@buaa.edu.cn
 
 #### 参与贡献
 
