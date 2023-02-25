@@ -271,7 +271,7 @@ impl Virtq {
         if trace() && addr < 0x1000 {
             panic!("illegal desc ring addr {:x}", addr);
         }
-        inner.desc_table = Some(unsafe { slice::from_raw_parts_mut(addr as *mut VringDesc, 16 * DESC_QUEUE_SIZE) });
+        inner.desc_table = Some(unsafe { slice::from_raw_parts_mut(addr as *mut VringDesc, DESC_QUEUE_SIZE) });
     }
 
     pub fn set_avail(&self, addr: usize) {
@@ -415,7 +415,7 @@ impl Virtq {
         //          data.ready, data.vq_index, data.last_avail_idx, data.last_used_idx, data.desc_table_ipa, data.avail_ipa, data.used_ipa, desc_table_addr, avail_addr, used_addr);
         if desc_table_addr != 0 {
             inner.desc_table =
-                Some(unsafe { slice::from_raw_parts_mut(desc_table_addr as *mut VringDesc, 16 * DESC_QUEUE_SIZE) });
+                Some(unsafe { slice::from_raw_parts_mut(desc_table_addr as *mut VringDesc, DESC_QUEUE_SIZE) });
         }
         if avail_addr != 0 {
             inner.avail = Some(unsafe { &mut *(avail_addr as *mut VringAvail) });
@@ -462,7 +462,7 @@ impl Virtq {
             None => None,
             Some(desc_table) => {
                 let desc_addr = &desc_table[0] as *const _ as usize;
-                Some(unsafe { slice::from_raw_parts_mut(desc_addr as *mut VringDesc, 16 * DESC_QUEUE_SIZE) })
+                Some(unsafe { slice::from_raw_parts_mut(desc_addr as *mut VringDesc, DESC_QUEUE_SIZE) })
             }
         };
         dst_inner.avail = match &src_inner.avail {
