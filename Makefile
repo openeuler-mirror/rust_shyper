@@ -1,5 +1,5 @@
 # Path
-DISK = /home/ohmr/work/hypervisor/disk-img/disk.img
+DISK = 
 
 # Compile
 ARCH ?= aarch64
