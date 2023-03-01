@@ -23,6 +23,9 @@ lto = true
 panic = "abort"
 debug = true
 
+[build-dependencies]
+cmake = "0.1"
+
 [dependencies]
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
 #nostd_async = "0.6.0"

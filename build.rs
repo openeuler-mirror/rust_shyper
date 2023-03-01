@@ -8,11 +8,16 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use std::env::var;
 use std::process::Command;
+use cmake::Config;
 
 fn main() {
-    println!("cargo:rustc-link-search=native={}/lib", var("PWD").unwrap());
+    let dst = Config::new("libfdt-binding")
+        .profile("release")
+        .build_target("all")
+        .build()
+        .join("build");
+    println!("cargo:rustc-link-search=native={}", dst.display());
     println!("cargo:rustc-link-lib=static=fdt-binding");
     // note: add error checking yourself.
     let output = Command::new("date").arg("+\"%Y-%m-%d %H:%M:%S %Z\"").output().unwrap();

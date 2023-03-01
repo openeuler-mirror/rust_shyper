@@ -6,7 +6,7 @@ ARCH ?= aarch64
 BUILD_STD = core,alloc
 
 # Toolchain
-TOOLCHAIN=aarch64-linux-gnu
+TOOLCHAIN=aarch64-none-elf
 QEMU = /usr/share/qemu/bin/qemu-system-aarch64
 GDB = ${TOOLCHAIN}-gdb
 OBJDUMP = ${TOOLCHAIN}-objdump
