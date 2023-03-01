@@ -14,11 +14,9 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-changed=./");
 
     let bindings = bindgen::Builder::default()
-        .clang_arg("-target")
-        .clang_arg("aarch64")
         .use_core()
         .ctypes_prefix("myctypes")
         .header("wrapper.h")
