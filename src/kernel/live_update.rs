@@ -40,7 +40,7 @@ use crate::kernel::{
     SchedulerUpdate, SHARE_MEM_LIST, timer_irq_handler, UsedInfo, Vcpu, VCPU_LIST, VcpuInner, vm, Vm, VM_IF_LIST,
     vm_ipa2pa, VM_LIST, VM_NUM_MAX, VM_REGION, VmInterface, VmRegion, logger_init,
 };
-use crate::lib::{barrier, BitAlloc256, BitMap, FlexBitmap, time_current_us};
+use crate::lib::{BitAlloc256, BitMap, FlexBitmap, time_current_us};
 use crate::mm::{heap_init, PageFrame};
 use crate::vmm::vmm_ipi_handler;
 
@@ -775,10 +775,9 @@ pub fn vm_list_update(src_vm_list: &Mutex<Vec<Vm>>) {
                             (net.vq(0).unwrap().avail()),
                             vm_ipa2pa(vm.clone(), net.vq(0).unwrap().avail_addr())
                         );
-                        println!(
-                            "VirtioNet save handler {:x}",
-                            unsafe { *(&virtio_net_notify_handler as *const _ as *const usize) }
-                        );
+                        println!("VirtioNet save handler {:x}", unsafe {
+                            *(&virtio_net_notify_handler as *const _ as *const usize)
+                        });
                         mmio.save_mmio(net.clone(), Some(virtio_net_notify_handler));
                         EmuDevs::VirtioNet(mmio)
                     }
@@ -796,10 +795,9 @@ pub fn vm_list_update(src_vm_list: &Mutex<Vec<Vm>>) {
                             (console.vq(0).unwrap().avail()),
                             vm_ipa2pa(vm.clone(), console.vq(0).unwrap().avail_addr())
                         );
-                        println!(
-                            "VirtioConsole save handler {:x}",
-                            unsafe { *(&virtio_console_notify_handler as *const _ as *const usize) }
-                        );
+                        println!("VirtioConsole save handler {:x}", unsafe {
+                            *(&virtio_console_notify_handler as *const _ as *const usize)
+                        });
                         mmio.save_mmio(console.clone(), Some(virtio_console_notify_handler));
                         EmuDevs::VirtioConsole(mmio)
                     }

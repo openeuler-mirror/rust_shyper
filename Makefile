@@ -59,15 +59,15 @@ QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-n
 
 QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.25
 
-run:
+run: qemu_debug
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
 		-kernel target/aarch64-qemu/debug/${IMAGE}.bin
 
-run_release:
+run_release: qemu_release
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
 		-kernel target/aarch64-qemu/release/${IMAGE}.bin
 
-debug:
+debug: qemu_debug
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
 		-kernel target/aarch64-qemu/debug/${IMAGE}.bin \
 		-s -S

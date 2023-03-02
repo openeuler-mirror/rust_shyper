@@ -21,9 +21,9 @@ use crate::kernel::{
     active_vm, active_vm_id, current_cpu, DIRTY_MEM_THRESHOLD, interrupt_vm_inject, ipi_register, ipi_send_msg,
     IpiHvcMsg, IpiInnerMsg, IpiMessage, IpiType, ivc_update_mq, map_migrate_vm_mem, mem_heap_region_reserve,
     migrate_finish_ipi_handler, migrate_ready, Scheduler, send_migrate_memcpy_msg, unmap_migrate_vm_mem,
-    UPDATE_IMG_BASE_ADDR, update_request, vcpu_idle, VgicMigData, VirtioMmioData, vm, vm_if_copy_mem_map,
-    vm_if_dirty_mem_map, vm_if_get_cpu_id, vm_if_ivc_arg, vm_if_ivc_arg_ptr, vm_if_mem_map_dirty_sum,
-    vm_if_mem_map_page_num, vm_if_set_ivc_arg_ptr, VM_NUM_MAX, VMData,
+    UPDATE_IMG_BASE_ADDR, update_request, vcpu_idle, vm, vm_if_copy_mem_map, vm_if_dirty_mem_map, vm_if_get_cpu_id,
+    vm_if_ivc_arg, vm_if_ivc_arg_ptr, vm_if_mem_map_dirty_sum, vm_if_mem_map_page_num, vm_if_set_ivc_arg_ptr,
+    VM_NUM_MAX, VMData,
 };
 use crate::lib::{func_barrier, memcpy_safe, round_up, set_barrier_num, trace};
 use crate::lib::unilib::*;
@@ -542,7 +542,7 @@ pub fn hvc_guest_notify(vm_id: usize) {
             );
         }
         Some(vcpu) => {
-            interrupt_vm_inject(vm.clone(), vcpu.clone(), HVC_IRQ, 0);
+            interrupt_vm_inject(vm, vcpu, HVC_IRQ, 0);
         }
     };
 }

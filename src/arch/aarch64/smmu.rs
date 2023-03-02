@@ -376,10 +376,10 @@ impl SmmuV2 {
 
         println!(
             concat!(
-            "SMMU info:\n",
-            "  page size {:#x}, num pages {}, context base {:#x}\n",
-            "  stream matching with {} register groups\n",
-            "  {} context banks ({} stage-2 only)"
+                "SMMU info:\n",
+                "  page size {:#x}, num pages {}, context base {:#x}\n",
+                "  stream matching with {} register groups\n",
+                "  {} context banks ({} stage-2 only)"
             ),
             page_size, num_pages, context_base, smr_num, context_bank_num, stage2_context_bank_num,
         );

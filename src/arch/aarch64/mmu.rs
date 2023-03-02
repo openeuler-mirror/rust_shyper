@@ -12,11 +12,8 @@ use core::arch::global_asm;
 use tock_registers::*;
 use tock_registers::interfaces::*;
 
-use crate::arch::pt_lvl2_idx;
 use crate::board::PLAT_DESC;
 use crate::lib::memset_safe;
-#[cfg(feature = "pi4")]
-use crate::arch::LVL2_SHIFT;
 
 use super::interface::*;
 
@@ -148,6 +145,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
 
     #[cfg(feature = "tx2")]
     {
+        use crate::arch::pt_lvl2_idx;
         for i in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             let output_addr = i << LVL1_SHIFT;
             lvl1_pt.lvl1[i] = if output_addr >= PLAT_DESC.mem_desc.base {

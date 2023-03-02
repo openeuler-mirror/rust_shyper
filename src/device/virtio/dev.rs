@@ -168,8 +168,8 @@ impl VirtDev {
     pub fn is_net(&self) -> bool {
         let inner = self.inner.lock();
         match &inner.desc {
-            DevDesc::NetDesc(_) => { true }
-            _ => { false }
+            DevDesc::NetDesc(_) => true,
+            _ => false,
         }
     }
 
