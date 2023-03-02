@@ -17,7 +17,7 @@ The list of supported (and work in progress) platforms is presented below:
 **aarch64**
 - [x] NVIDIA Jetson TX2
 - [x] Raspberry Pi 4 Model B
-- [ ] QEMU (still work in progress)
+- [x] QEMU (note that VM migration and Hypervisor Live-update is not supported on QEMU)
 
 ## How to Build
 

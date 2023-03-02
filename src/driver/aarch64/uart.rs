@@ -11,14 +11,15 @@
 use core::ptr;
 
 pub fn putc(byte: u8) {
-    use crate::board::UART_1_ADDR;
     #[cfg(feature = "qemu")]
     unsafe {
-        ptr::write_volatile(UART_1_ADDR as *mut u8, byte);
+        use crate::board::UART_0_ADDR;
+        ptr::write_volatile(UART_0_ADDR as *mut u8, byte);
     }
     // ns16550
     #[cfg(feature = "tx2")]
     unsafe {
+        use crate::board::UART_1_ADDR;
         if byte == '\n' as u8 {
             putc('\r' as u8);
         }

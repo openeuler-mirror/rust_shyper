@@ -17,3 +17,6 @@ upload_update
 .idea
 build/
 pi4_upload_release
+*.img
+*.dts
+*.dtb

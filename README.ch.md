@@ -17,7 +17,7 @@ Rust-Shyper是由北航计算机学院操作系统研究团队，在华为技术
 **aarch64**
 - [x] NVIDIA Jetson TX2
 - [x] Raspberry Pi 4 Model B
-- [ ] QEMU (still work in progress)
+- [x] QEMU (note that VM migration and Hypervisor Live-update is not supported on QEMU)
 
 ## 如何编译
 

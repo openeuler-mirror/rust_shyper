@@ -210,7 +210,18 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     }
     #[cfg(feature = "qemu")]
     {
-        todo!()
+        use crate::arch::LVL2_SHIFT;
+        for index in 0..PLATFORM_PHYSICAL_LIMIT_GB {
+            let pa = index << LVL1_SHIFT;
+            lvl1_pt.lvl1[index] = BlockDescriptor::new(pa, pa < PLAT_DESC.mem_desc.base);
+        }
+        lvl1_pt.lvl1[32] = BlockDescriptor::table(lvl2_base);
+        for (index, pa) in (0..PLAT_DESC.mem_desc.base).step_by(1 << LVL2_SHIFT).enumerate() {
+            if index >= 512 {
+                break;
+            }
+            lvl2_pt.lvl1[index] = BlockDescriptor::new(pa, true);
+        }
     }
 }
 
