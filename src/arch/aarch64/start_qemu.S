@@ -4,13 +4,13 @@
 _start:
     mov x20, x0
 // #ifdef PLATFORM_TX2
-    mrs x0, mpidr_el1
-    and x1, x0, #0x100
-    cbz x1, 1f
-    and x0, x0, #3
-    b   2f
-1:  wfe
-    b   1b
+//     mrs x0, mpidr_el1
+//     and x1, x0, #0x100
+//     cbz x1, 1f
+//     and x0, x0, #3
+//     b   2f
+// 1:  wfe
+//     b   1b
 
 // #endif
 // #ifdef PLATFORM_QEMU
@@ -47,7 +47,6 @@ _start:
     adrp x1, boot_stack
     mov x2, (4096 * 2)
     mul x3, x0, x2
-    add x1, x1, x2
     add x1, x1, x3
 
     mov sp, x1
