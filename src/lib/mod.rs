@@ -24,5 +24,5 @@ mod cache;
 mod print;
 mod string;
 mod time;
-mod util;
 pub mod unilib;
+mod util;

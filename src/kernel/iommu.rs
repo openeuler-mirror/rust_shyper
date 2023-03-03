@@ -22,7 +22,7 @@ pub fn iommu_init() {
 
 pub fn iommmu_vm_init(vm: Vm) -> bool {
     if cfg!(feature = "tx2") {
-        return smmu_vm_init(vm.clone());
+        return smmu_vm_init(vm);
     } else {
         println!("Platform not support IOMMU");
         return false;

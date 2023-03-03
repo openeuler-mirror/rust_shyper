@@ -312,12 +312,7 @@ pub fn vmm_reboot() {
     crate::arch::vcpu_arch_init(vm.clone(), vm.vcpu(0).unwrap());
     vcpu.reset_context();
 
-    // TODO: rewite hard code.
-    // vmm_load_image(
-    //     vm.clone(),
-    //     include_bytes!("../../image/Image_vanilla"),
-    // );
-    vmm_load_image_from_mvm(vm.clone());
+    vmm_load_image_from_mvm(vm);
 
     // vcpu_run();
 }

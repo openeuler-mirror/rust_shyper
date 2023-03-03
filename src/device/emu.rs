@@ -39,7 +39,7 @@ impl EmuDevs {
         match self {
             EmuDevs::Vgic(vgic) => {
                 if let EmuDevs::Vgic(src_vgic) = src_dev {
-                    vgic.save_vgic(src_vgic.clone());
+                    vgic.save_vgic(src_vgic);
                 } else {
                     println!("EmuDevs::migrate_save: illegal src dev type for vgic");
                 }

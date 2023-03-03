@@ -10,7 +10,7 @@
 
 /**
  * This module is used to forward the unilib request from Unishyper to MVM.
- * Note: 
+ * Note:
  *  Currently it's a synchronous process, which means it's unefficient.
  *  In the case of 1-to-1 CPU partion strategy, I don't think it's a problem.
  *  But for different Unishypers runs on one single CPU, stucking in EL2 may cause a big efficiency problem,
@@ -119,7 +119,11 @@ impl UnilibFS {
     fn loop_for_response(&self) -> usize {
         loop {
             if self.flag() != 0 {
-                println!("unilib operation finished, flag {}, value {}", self.flag(), self.value());
+                println!(
+                    "unilib operation finished, flag {}, value {}",
+                    self.flag(),
+                    self.value()
+                );
                 break self.value();
             }
             sleep(1);
@@ -182,7 +186,7 @@ pub fn unilib_fs_append(mmio_ipa: usize) -> Result<usize, ()> {
     let vm = active_vm().unwrap();
     let mmio_pa = vm_ipa2pa(vm.clone(), mmio_ipa);
     let unilib_fs = UnilibFS { base_addr: mmio_pa };
-    let buf_pa = vm_ipa2pa(vm.clone(), unilib_fs.buf_ipa());
+    let buf_pa = vm_ipa2pa(vm, unilib_fs.buf_ipa());
     println!(
         "unilib_fs_append: VM[{}] fs_mmio_ipa 0x{:x}, buf ipa 0x{:x}, buf_pa 0x{:x}",
         unilib_fs.vm_id(),
@@ -223,7 +227,7 @@ pub fn unilib_fs_open(path_start_ipa: usize, path_length: usize, flags: usize) -
     // println!(
     //     "VM[{}] unilib fs open path_ipa: {:x}, path_length {}, flags {}",
     //     vm_id, path_start_ipa, path_length, flags
-    // );    
+    // );
     // Get fs_cfg struct according to vm_id.
     let fs_list_lock = UNILIB_FS_LIST.lock();
     let fs_cfg = match fs_list_lock.get(&vm_id) {
@@ -350,7 +354,7 @@ pub fn unilib_fs_read(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, ()
     if res < 0 {
         return Ok(res as usize);
     }
-    let buf_pa = vm_ipa2pa(vm.clone(), buf_ipa);
+    let buf_pa = vm_ipa2pa(vm, buf_ipa);
     memcpy_safe(buf_pa as *mut u8, fs_cfg.get_buf(), fs_cfg.value());
     Ok(fs_cfg.value())
 }
@@ -411,7 +415,7 @@ pub fn unilib_fs_write(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, (
 /// Reposition read/write file offset.
 /// lseek() repositions the file offset of the open file description associated with the file descriptor fd to the argument offset according to the directive whence.
 /// It's a synchronous process trigger by GVM.
-/// Upon successful completion, lseek() returns the resulting offset 
+/// Upon successful completion, lseek() returns the resulting offset
 /// location as measured in bytes from the beginning of the file, wrapped by `Result` structure.
 /// ## Arguments
 /// * `fd`     - The file descriptor of file.

@@ -387,7 +387,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                             #[cfg(feature = "pi4")]
-                            let r = fdt_setup_gic(
+                            let _r = fdt_setup_gic(
                                 dtb,
                                 (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
                                 (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
@@ -454,7 +454,7 @@ pub fn vmm_setup_config(vm_id: usize) {
     println!(
         "vmm_setup_config VM[{}] name {:?} current core {}",
         vm_id,
-        config.name.clone().unwrap(),
+        config.name.unwrap(),
         current_cpu().id
     );
 

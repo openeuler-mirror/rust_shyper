@@ -17,7 +17,7 @@ use spin::Mutex;
 use crate::board::*;
 use crate::config::vm_cfg_add_vm_entry;
 use crate::device::EmuDeviceType;
-use crate::kernel::{HVC_IRQ, INTERRUPT_IRQ_GUEST_TIMER, VmType};
+use crate::kernel::VmType;
 
 use super::{
     PassthroughRegion, vm_cfg_set_config_name, VmConfigEntry, VmCpuConfig, VMDtbDevConfigList, VmEmulatedDeviceConfig,
@@ -196,5 +196,5 @@ pub fn mvm_config_init() {
         vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
         vm_dtb_devs: Arc::new(Mutex::new(VMDtbDevConfigList::default())),
     };
-    vm_cfg_add_vm_entry(mvm_config_entry);
+    let _ = vm_cfg_add_vm_entry(mvm_config_entry);
 }

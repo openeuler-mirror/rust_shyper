@@ -49,7 +49,7 @@ impl Vcpu {
         inner.id = vcpu_id;
         inner.phys_id = 0;
         drop(inner);
-        crate::arch::vcpu_arch_init(vm.clone(), self.clone());
+        crate::arch::vcpu_arch_init(vm, self.clone());
         self.reset_context();
     }
 
@@ -472,7 +472,7 @@ pub fn vcpu_alloc() -> Option<Vcpu> {
 
     let val = Vcpu::default();
     vcpu_list.push(val.clone());
-    Some(val.clone())
+    Some(val)
 }
 
 pub fn vcpu_remove(vcpu: Vcpu) {
@@ -498,14 +498,14 @@ pub fn vcpu_idle(_vcpu: Vcpu) -> ! {
 pub fn vcpu_run(announce: bool) -> ! {
     {
         let vcpu = current_cpu().active_vcpu.clone().unwrap();
-        let vm = vcpu.vm().unwrap().clone();
+        let vm = vcpu.vm().unwrap();
 
         current_cpu().cpu_state = CpuState::CpuRun;
         vm_if_set_state(active_vm_id(), super::VmState::VmActive);
 
         vcpu.context_vm_restore();
         if announce {
-            crate::device::virtio_net_announce(vm.clone());
+            crate::device::virtio_net_announce(vm);
         }
         // tlb_invalidate_guest_all();
         // for i in 0..vm.mem_region_num() {
