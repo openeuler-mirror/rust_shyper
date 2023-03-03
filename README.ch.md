@@ -195,12 +195,15 @@ sudo tools/shyper vm boot <VMID>
 
 ## 发表文献
 
-1. Siran Li, Lei Wang, Keyang Hu, Ce Mo, Bo Jiang. - [VM Migration and Live-Update for Reliable Embedded Hypervisor](https://link.springer.com/chapter/10.1007/978-3-031-21213-0_4)
+1. Siran Li, Lei Wang, Keyang Hu, Ce Mo, Bo Jiang, VM Migration and Live-Update for Reliable Embedded Hypervisor. In: Dong, W., Talpin, JP. (eds) Dependable Software Engineering. Theories, Tools, and Applications. SETTA 2022. Lecture Notes in Computer Science, vol 13649. Springer, Cham. https://doi.org/10.1007/978-3-031-21213-0_4
+2. Yicong Shen, Lei Wang, Yuanzhi Liang, Siran Li, Bo Jiang, "Shyper: An embedded hypervisor applying hierarchical resource isolation strategies for mixed-criticality systems," 2022 Design, Automation & Test in Europe Conference & Exhibition (DATE), Antwerp, Belgium, 2022, pp. 1287-1292, doi: 10.23919/DATE54114.2022.9774664.
+
+了解Rust-Shyper参见以下slides [基于Rust的嵌入式虚拟机监视器及热更新技术](./doc/%E5%9F%BA%E4%BA%8ERust%E7%9A%84%E5%B5%8C%E5%85%A5%E5%BC%8F%E8%99%9A%E6%8B%9F%E6%9C%BA%E7%9B%91%E8%A7%86%E5%99%A8%E5%8F%8A%E7%83%AD%E6%9B%B4%E6%96%B0%E6%8A%80%E6%9C%AF%EF%BC%88%E7%8E%8B%E9%9B%B7%EF%BC%89.pdf)
 
 #### 关于我们
 
 Rust-Shyper的开发者来自北京航空航天大学计算机学院操作系统研究团队。如果有什么问题，请您通过电子邮件联系我们。
-- 王雷：教授，博士生导师。[个人主页](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn。
+- 王雷：教授，博士生导师。[个人主页](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn
 - 姜博：副教授，博士生导师。[个人主页](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
 - 李思然：硕士研究生 ohmrlsr@buaa.edu.cn
 - 胡柯洋：硕士研究生 hky1999@buaa.edu.cn
