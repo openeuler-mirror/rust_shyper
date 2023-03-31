@@ -249,21 +249,7 @@ impl Cpu {
 
 #[no_mangle]
 #[link_section = ".cpu_private"]
-pub static mut CPU: Cpu = Cpu {
-    id: 0,
-    cpu_state: CpuState::CpuInv,
-    active_vcpu: None,
-    ctx: None,
-    vcpu_array: VcpuArray::new(),
-    sched: SchedType::None,
-    current_irq: 0,
-    cpu_pt: CpuPt {
-        lvl1: [0; PTE_PER_PAGE],
-        lvl2: [0; PTE_PER_PAGE],
-        lvl3: [0; PTE_PER_PAGE],
-    },
-    stack: [0; CPU_STACK_SIZE],
-};
+pub static mut CPU: Cpu = Cpu::default();
 
 pub fn current_cpu() -> &'static mut Cpu {
     unsafe { &mut CPU }
@@ -333,16 +319,7 @@ pub fn cpu_idle() -> ! {
     }
 }
 
-pub static mut CPU_LIST: [Cpu; PLATFORM_CPU_NUM_MAX] = [
-    Cpu::default(),
-    Cpu::default(),
-    Cpu::default(),
-    Cpu::default(),
-    Cpu::default(),
-    Cpu::default(),
-    Cpu::default(),
-    Cpu::default(),
-];
+pub static mut CPU_LIST: [Cpu; PLATFORM_CPU_NUM_MAX] = [const { Cpu::default() }; PLATFORM_CPU_NUM_MAX];
 
 #[no_mangle]
 // #[link_section = ".text.boot"]

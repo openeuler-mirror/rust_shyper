@@ -10,7 +10,7 @@
 
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
-use crate::board::{ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig, PlatMemRegion, SchedRule};
+use crate::board::{ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig, PlatMemRegion, PlatCpuCoreConfig};
 use crate::board::SchedRule::RoundRobin;
 use crate::device::ARM_CORTEX_A57;
 #[allow(unused_imports)]
@@ -68,22 +68,31 @@ pub const DISK_PARTITION_4_SIZE: usize = 11471872;
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
         num: 4,
-        mpidr_list: [0x80000000, 0x80000001, 0x80000002, 0x80000003, 0, 0, 0, 0],
-        name: [ARM_CORTEX_A57; 8],
-        sched_list: [
-            RoundRobin,
-            RoundRobin,
-            RoundRobin,
-            RoundRobin,
-            SchedRule::None,
-            SchedRule::None,
-            SchedRule::None,
-            SchedRule::None,
+        core_list: &[
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 0x80000000,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 0x80000001,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 0x80000002,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 0x80000003,
+                sched: RoundRobin,
+            },
         ],
     },
     mem_desc: PlatMemoryConfig {
-        region_num: 4,
-        regions: [
+        regions: &[
             PlatMemRegion {
                 base: 0xf0000000,
                 size: 0xc000000,
@@ -100,18 +109,6 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
                 base: 0x100000000,
                 size: 0x100000000,
             },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
         ],
         base: 0xf0000000,
     },
@@ -146,7 +143,7 @@ pub fn platform_power_on_secondary_cores() {
         fn _image_start();
     }
     for i in 1..PLAT_DESC.cpu_desc.num {
-        platform_cpu_on(PLAT_DESC.cpu_desc.mpidr_list[i], _image_start as usize, 0);
+        platform_cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _image_start as usize, 0);
     }
 }
 

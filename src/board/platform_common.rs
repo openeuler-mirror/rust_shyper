@@ -12,7 +12,6 @@ use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
 
 pub const PLATFORM_CPU_NUM_MAX: usize = 8;
-pub const TOTAL_MEM_REGION_MAX: usize = 16;
 pub const PLATFORM_VCPU_NUM_MAX: usize = 8;
 
 #[repr(C)]
@@ -29,17 +28,20 @@ pub struct PlatMemRegion {
 
 #[repr(C)]
 pub struct PlatMemoryConfig {
-    pub region_num: usize,
     pub base: usize,
-    pub regions: [PlatMemRegion; TOTAL_MEM_REGION_MAX],
+    pub regions: &'static [PlatMemRegion],
+}
+
+pub struct PlatCpuCoreConfig {
+    pub name: u8,
+    pub mpidr: usize,
+    pub sched: SchedRule,
 }
 
 #[repr(C)]
 pub struct PlatCpuConfig {
     pub num: usize,
-    pub name: [u8; PLATFORM_CPU_NUM_MAX],
-    pub mpidr_list: [usize; PLATFORM_CPU_NUM_MAX],
-    pub sched_list: [SchedRule; PLATFORM_CPU_NUM_MAX],
+    pub core_list: &'static [PlatCpuCoreConfig],
 }
 
 #[repr(C)]

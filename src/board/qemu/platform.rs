@@ -11,8 +11,8 @@
 // TODO: move these core name to device
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
-use crate::board::{ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig, PlatMemRegion};
-use crate::board::SchedRule::{self, RoundRobin};
+use crate::board::{ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig, PlatMemRegion, PlatCpuCoreConfig};
+use crate::board::SchedRule::RoundRobin;
 use crate::device::ARM_CORTEX_A57;
 use crate::driver::{read, write};
 
@@ -46,22 +46,32 @@ pub const DISK_PARTITION_2_SIZE: usize = 8192000;
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
         num: 4,
-        mpidr_list: [0, 1, 2, 3, 4, 5, 6, 7],
-        name: [ARM_CORTEX_A57; 8],
-        sched_list: [
-            RoundRobin,
-            RoundRobin,
-            RoundRobin,
-            RoundRobin,
-            SchedRule::None,
-            SchedRule::None,
-            SchedRule::None,
-            SchedRule::None,
+        core_list: &[
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 0,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 1,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 2,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 3,
+                sched: RoundRobin,
+            },
         ],
     },
     mem_desc: PlatMemoryConfig {
-        region_num: 2,
-        regions: [
+        regions: &[
+            // reserve 0x48000000 ~ 0x48100000 for QEMU dtb
             PlatMemRegion {
                 base: 0x40000000,
                 size: 0x08000000,
@@ -70,20 +80,6 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
                 base: 0x50000000,
                 size: 0x1f0000000,
             },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
-            PlatMemRegion { base: 0, size: 0 },
         ],
         base: 0x40000000,
     },
@@ -118,7 +114,7 @@ pub fn platform_power_on_secondary_cores() {
         fn _image_start();
     }
     for i in 1..PLAT_DESC.cpu_desc.num {
-        platform_cpu_on(PLAT_DESC.cpu_desc.mpidr_list[i], _image_start as usize, 0);
+        platform_cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _image_start as usize, 0);
     }
 }
 

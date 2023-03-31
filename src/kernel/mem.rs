@@ -33,7 +33,7 @@ pub fn mem_heap_region_init() {
         fn _image_end();
     }
 
-    if PLAT_DESC.mem_desc.region_num == 0 {
+    if PLAT_DESC.mem_desc.regions.is_empty() {
         println!("Platform has no memory region!");
     }
 
@@ -77,18 +77,16 @@ pub fn mem_heap_region_reserve(base_addr: usize, size: usize) {
 }
 
 fn mem_vm_region_init() {
-    if PLAT_DESC.mem_desc.region_num - 1 > TOTAL_MEM_REGION_MAX {
-        panic!("Platform memory regions overrun!");
-    } else if PLAT_DESC.mem_desc.region_num == 0 {
+    if PLAT_DESC.mem_desc.regions.is_empty() {
         panic!("Platform Vm Memory Regions Overrun!");
     }
 
-    if PLAT_DESC.mem_desc.region_num <= 1 {
+    if PLAT_DESC.mem_desc.regions.len() <= 1 {
         panic!("Platform has no VM memory region!");
     }
 
     let mut pages: usize = 0;
-    let vm_region_num = PLAT_DESC.mem_desc.region_num - 1;
+    let vm_region_num = PLAT_DESC.mem_desc.regions.len() - 1;
 
     for i in 0..vm_region_num {
         let mut mem_region = MemRegion::new();

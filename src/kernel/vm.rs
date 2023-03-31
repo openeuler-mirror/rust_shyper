@@ -32,16 +32,7 @@ use super::vcpu::Vcpu;
 
 pub const DIRTY_MEM_THRESHOLD: usize = 0x2000;
 pub const VM_NUM_MAX: usize = 8;
-pub static VM_IF_LIST: [Mutex<VmInterface>; VM_NUM_MAX] = [
-    Mutex::new(VmInterface::default()),
-    Mutex::new(VmInterface::default()),
-    Mutex::new(VmInterface::default()),
-    Mutex::new(VmInterface::default()),
-    Mutex::new(VmInterface::default()),
-    Mutex::new(VmInterface::default()),
-    Mutex::new(VmInterface::default()),
-    Mutex::new(VmInterface::default()),
-];
+pub static VM_IF_LIST: [Mutex<VmInterface>; VM_NUM_MAX] = [const { Mutex::new(VmInterface::default()) }; VM_NUM_MAX];
 
 pub fn vm_if_reset(vm_id: usize) {
     let mut vm_if = VM_IF_LIST[vm_id].lock();
