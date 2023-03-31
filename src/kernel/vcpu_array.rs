@@ -20,7 +20,7 @@ pub struct VcpuArray {
 impl VcpuArray {
     pub const fn new() -> Self {
         Self {
-            array: [None, None, None, None, None, None, None, None],
+            array: [const { None }; VM_NUM_MAX],
             len: 0,
         }
     }
@@ -93,7 +93,7 @@ impl VcpuArray {
 
 // Todo: add config for base slice
 pub fn cpu_sched_init() {
-    match PLAT_DESC.cpu_desc.sched_list[current_cpu().id] {
+    match PLAT_DESC.cpu_desc.core_list[current_cpu().id].sched {
         SchedRule::RoundRobin => {
             info!("cpu[{}] init Round Robin Scheduler", current_cpu().id);
             current_cpu().sched = SchedType::SchedRR(SchedulerRR::new(1));
