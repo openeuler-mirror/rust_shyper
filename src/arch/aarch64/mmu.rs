@@ -32,6 +32,9 @@ global_asm!(include_str!("start_pi4.S"));
 #[cfg(feature = "qemu")]
 global_asm!(include_str!("start_qemu.S"));
 
+#[cfg(feature = "rk3588")]
+global_asm!(include_str!("start.S"));
+
 // const PHYSICAL_ADDRESS_LIMIT_GB: usize = BOARD_PHYSICAL_ADDRESS_LIMIT >> 30;
 // const PAGE_SIZE: usize = 4096;
 // const PAGE_SHIFT: usize = 12;
@@ -219,6 +222,39 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
                 break;
             }
             lvl2_pt.lvl1[index] = BlockDescriptor::new(pa, true);
+        }
+    }
+    //todo
+    #[cfg(feature = "rk3588")]
+    {
+        use crate::arch::pt_lvl2_idx;
+        for i in 0..PLATFORM_PHYSICAL_LIMIT_GB {
+            let output_addr = i << LVL1_SHIFT;
+            lvl1_pt.lvl1[i] = if output_addr >= PLAT_DESC.mem_desc.base {
+                BlockDescriptor::new(output_addr, false)
+            } else {
+                BlockDescriptor::invalid()
+            }
+        }
+        // for i in PLATFORM_PHYSICAL_LIMIT_GB..ENTRY_PER_PAGE {
+        //     pt.lvl1[i] = BlockDescriptor::invalid();
+        // }
+
+        // map the devices to HIGH 32GB, whose offset is 2^35 = 0x8_0000_0000
+        lvl1_pt.lvl1[32] = BlockDescriptor::table(lvl2_base);
+        // 0x200000 ~ 2MB
+        // UART0 ~ 0x3000000 - 0x3200000 (0x3100000)
+        // UART1 ~ 0xc200000 - 0xc400000 (0xc280000)
+        // EMMC ~ 0x3400000 - 0x3600000 (0x3460000)
+        // GIC  ~ 0x3800000 - 0x3a00000 (0x3881000)
+        // SMMU ~ 0x12000000 - 0x13000000
+        lvl2_pt.lvl1[pt_lvl2_idx(0x3000000)] = BlockDescriptor::new(0x3000000, true);
+        lvl2_pt.lvl1[pt_lvl2_idx(0xc200000)] = BlockDescriptor::new(0xc200000, true);
+        // lvl2_pt.lvl1[pt_lvl2_idx(0x3400000)] = BlockDescriptor::new(0x3400000, true);
+        lvl2_pt.lvl1[pt_lvl2_idx(0x3800000)] = BlockDescriptor::new(0x3800000, true);
+        for i in 0..(0x100_0000 / 0x200000) {
+            let addr = 0x12000000 + i * 0x200000;
+            lvl2_pt.lvl1[pt_lvl2_idx(addr)] = BlockDescriptor::new(addr, true);
         }
     }
 }

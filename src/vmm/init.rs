@@ -146,6 +146,20 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 } else {
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                 }
+                //todo
+                #[cfg(feature = "rk3588")]
+                if name == "L4T" {
+                    println!("MVM {} loading Image", vm.id());
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/L4T"));
+                } else if name == "Image_vanilla" {
+                    println!("VM {} loading default Linux Image", vm.id());
+                    #[cfg(feature = "static-config")]
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
+                    #[cfg(not(feature = "static-config"))]
+                    println!("*** Please enable feature `static-config`");
+                } else {
+                    warn!("Image {} is not supported", name);
+                }
             }
             None => {
                 // nothing to do, its a dynamic configuration
@@ -366,6 +380,8 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@200000\0".as_ptr());
             #[cfg(feature = "qemu")]
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@50000000\0".as_ptr());
+            #[cfg(feature = "rk3588")]
+            fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@90000000\0".as_ptr());
             // FDT+TIMER
             fdt_add_timer(dtb, 0x8);
             // FDT+BOOTCMD
@@ -391,6 +407,30 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 dtb,
                                 (Platform::GICD_BASE | 0xF_0000_0000) as u64,
                                 (Platform::GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
+                            //todo
+                            #[cfg(feature = "rk3588")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
+                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
+                            //todo
+                            #[cfg(feature = "rk3588")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
+                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
+                            //todo
+                            #[cfg(feature = "rk3588")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
+                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                         }

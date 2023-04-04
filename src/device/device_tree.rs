@@ -15,7 +15,6 @@ use vm_fdt::{Error, FdtWriter, FdtWriterResult};
 use crate::config::{DtbDevType, VmDtbDevConfig};
 use crate::config::VmConfigEntry;
 use crate::device::EmuDeviceType;
-use crate::SYSTEM_FDT;
 use crate::vmm::CPIO_RAMDISK;
 
 const PI4_DTB_ADDR: usize = 0xf0000000;
@@ -151,6 +150,66 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         println!("fdt patched size {}", len);
         let slice = core::slice::from_raw_parts(dtb as *const u8, len);
         SYSTEM_FDT.call_once(|| slice.to_vec());
+    }
+    //todo
+    #[cfg(feature = "rk3588")]
+    unsafe {
+        use fdt::*;
+        println!("fdt orignal size {}", fdt_size(dtb));
+        fdt_pack(dtb);
+        fdt_enlarge(dtb);
+        let r = fdt_del_mem_rsv(dtb, 0);
+        assert_eq!(r, 0);
+        // fdt_add_mem_rsv(fdt, 0x80000000, 0x10000000);
+        fdt_clear_initrd(dtb);
+        let r = fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core0\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core1\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/cpus/cpu@0\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/cpus/cpu@1\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/sdhci@3460000\0".as_ptr());
+        assert_eq!(r, 0);
+        // fdt_disable_node(dtb, "iommu@12000000\0".as_ptr());
+        // assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/sdhci@3440000\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/serial@c280000\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/serial@3110000\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/serial@3130000\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/combined-uart\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/trusty\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/host1x/nvdisplay@15210000\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/reserved-memory/ramoops_carveout\0".as_ptr());
+        assert_eq!(r, 0);
+        let r = fdt_disable_node(dtb, "/watchdog@30c0000\0".as_ptr());
+        assert_eq!(r, 0);
+        // disable denver pmu
+        let r = fdt_disable_node(dtb, "/denver-pmu\0".as_ptr());
+        assert_eq!(r, 0);
+        // modify arm pmu
+        // Hardcode: here, irq and affi are associated with clurster 1, cpu 0
+        let irq: [u32; 1] = [0x128];
+        let affi: [u32; 1] = [0x4];
+        let r = fdt_setup_pmu(
+            dtb,
+            "arm,armv8-pmuv3\0".as_ptr(),
+            irq.as_ptr(),
+            irq.len() as u32,
+            affi.as_ptr(),
+            affi.len() as u32,
+        );
+        assert_eq!(r, 0);
+        let len = fdt_size(dtb);
+        println!("fdt after patched size {}", len);
     }
 }
 

@@ -14,7 +14,8 @@ use alloc::vec::Vec;
 
 use spin::Mutex;
 
-use crate::board::{Platform, PlatOperation};
+use crate::board::*;
+// self.mem_map_cache = None;
 use crate::config::vm_cfg_add_vm_entry;
 use crate::device::EmuDeviceType;
 use crate::kernel::{HVC_IRQ, INTERRUPT_IRQ_GUEST_TIMER, VmType};
@@ -31,62 +32,61 @@ pub fn mvm_config_init() {
     vm_cfg_set_config_name("tx2-default");
 
     // vm0 emu
-    let emu_dev_config = vec![
-        VmEmulatedDeviceConfig {
-            name: Some(String::from("interrupt-controller@3881000")),
-            base_ipa: Platform::GICD_BASE,
-            length: 0x1000,
-            irq_id: 0,
-            cfg_list: Vec::new(),
-            emu_type: EmuDeviceType::EmuDeviceTGicd,
-            mediated: false,
-        },
-        VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_net@a001000")),
-            base_ipa: 0xa001000,
-            length: 0x1000,
-            irq_id: 32 + 0x100,
-            cfg_list: vec![0x74, 0x56, 0xaa, 0x0f, 0x47, 0xd0],
-            emu_type: EmuDeviceType::EmuDeviceTVirtioNet,
-            mediated: false,
-        },
-        VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@a002000")),
-            base_ipa: 0xa002000,
-            length: 0x1000,
-            irq_id: 32 + 0x101,
-            cfg_list: vec![1, 0xa002000],
-            emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
-            mediated: false,
-        },
-        VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@a003000")),
-            base_ipa: 0xa003000,
-            length: 0x1000,
-            irq_id: 32 + 0x102,
-            cfg_list: vec![2, 0xa002000],
-            emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
-            mediated: false,
-        },
-        VmEmulatedDeviceConfig {
-            name: Some(String::from("iommu")),
-            base_ipa: 0x12000000,
-            length: 0x1000000,
-            irq_id: 0,
-            cfg_list: Vec::new(),
-            emu_type: EmuDeviceType::EmuDeviceTIOMMU,
-            mediated: false,
-        },
-        VmEmulatedDeviceConfig {
-            name: Some(String::from("vm_service")),
-            base_ipa: 0,
-            length: 0,
-            irq_id: HVC_IRQ,
-            cfg_list: Vec::new(),
-            emu_type: EmuDeviceType::EmuDeviceTShyper,
-            mediated: false,
-        }
-    ];
+    let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
+    emu_dev_config.push(VmEmulatedDeviceConfig {
+        name: Some(String::from("interrupt-controller@3881000")),
+        base_ipa: PLATFORM_GICD_BASE,
+        length: 0x1000,
+        irq_id: 0,
+        cfg_list: Vec::new(),
+        emu_type: EmuDeviceType::EmuDeviceTGicd,
+        mediated: false,
+    });
+    emu_dev_config.push(VmEmulatedDeviceConfig {
+        name: Some(String::from("virtio_net@a001000")),
+        base_ipa: 0xa001000,
+        length: 0x1000,
+        irq_id: 32 + 0x100,
+        cfg_list: vec![0x74, 0x56, 0xaa, 0x0f, 0x47, 0xd0],
+        emu_type: EmuDeviceType::EmuDeviceTVirtioNet,
+        mediated: false,
+    });
+    emu_dev_config.push(VmEmulatedDeviceConfig {
+        name: Some(String::from("virtio_console@a002000")),
+        base_ipa: 0xa002000,
+        length: 0x1000,
+        irq_id: 32 + 0x101,
+        cfg_list: vec![1, 0xa002000],
+        emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
+        mediated: false,
+    });
+    emu_dev_config.push(VmEmulatedDeviceConfig {
+        name: Some(String::from("virtio_console@a003000")),
+        base_ipa: 0xa003000,
+        length: 0x1000,
+        irq_id: 32 + 0x102,
+        cfg_list: vec![2, 0xa002000],
+        emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
+        mediated: false,
+    });
+    emu_dev_config.push(VmEmulatedDeviceConfig {
+        name: Some(String::from("iommu")),
+        base_ipa: 0x12000000,
+        length: 0x1000000,
+        irq_id: 0,
+        cfg_list: Vec::new(),
+        emu_type: EmuDeviceType::EmuDeviceTIOMMU,
+        mediated: false,
+    });
+    emu_dev_config.push(VmEmulatedDeviceConfig {
+        name: Some(String::from("vm_service")),
+        base_ipa: 0,
+        length: 0,
+        irq_id: HVC_IRQ,
+        cfg_list: Vec::new(),
+        emu_type: EmuDeviceType::EmuDeviceTShyper,
+        mediated: false,
+    });
 
     // vm0 passthrough
     let mut pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig::default();
@@ -148,7 +148,7 @@ pub fn mvm_config_init() {
         PassthroughRegion { ipa: 0x03ad0000, pa: 0x03ad0000, length: 0x20000, dev_property: true },
         // PassthroughRegion { ipa: 0x03b41000, pa: 0x03b41000, length: 0x1000 },
         PassthroughRegion { ipa: 0x03c00000, pa: 0x03c00000, length: 0xa0000, dev_property: true },
-        PassthroughRegion { ipa: Platform::GICC_BASE, pa: Platform::GICV_BASE, length: 0x2000, dev_property: true },
+        PassthroughRegion { ipa: PLATFORM_GICC_BASE, pa: PLATFORM_GICV_BASE, length: 0x2000, dev_property: true },
         PassthroughRegion { ipa: 0x8010000, pa: 0x8010000, length: 0x1000, dev_property: true },
         PassthroughRegion { ipa: 0x08030000, pa: 0x08030000, length: 0x1000, dev_property: true },
         PassthroughRegion { ipa: 0x08050000, pa: 0x08050000, length: 0x1000, dev_property: true },
@@ -204,7 +204,7 @@ pub fn mvm_config_init() {
         INTERRUPT_IRQ_GUEST_TIMER, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 49, 56, 57, 58, 59, 60, 62, 63, 64, 65, 67, 68,
         69, 70, 71, 72, 74, 76, 79, 82, 85, 88, 91, 92, 94, 95, 96, 97, 102, 103, 104, 105, 107,
         108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125,
-        126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, Platform::UART_0_INT, 151, 152,
+        126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, UART_0_INT, 151, 152,
         153, 154, 155, 156, 157, 158, 159, 165, 166, 167, 168, 173, 174, 175, 176, 177, 178, 179,
         185, 186, 187, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 208,
         212, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 229, 230, 233, 234, 235, 237, 238,
@@ -217,12 +217,11 @@ pub fn mvm_config_init() {
     ];
 
     // vm0 vm_region
-    let vm_region = vec![
-        VmRegion {
-            ipa_start: 0xa0000000,
-            length: 0x60000000,
-        }
-    ];
+    let mut vm_region: Vec<VmRegion> = Vec::new();
+    vm_region.push(VmRegion {
+        ipa_start: 0xa0000000,
+        length: 0x60000000,
+    });
     // vm_region.push(VmRegion {
     //     ipa_start: 0xf0200000,
     //     length: 0xc0000000,

@@ -35,6 +35,7 @@ mod context_frame;
 mod cpu;
 mod exception;
 mod gic;
+mod gicv3;
 mod interface;
 mod interrupt;
 mod mmu;

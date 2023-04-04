@@ -130,6 +130,8 @@ pub const HVC_IRQ: usize = 32 + 0x20;
 pub const HVC_IRQ: usize = 32 + 0x10;
 #[cfg(feature = "qemu")]
 pub const HVC_IRQ: usize = 32 + 0x20;
+#[cfg(feature = "rk3588")]
+pub const HVC_IRQ: usize = 32 + 0x20;
 
 #[repr(C)]
 pub enum HvcGuestMsg {

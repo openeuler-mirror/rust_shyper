@@ -52,6 +52,10 @@ pi4:
 	$(MAKE) build BOARD=pi4
 	# bash pi4_upload_release
 
+rk3588_release:
+	cargo build -Z build-std=${BUILD_STD} --target aarch64-rk3588.json --features rk3588 --release
+	bash rk3588_upload_release
+	${OBJDUMP} --demangle -d target/aarch64-rk3588/release/${IMAGE} > target/aarch64-tx2/release/t.txt
 
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
 	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
