@@ -40,4 +40,5 @@ pub fn putc(byte: u8) {
         while ptr::read_volatile((UART_BASE + 20) as *const u8) & 0x20 == 0 {}
         ptr::write_volatile(UART_BASE as *mut u8, byte);
     }
+
 }
