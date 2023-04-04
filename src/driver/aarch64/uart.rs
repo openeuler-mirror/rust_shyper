@@ -32,64 +32,13 @@ pub fn putc(byte: u8) {
         while (ptr::read_volatile((UART_BASE as usize + 24) as *const u32) & (1 << 5)) != 0 {}
         ptr::write_volatile(UART_BASE as *mut u32, byte as u32);
     }
-    #[cfg(feature = "tx2")]
-    unsafe {
-        use crate::board::UART_1_ADDR;
-        if byte == '\n' as u8 {
-            putc('\r' as u8);
-        }
-        while ptr::read_volatile((UART_1_ADDR + 0x8_0000_0000 + 20) as *const u8) & 0x20 == 0 {}
-        ptr::write_volatile((UART_1_ADDR + 0x8_0000_0000) as *mut u8, byte);
-        // while ptr::read_volatile((UART_1_ADDR + 20) as *const u8) & 0x20 == 0 {}
-        // ptr::write_volatile(UART_1_ADDR as *mut u8, byte);
-    }
     #[cfg(feature = "rk3588")]
     unsafe {
-        use crate::board::UART_1_ADDR;
         if byte == '\n' as u8 {
             putc('\r' as u8);
         }
-        while ptr::read_volatile((UART_1_ADDR + 0x8_0000_0000 + 20) as *const u8) & 0x20 == 0 {}
-        ptr::write_volatile((UART_1_ADDR + 0x8_0000_0000) as *mut u8, byte);
+        while ptr::read_volatile((UART_BASE + 20) as *const u8) & 0x20 == 0 {}
+        ptr::write_volatile(UART_BASE as *mut u8, byte);
     }
-    #[cfg(feature = "tx2")]
-    unsafe {
-        use crate::board::UART_1_ADDR;
-        if byte == '\n' as u8 {
-            putc('\r' as u8);
-        }
-        while ptr::read_volatile((UART_1_ADDR + 0x8_0000_0000 + 20) as *const u8) & 0x20 == 0 {}
-        ptr::write_volatile((UART_1_ADDR + 0x8_0000_0000) as *mut u8, byte);
-        // while ptr::read_volatile((UART_1_ADDR + 20) as *const u8) & 0x20 == 0 {}
-        // ptr::write_volatile(UART_1_ADDR as *mut u8, byte);
-    }
-    #[cfg(feature = "rk3588")]
-    unsafe {
-        use crate::board::UART_1_ADDR;
-        if byte == '\n' as u8 {
-            putc('\r' as u8);
-        }
-        while ptr::read_volatile((UART_1_ADDR + 0x8_0000_0000 + 20) as *const u8) & 0x20 == 0 {}
-        ptr::write_volatile((UART_1_ADDR + 0x8_0000_0000) as *mut u8, byte);
-    }
-    #[cfg(feature = "tx2")]
-    unsafe {
-        use crate::board::UART_1_ADDR;
-        if byte == '\n' as u8 {
-            putc('\r' as u8);
-        }
-        while ptr::read_volatile((UART_1_ADDR + 0x8_0000_0000 + 20) as *const u8) & 0x20 == 0 {}
-        ptr::write_volatile((UART_1_ADDR + 0x8_0000_0000) as *mut u8, byte);
-        // while ptr::read_volatile((UART_1_ADDR + 20) as *const u8) & 0x20 == 0 {}
-        // ptr::write_volatile(UART_1_ADDR as *mut u8, byte);
-    }
-    #[cfg(feature = "rk3588")]
-    unsafe {
-        use crate::board::UART_1_ADDR;
-        if byte == '\n' as u8 {
-            putc('\r' as u8);
-        }
-        while ptr::read_volatile((UART_1_ADDR + 0x8_0000_0000 + 20) as *const u8) & 0x20 == 0 {}
-        ptr::write_volatile((UART_1_ADDR + 0x8_0000_0000) as *mut u8, byte);
-    }
+
 }

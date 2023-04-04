@@ -15,7 +15,6 @@ use crate::arch::{
 };
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
 use crate::arch::PAGE_SIZE;
-use crate::board::*;
 use crate::config::vm_cfg_entry;
 use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init};
 use crate::device::create_fdt;
@@ -146,19 +145,11 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 } else {
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                 }
-                //todo
                 #[cfg(feature = "rk3588")]
-                if name == "L4T" {
-                    println!("MVM {} loading Image", vm.id());
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/L4T"));
-                } else if name == "Image_vanilla" {
-                    println!("VM {} loading default Linux Image", vm.id());
-                    #[cfg(feature = "static-config")]
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
-                    #[cfg(not(feature = "static-config"))]
-                    println!("*** Please enable feature `static-config`");
+                if name.is_empty() {
+                    panic!("kernel image name empty")
                 } else {
-                    warn!("Image {} is not supported", name);
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                 }
             }
             None => {
@@ -407,30 +398,6 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 dtb,
                                 (Platform::GICD_BASE | 0xF_0000_0000) as u64,
                                 (Platform::GICC_BASE | 0xF_0000_0000) as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
-                            );
-                            //todo
-                            #[cfg(feature = "rk3588")]
-                            let _r = fdt_setup_gic(
-                                dtb,
-                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
-                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
-                            );
-                            //todo
-                            #[cfg(feature = "rk3588")]
-                            let _r = fdt_setup_gic(
-                                dtb,
-                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
-                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
-                            );
-                            //todo
-                            #[cfg(feature = "rk3588")]
-                            let _r = fdt_setup_gic(
-                                dtb,
-                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
-                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                         }

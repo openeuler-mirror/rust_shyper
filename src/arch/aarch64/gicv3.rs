@@ -17,7 +17,8 @@ use tock_registers::*;
 use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 
-use crate::board::{platform_cpuid_to_cpuif, PLATFORM_GICC_BASE, PLATFORM_GICD_BASE, PLATFORM_GICH_BASE};
+use crate::board::{Platform, PlatOperation};
+use crate::lib::bit_extract;
 use crate::kernel::current_cpu;
 use crate::kernel::INTERRUPT_NUM_MAX;
 
@@ -296,7 +297,7 @@ impl GicDistributor {
 
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
         if sgi_num < GIC_SGIS_NUM {
-            let mpidr = platform_cpuid_to_cpuif(cpu_target) & MPIDR_AFF_MSK;
+            let mpidr = Platform::cpuid_to_cpuif(cpu_target) & MPIDR_AFF_MSK;
             /* We only support two affinity levels */
             let sgi = (((mpidr) >> 8 & 0xff) << GICC_SGIR_AFF1_OFFSET)
                 | (1 << (mpidr & 0xff))
@@ -908,10 +909,10 @@ impl GicState {
     }
 }
 
-pub static GICD: GicDistributor = GicDistributor::new(PLATFORM_GICD_BASE + 0x8_0000_0000);
-pub static GICC: GicCpuInterface = GicCpuInterface::new(PLATFORM_GICC_BASE + 0x8_0000_0000);
-pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(PLATFORM_GICH_BASE + 0x8_0000_0000);
-pub static GICR: GicRedistributor = GicRedistributor::new(PLATFORM_GICH_BASE + 0x8_0000_0000);
+pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE + 0x8_0000_0000);
+pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE + 0x8_0000_0000);
+pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE + 0x8_0000_0000);
+pub static GICR: GicRedistributor = GicRedistributor::new(Platform::GICH_BASE + 0x8_0000_0000);
 
 #[inline(always)]
 pub fn gich_lrs_num() -> usize {
