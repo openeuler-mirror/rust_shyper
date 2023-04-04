@@ -8,13 +8,14 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-#[cfg(feature = "pi4")]
-pub use self::pi4::*;
 pub use self::platform_common::*;
+
+#[cfg(feature = "pi4")]
+pub use self::pi4::{Pi4Platform as Platform, PLAT_DESC};
 #[cfg(feature = "qemu")]
-pub use self::qemu::*;
+pub use self::qemu::{QemuPlatform as Platform, PLAT_DESC};
 #[cfg(feature = "tx2")]
-pub use self::tx2::*;
+pub use self::tx2::{Tx2Platform as Platform, PLAT_DESC};
 
 #[cfg(feature = "pi4")]
 mod pi4;

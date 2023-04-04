@@ -382,15 +382,15 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
                             fdt_setup_gic(
                                 dtb,
-                                PLATFORM_GICD_BASE as u64,
-                                PLATFORM_GICC_BASE as u64,
+                                Platform::GICD_BASE as u64,
+                                Platform::GICC_BASE as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                             #[cfg(feature = "pi4")]
                             let _r = fdt_setup_gic(
                                 dtb,
-                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
-                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
+                                (Platform::GICD_BASE | 0xF_0000_0000) as u64,
+                                (Platform::GICC_BASE | 0xF_0000_0000) as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                         }

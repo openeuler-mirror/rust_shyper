@@ -10,7 +10,7 @@
 
 use core::arch::global_asm;
 
-global_asm!(include_str!("../arch/aarch64/cache.S"));
+global_asm!(include_str!("cache.S"));
 
 extern "C" {
     pub fn cache_invalidate_d(start: usize, len: usize);
