@@ -438,6 +438,30 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 (Platform::GICC_BASE | 0xF_0000_0000) as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
+                            //todo
+                            #[cfg(feature = "rk3588")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
+                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
+                            //todo
+                            #[cfg(feature = "rk3588")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
+                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
+                            //todo
+                            #[cfg(feature = "rk3588")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (PLATFORM_GICD_BASE | 0xF_0000_0000) as u64,
+                                (PLATFORM_GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
                         }
                         EmuDeviceTGICR => {
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
