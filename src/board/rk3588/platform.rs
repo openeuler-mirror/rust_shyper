@@ -19,11 +19,11 @@ use crate::device::ARM_CORTEX_A57;
 #[allow(unused_imports)]
 use crate::device::ARM_NVIDIA_DENVER;
 
-pub struct Tx2Platform;
+pub struct Rk3588Platform;
 
-impl PlatOperation for Tx2Platform {
-    const UART_0_ADDR: usize = 0x3100000;
-    const UART_1_ADDR: usize = 0xc280000;
+impl PlatOperation for Rk3588Platform {
+    const UART_0_ADDR: usize = 0x3200000;
+    const UART_1_ADDR: usize = 0xc290000;
 
     const UART_0_INT: usize = 32 + 0x70;
     const UART_1_INT: usize = 32 + 0x72;
@@ -49,7 +49,7 @@ impl PlatOperation for Tx2Platform {
     const SHARE_MEM_BASE: usize = 0xd_0000_0000;
 
     fn cpuid_to_cpuif(cpuid: usize) -> usize {
-        cpuid + PLAT_DESC.cpu_desc.num
+        PLAT_DESC.cpu_desc.core_list[cpuid].mpidr
     }
 
     fn cpuif_to_cpuid(cpuif: usize) -> usize {
