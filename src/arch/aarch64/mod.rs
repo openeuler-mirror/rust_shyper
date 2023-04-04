@@ -19,6 +19,7 @@ pub use self::page_table::*;
 pub use self::psci::*;
 pub use self::regs::*;
 pub use self::smc::*;
+pub use self::cache::*;
 pub use self::smmu::*;
 pub use self::sync::*;
 pub use self::timer::*;
@@ -29,6 +30,7 @@ pub use self::vgic::*;
 #[macro_use]
 mod regs;
 
+mod cache;
 mod context_frame;
 mod cpu;
 mod exception;

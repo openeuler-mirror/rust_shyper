@@ -53,18 +53,18 @@ pub fn init_tmp_config_for_bma1() {
     pt_dev_config.regions = vec![
         PassthroughRegion {
             ipa: 0x9000000,
-            pa: UART_1_ADDR,
+            pa: Platform::UART_1_ADDR,
             length: 0x1000,
             dev_property: true,
         },
         PassthroughRegion {
             ipa: 0x8010000,
-            pa: PLATFORM_GICV_BASE,
+            pa: Platform::GICV_BASE,
             length: 0x2000,
             dev_property: true,
         },
     ];
-    pt_dev_config.irqs = vec![UART_1_INT];
+    pt_dev_config.irqs = vec![Platform::UART_1_INT];
 
     // bma vm_region
     let mut vm_region: Vec<VmRegion> = Vec::new();
@@ -133,13 +133,13 @@ pub fn init_tmp_config_for_bma2() {
     pt_dev_config.regions = vec![
         PassthroughRegion {
             ipa: 0x9000000,
-            pa: UART_1_ADDR,
+            pa: Platform::UART_1_ADDR,
             length: 0x1000,
             dev_property: true,
         },
         PassthroughRegion {
             ipa: 0x8010000,
-            pa: PLATFORM_GICV_BASE,
+            pa: Platform::GICV_BASE,
             length: 0x2000,
             dev_property: true,
         },
@@ -250,7 +250,7 @@ pub fn init_tmp_config_for_vm1() {
         // },
         PassthroughRegion {
             ipa: 0x8010000,
-            pa: PLATFORM_GICV_BASE,
+            pa: Platform::GICV_BASE,
             length: 0x2000,
             dev_property: true,
         },
@@ -382,7 +382,7 @@ pub fn init_tmp_config_for_vm2() {
         // },
         PassthroughRegion {
             ipa: 0x8010000,
-            pa: PLATFORM_GICV_BASE,
+            pa: Platform::GICV_BASE,
             length: 0x2000,
             dev_property: true,
         },

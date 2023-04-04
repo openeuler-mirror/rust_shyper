@@ -19,7 +19,7 @@ use crate::arch::{PAGE_SIZE, PTE_S2_FIELD_AP_RO, PTE_S2_NORMAL, PTE_S2_RO};
 use crate::arch::{GICC_CTLR_EN_BIT, GICC_CTLR_EOIMODENS_BIT};
 use crate::arch::PageTable;
 use crate::arch::Vgic;
-use crate::board::SHARE_MEM_BASE;
+use crate::board::{Platform, PlatOperation};
 use crate::config::VmConfigEntry;
 use crate::device::EmuDevs;
 use crate::kernel::{
@@ -943,7 +943,7 @@ impl VmInner {
             intc_dev_id: 0,
             int_bitmap: Some(BitAlloc4K::default()),
             // migration_state: false,
-            share_mem_base: SHARE_MEM_BASE, // hard code
+            share_mem_base: Platform::SHARE_MEM_BASE, // hard code
             migrate_save_pf: vec![],
             migrate_restore_pf: vec![],
 
@@ -972,7 +972,7 @@ impl VmInner {
             intc_dev_id: 0,
             int_bitmap: Some(BitAlloc4K::default()),
             // migration_state: false,
-            share_mem_base: SHARE_MEM_BASE, // hard code
+            share_mem_base: Platform::SHARE_MEM_BASE, // hard code
             migrate_save_pf: vec![],
             migrate_restore_pf: vec![],
             iommu_ctx_id: None,
