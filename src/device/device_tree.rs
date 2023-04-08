@@ -15,6 +15,7 @@ use vm_fdt::{Error, FdtWriter, FdtWriterResult};
 use crate::config::{DtbDevType, VmDtbDevConfig};
 use crate::config::VmConfigEntry;
 use crate::device::EmuDeviceType;
+use crate::SYSTEM_FDT;
 use crate::vmm::CPIO_RAMDISK;
 
 const PI4_DTB_ADDR: usize = 0xf0000000;
