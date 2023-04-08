@@ -35,6 +35,8 @@ impl PlatOperation for QemuPlatform {
     const GICC_BASE: usize = 0x08010000;
     const GICH_BASE: usize = 0x08030000;
     const GICV_BASE: usize = 0x08040000;
+    #[cfg(feature = "gicv3")]
+    const GICR_BASE: usize = 0x08050000;
 
     const SHARE_MEM_BASE: usize = 0x7_0000_0000;
 
@@ -115,6 +117,8 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             gicc_addr: Platform::GICC_BASE,
             gich_addr: Platform::GICH_BASE,
             gicv_addr: Platform::GICV_BASE,
+            #[cfg(feature = "gicv3")]
+            gicr_addr: Platform::GICR_BASE,
             maintenance_int_id: 25,
         },
         smmu_desc: SmmuDesc {

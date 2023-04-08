@@ -34,6 +34,7 @@ impl PlatOperation for Rk3588Platform {
     const GICC_BASE: usize = 0x3882000;
     const GICH_BASE: usize = 0x3884000;
     const GICV_BASE: usize = 0x3886000;
+    const GICR_BASE: usize = 0x3887000;
 
     // start sector number (LBA)
     const DISK_PARTITION_0_START: usize = 43643256;
@@ -118,6 +119,7 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             gicc_addr: Platform::GICC_BASE,
             gich_addr: Platform::GICH_BASE,
             gicv_addr: Platform::GICV_BASE,
+            gicr_addr: Platform::GICV_BASE,
             maintenance_int_id: 25,
         },
         smmu_desc: SmmuDesc {

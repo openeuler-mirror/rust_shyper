@@ -53,7 +53,7 @@ pi4:
 	# bash pi4_upload_release
 
 rk3588_release:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-rk3588.json --features rk3588 --release
+	cargo build -Z build-std=${BUILD_STD} --target aarch64-rk3588.json --features "rk3588 gicv3" --release
 	bash rk3588_upload_release
 	${OBJDUMP} --demangle -d target/aarch64-rk3588/release/${IMAGE} > target/aarch64-tx2/release/t.txt
 
@@ -64,7 +64,7 @@ QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
 QEMU_SERIAL_OPTIONS = -serial mon:stdio #\
 	-serial telnet:localhost:12345,server
 
-QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=n0
+QEMU_NETWORK_OPTIONS = -netdev tap,id=tap0,ifname=tap0,script=no,downscript=no -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=tap0
 
 QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.25
 

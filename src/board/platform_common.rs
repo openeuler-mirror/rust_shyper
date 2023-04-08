@@ -75,6 +75,8 @@ pub trait PlatOperation {
     const GICC_BASE: usize;
     const GICH_BASE: usize;
     const GICV_BASE: usize;
+    #[cfg(feature = "gicv3")]
+    const GICR_BASE: usize;
 
     const DISK_PARTITION_0_START: usize = usize::MAX;
     const DISK_PARTITION_1_START: usize = usize::MAX;

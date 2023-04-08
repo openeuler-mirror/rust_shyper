@@ -15,6 +15,7 @@ use vm_fdt::{Error, FdtWriter, FdtWriterResult};
 use crate::config::{DtbDevType, VmDtbDevConfig};
 use crate::config::VmConfigEntry;
 use crate::device::EmuDeviceType;
+use crate::SYSTEM_FDT;
 use crate::vmm::CPIO_RAMDISK;
 
 const PI4_DTB_ADDR: usize = 0xf0000000;
@@ -100,7 +101,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
-        assert_eq!(fdt_disable_node(dtb, "/platform@c000000\0".as_ptr()), 0);
+        //assert_eq!(fdt_disable_node(dtb, "/platform@c000000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/fw-cfg@9020000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/memory@40000000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/virtio_mmio@a000000\0".as_ptr()), 0);
@@ -143,7 +144,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         // pass through the only one uart on qemu-system-aarch64
         // assert_eq!(fdt_remove_node(dtb, "/pl011@9000000\0".as_ptr()), 0);
 
-        assert_eq!(fdt_remove_node(dtb, "/intc@8000000/v2m@8020000\0".as_ptr()), 0);
+        //assert_eq!(fdt_remove_node(dtb, "/intc@8000000/v2m@8020000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/flash@0\0".as_ptr()), 0);
 
         let len = fdt_size(dtb) as usize;

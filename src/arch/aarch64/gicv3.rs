@@ -140,6 +140,7 @@ pub struct GicDesc {
     pub gicc_addr: usize,
     pub gich_addr: usize,
     pub gicv_addr: usize,
+    pub gicr_addr: usize,
     pub maintenance_int_id: usize,
 }
 
@@ -183,7 +184,7 @@ register_structs! {
         (0x3400 => IGRPMODRE: [ReadWrite<u32>; GIC_CONFIG_REGS_NUM]), //Interrupt Group Modifier for extended SPI range
         (0x3600 => NSACRE: [ReadWrite<u32>; GIC_SEC_REGS_NUM]),  //Non-secure Access Control Registers for extended SPI range
         (0x3b00 => INMIRE: [ReadWrite<u32>; GIC_CONFIG_REGS_NUM]), //Non-maskable Interrupt Registers for Extended SPIs
-        (0x6100 => IROUTER: [ReadWrite<u64>; GIC_INT_RT_NUM]), //Interrupt Routing Registers
+        (0x6100 => IROUTER: [ReadWrite<u64>; GIC_INTS_MAX]), //Interrupt Routing Registers
         (0x8000 => IROUTERE: [ReadWrite<u64>; GIC_INTS_MAX]), //Interrupt Routing Registers for extended SPI range
         (0xffd0 => reserve4IDR: [ReadOnly<u32>;12]), //Reserved for ID registers
         (0x10000 => @END),
@@ -473,28 +474,45 @@ register_structs! {
         (0x0014 => WAKER: ReadWrite<u32>),     // Redistributor Wake Register
         (0x0018 => MPAMIDR: ReadOnly<u32>),   // Report maximum PARTID and PMG Register
         (0x001c => PARTIDR: ReadWrite<u32>),   // Set PARTID and PMG Register
+        (0x0020 => reserved18),
         (0x0040 => SETLPIR: WriteOnly<u64>),    // Set LPI Pending Register
         (0x0048 => CLRLPIR: WriteOnly<u64>),  // Clear LPI Pending Register
-        (0x0048 => AHPPIR: ReadOnly<u32>),  // Aliased Highest Priority Pending Interrupt Register
+        (0x0050 => reserved17),
         (0x0070 => PROPBASER: ReadWrite<u64>),  //Redistributor Properties Base Address Register
         (0x0078 => PEDNBASER: ReadWrite<u64>),    //Redistributor LPI Pending Table Base Address Register
+        (0x0080 => reserved16),
         (0x00a0 => INVLPIR: WriteOnly<u64>),  // Redistributor Invalidate LPI Register
+        (0x00a8 => reserved15),
         (0x00b0 => INVALLR: WriteOnly<u64>),    // Redistributor Invalidate All Register
+        (0x00b8 => reserved14),
         (0x00c0 => SYNCR: ReadOnly<u64>),    // Redistributor Synchronize Register
+        (0x00c8 => reserved13),
         (0xffd0 => ID: [ReadWrite<u32>;((0x10000 - 0xFFD0) / size_of::<u32>())]),
+        (0x10000 => reserved12),
         (0x10080 => IGROUPR0: ReadWrite<u32>), //SGI_base frame, all below
+        (0x10084 => reserved11),
         (0x10100 => ISENABLER0: ReadWrite<u32>),
+        (0x10104 => reserved10),
         (0x10180 => ICENABLER0: ReadWrite<u32>),
+        (0x10184 => reserved9),
         (0x10200 => ISPENDR0: ReadWrite<u32>),
+        (0x10204 => reserved8),
         (0x10280 => ICPENDR0: ReadWrite<u32>),
+        (0x10284 => reserved7),
         (0x10300 => ISACTIVER0: ReadWrite<u32>),
+        (0x10304 => reserved6),
         (0x10380 => ICACTIVER0: ReadWrite<u32>),
+        (0x10384 => reserved5),
         (0x10400 => IPRIORITYR: [ReadWrite<u32>;8]),
+        (0x10420 => reserved4),
         (0x10c00 => ICFGR0: ReadWrite<u32>),
         (0x10c04 => ICFGR1: ReadWrite<u32>),
+        (0x10c08 => reserved3),
         (0x10d00 => IGRPMODR0: ReadWrite<u32>),
+        (0x10d04 => reserved2),
         (0x10e00 => NSACR: ReadWrite<u32>),
-        (0x11000 => @END),
+        (0x10e04 => reserved1),
+        (0x20000 => @END),
   }
 }
 
@@ -691,7 +709,7 @@ impl GicCpuInterface {
         msr!(ICC_SRE_EL2, 0x1, "x");
 
         unsafe {
-            core::arch::asm!("ISB\n\t", "memory");
+            core::arch::asm!("ISB\n\t");
         }
 
         for i in 0..gich_lrs_num() {
@@ -875,6 +893,22 @@ pub struct GicState {
 }
 
 impl GicState {
+    pub fn default() -> GicState {
+        GicState {
+            ctlr: 0,
+            pmr: 0,
+            bpr: 0,
+            iar: 0,
+            eoir: 0,
+            rpr: 0,
+            hppir: 0,
+            priv_isenabler: 0,
+            priv_ipriorityr: [0; GIC_PRIVINT_NUM / 4],
+            hcr: 0,
+            lr: [0; GIC_LIST_REGS_NUM],
+        }
+    }
+
     pub fn save_state(&mut self) {
         mrs!(self.pmr, ICC_PMR_EL1, "x");
         mrs!(self.bpr, ICC_BPR1_EL1, "x");
