@@ -14,10 +14,6 @@ use crate::board::{Platform, PlatOperation};
 
 pub fn putc(byte: u8) {
     const UART_BASE: usize = Platform::HYPERVISOR_UART_BASE + 0x8_0000_0000;
-    #[cfg(feature = "qemu")]
-    unsafe {
-        ptr::write_volatile(UART_BASE as *mut u8, byte);
-    }
     // ns16550
     #[cfg(feature = "tx2")]
     unsafe {
@@ -28,7 +24,7 @@ pub fn putc(byte: u8) {
         ptr::write_volatile(UART_BASE as *mut u8, byte);
     }
     // pl011
-    #[cfg(feature = "pi4")]
+    #[cfg(any(feature = "pi4", feature = "qemu"))]
     unsafe {
         if byte == '\n' as u8 {
             putc('\r' as u8);
