@@ -72,7 +72,6 @@ const GICH_LR_HW_BIT: usize = 1 << 61;
 const GICH_LR_EOI_BIT: usize = 1 << 41;
 const GICH_NUM_ELRSR: usize = 1;
 const GICH_VTR_MSK: usize = 0b11111;
-
 pub const GIC_SGIS_NUM: usize = 16;
 const GIC_PPIS_NUM: usize = 16;
 pub const GIC_INTS_MAX: usize = INTERRUPT_NUM_MAX;

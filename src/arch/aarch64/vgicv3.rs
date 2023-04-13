@@ -14,6 +14,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use cortex_a::registers::HCR_EL2::VM;
 use spin::Mutex;
 
 use crate::{arch::GICH, kernel::IpiInitcMessage};

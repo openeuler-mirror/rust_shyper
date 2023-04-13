@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 
 use crate::arch::{
     emu_intc_handler, emu_intc_init, emu_smmu_handler, partial_passthrough_intc_handler, partial_passthrough_intc_init,
+    vgic_icc_sre_handler, vgic_icc_sgir_handler,
 };
 #[cfg(feature="gicv3")]
 use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
