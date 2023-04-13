@@ -28,9 +28,9 @@ pub use self::sync::*;
 pub use self::timer::*;
 pub use self::tlb::*;
 pub use self::vcpu::*;
-#[cfg(not(feature = "gicv3"))]
-pub use self::vgic::*;
-#[cfg(feature = "gicv3")]
+// #[cfg(not(feature = "gicv3"))]
+// pub use self::vgic::*;
+// #[cfg(feature = "gicv3")]
 pub use self::vgicv3::*;
 
 #[macro_use]
@@ -55,7 +55,7 @@ mod sync;
 mod timer;
 mod tlb;
 mod vcpu;
-#[cfg(not(feature = "gicv3"))]
-mod vgic;
-#[cfg(feature = "gicv3")]
+// #[cfg(not(feature = "gicv3"))]
+// mod vgic;
+//#[cfg(feature = "gicv3")]
 mod vgicv3;

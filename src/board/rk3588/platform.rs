@@ -11,7 +11,7 @@
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
 use crate::board::{
-    PlatOperation, Platform, PlatCpuCoreConfig, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
+    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
     PlatMemRegion,
 };
 use crate::board::SchedRule::RoundRobin;
@@ -126,6 +126,10 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             base: 0x12000000,
             interrupt_id: 187,
             global_mask: 0x7f80,
+        },
+        cluster_desc: ClusterDesc {
+            num: 2,
+            core_num: &[2, 2],
         },
     },
 };

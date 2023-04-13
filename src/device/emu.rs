@@ -106,6 +106,9 @@ pub enum EmuDeviceType {
     EmuDeviceTShyper = 6,
     EmuDeviceTVirtioBlkMediated = 7,
     EmuDeviceTIOMMU = 8,
+    EmuDeviceTICCSRE = 9,
+    EmuDeviceTSGIR = 10,
+    EmuDeviceTGICR = 11,
 }
 
 impl Display for EmuDeviceType {
@@ -120,6 +123,9 @@ impl Display for EmuDeviceType {
             EmuDeviceType::EmuDeviceTShyper => write!(f, "device shyper"),
             EmuDeviceType::EmuDeviceTVirtioBlkMediated => write!(f, "medaited virtio block"),
             EmuDeviceType::EmuDeviceTIOMMU => write!(f, "IOMMU"),
+            EmuDeviceType::EmuDeviceTICCSRE => write!(f, "interrupt ICC SRE"),
+            EmuDeviceType::EmuDeviceTSGIR => write!(f, "interrupt ICC SGIR"),
+            EmuDeviceType::EmuDeviceTGICR => write!(f, "interrupt controller gicr"),
         }
     }
 }
@@ -128,6 +134,8 @@ impl EmuDeviceType {
     pub fn removable(&self) -> bool {
         match *self {
             EmuDeviceType::EmuDeviceTGicd
+            | EmuDeviceType::EmuDeviceTSGIR
+            | EmuDeviceType::EmuDeviceTICCSRE
             | EmuDeviceType::EmuDeviceTGPPT
             | EmuDeviceType::EmuDeviceTVirtioBlk
             | EmuDeviceType::EmuDeviceTVirtioNet
@@ -149,6 +157,8 @@ impl EmuDeviceType {
             6 => EmuDeviceType::EmuDeviceTShyper,
             7 => EmuDeviceType::EmuDeviceTVirtioBlkMediated,
             8 => EmuDeviceType::EmuDeviceTIOMMU,
+            9 => EmuDeviceType::EmuDeviceTICCSRE,
+            10 => EmuDeviceType::EmuDeviceTSGIR,
             _ => panic!("Unknown  EmuDeviceType value: {}", value),
         }
     }

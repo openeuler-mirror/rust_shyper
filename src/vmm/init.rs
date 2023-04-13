@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 
 use crate::arch::{
     emu_intc_handler, emu_intc_init, emu_smmu_handler, partial_passthrough_intc_handler, partial_passthrough_intc_init,
+    vgic_icc_sre_handler, vgic_icc_sgir_handler,
 };
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
 use crate::arch::PAGE_SIZE;
@@ -300,6 +301,27 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     return false;
                 }
             }
+            EmuDeviceTICCSRE => {
+                emu_register_dev(
+                    EmuDeviceTICCSRE,
+                    vm.id(),
+                    idx,
+                    emu_dev.base_ipa,
+                    emu_dev.length,
+                    vgic_icc_sre_handler,
+                );
+            }
+            EmuDeviceTSGIR => {
+                emu_register_dev(
+                    EmuDeviceTSGIR,
+                    vm.id(),
+                    idx,
+                    emu_dev.base_ipa,
+                    emu_dev.length,
+                    vgic_icc_sgir_handler,
+                );
+            }
+            
             _ => {
                 warn!("vmm_init_emulated_device: unknown emulated device");
                 return false;

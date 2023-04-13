@@ -12,7 +12,7 @@
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
 use crate::board::{
-    PlatOperation, Platform, PlatCpuCoreConfig, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
+    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
     PlatMemRegion,
 };
 use crate::board::SchedRule::RoundRobin;
@@ -36,7 +36,7 @@ impl PlatOperation for QemuPlatform {
     const GICH_BASE: usize = 0x08030000;
     const GICV_BASE: usize = 0x08040000;
     #[cfg(feature = "gicv3")]
-    const GICR_BASE: usize = 0x08050000;
+    const GICR_BASE: usize = 0x80a0000;
 
     const SHARE_MEM_BASE: usize = 0x7_0000_0000;
 
@@ -126,5 +126,6 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             interrupt_id: 0,
             global_mask: 0,
         },
+        cluster_desc: ClusterDesc { num: 1, core_num: &[4] },
     },
 };

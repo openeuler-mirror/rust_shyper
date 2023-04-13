@@ -48,6 +48,13 @@ pub struct PlatCpuConfig {
 pub struct ArchDesc {
     pub gic_desc: GicDesc,
     pub smmu_desc: SmmuDesc,
+    pub cluster_desc: ClusterDesc,
+}
+
+#[repr(C)]
+pub struct ClusterDesc {
+    pub num: usize,
+    pub core_num: &'static [usize],
 }
 
 #[repr(C)]

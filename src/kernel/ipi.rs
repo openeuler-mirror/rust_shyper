@@ -30,6 +30,7 @@ pub enum InitcEvent {
     VgicdSetTrgt,
     VgicdSetCfg,
     VgicdRoute,
+    Vgicdinject,
     None,
 }
 

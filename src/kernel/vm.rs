@@ -880,6 +880,23 @@ impl Vm {
         let mut inner = self.inner.lock();
         inner.share_mem_base += len;
     }
+
+    pub fn get_vcpu_by_mpdir(&self, mpdir: usize) -> Option<Vcpu> {
+        for i in 0..self.cpu_num() {
+            let cpuid;
+            if (mpdir >> 8) & 0b1 != 0 {
+                cpuid = 4 + (mpdir & 0xff);
+            } else {
+                cpuid = mpdir & 0xff;
+            }
+            let rvcpu = self.vcpu(i).clone().unwrap();
+            if rvcpu.phys_id() == cpuid {
+                return Some(rvcpu)
+            }
+        }
+        println!("get_vcpu_by_mpdir:get vcpu fail,error mpdir!");
+        return Option::None;
+    }
 }
 
 #[repr(align(4096))]
@@ -1082,4 +1099,12 @@ pub fn ipa2pa(pa_region: &Vec<VmPa>, ipa: usize) -> usize {
 
     // println!("ipa2pa: access invalid ipa {:x}", ipa);
     return 0;
+}
+
+pub fn cpuid2mpdir(cpuid: usize) -> usize {
+    if cpuid < 4 {
+        cpuid | (1 << 31)
+    } else {
+        0x100 | (cpuid - 4) | (1 << 31)
+    }
 }

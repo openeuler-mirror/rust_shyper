@@ -22,16 +22,24 @@ use crate::lib::bit_extract;
 use crate::kernel::current_cpu;
 use crate::kernel::INTERRUPT_NUM_MAX;
 
-const MPIDR_AFF_MSK: usize = 0xffff; //we are only supporting 2 affinity levels
+pub const MPIDR_AFF_MSK: usize = 0xffff; //we are only supporting 2 affinity levels
 
 // GICD BITS
 const GICD_CTLR_ENS_BIT: usize = 0x1;
 const GICD_CTLR_ENNS_BIT: usize = 0x2;
 const GICD_CTLR_ARE_NS_BIT: usize = 0x1 << 4;
-const GICD_IROUTER_INV: usize = !MPIDR_AFF_MSK;
-const GICD_IROUTER_RES0_MSK: usize = (1 << 40) - 1;
-const GICD_IROUTER_IRM_BIT: usize = 1 << 31;
+pub const GICD_IROUTER_INV: usize = !MPIDR_AFF_MSK;
+pub const GICD_IROUTER_RES0_MSK: usize = (1 << 40) - 1;
+pub const GICD_IROUTER_IRM_BIT: usize = 1 << 31;
+pub const GICD_TYPER_IDBITS_OFF: usize = 19;
+pub const GICD_TYPER_IDBITS_LEN: usize = 5;
+pub const GICD_TYPER_IDBITS_MSK: usize = (((1 << ((GICD_TYPER_IDBITS_LEN) - 1)) << 1) - 1) << (GICD_TYPER_IDBITS_OFF);
 const GICD_IROUTER_AFF_MSK: usize = GICD_IROUTER_RES0_MSK & !GICD_IROUTER_IRM_BIT;
+
+//GICR BITS
+pub const GICR_TYPER_PRCNUM_OFF: usize = 8;
+pub const GICR_TYPER_AFFVAL_OFF: usize = 32;
+pub const GICR_TYPER_LAST_OFF: usize = 4;
 
 // GICC BITS
 pub const GICC_CTLR_EN_BIT: usize = 0x1;
@@ -41,13 +49,27 @@ pub const GICC_CTLR_EOIMODE_BIT: usize = 0x1 << 1;
 pub const GICC_IGRPEN_EL1_ENB_BIT: usize = 0x1;
 pub const GICC_SGIR_AFF1_OFFSET: usize = 16;
 pub const GICC_SGIR_SGIINTID_OFF: usize = 24;
+pub const GICC_SGIR_SGIINTID_LEN: usize = 4;
 pub const GICC_IAR_ID_OFF: usize = 0;
 pub const GICC_IAR_ID_LEN: usize = 24;
+pub const GICC_SGIR_IRM_BIT: usize = 1 << 40;
 
 // GICH BITS
 const GICH_HCR_LRENPIE_BIT: usize = 1 << 2;
+pub const GICH_LR_VID_OFF: usize = 0;
+pub const GICH_LR_VID_LEN: usize = 32;
+pub const GICH_LR_VID_MASK: usize = (((1 << ((GICH_LR_VID_LEN) - 1)) << 1) - 1) << (GICH_LR_VID_OFF);
+pub const GICH_LR_PID_OFF: usize = 32;
+pub const GICH_LR_PID_LEN: usize = 10;
+pub const GICH_LR_PRIO_OFF: usize = 48;
+pub const GICH_LR_PRIO_LEN: usize = 8;
+pub const GICH_LR_STATE_OFF: usize = 62;
+pub const GICH_LR_GRP_BIT: usize = 1 << 60;
+pub const GICH_LR_PRIO_MSK: usize = (((1 << ((GICH_LR_PRIO_LEN) - 1)) << 1) - 1) << (GICH_LR_PRIO_OFF);
+const GICH_LR_HW_BIT: usize = 1 << 61;
+const GICH_LR_EOI_BIT: usize = 1 << 41;
+const GICH_NUM_ELRSR: usize = 1;
 const GICH_VTR_MSK: usize = 0b11111;
-
 pub const GIC_SGIS_NUM: usize = 16;
 const GIC_PPIS_NUM: usize = 16;
 pub const GIC_INTS_MAX: usize = INTERRUPT_NUM_MAX;
@@ -660,6 +682,10 @@ impl GicRedistributor {
 
         drop(lock);
     }
+
+    pub fn get_iidr(&self, gicr_id: u32) -> u32 {
+        self[gicr_id as usize].IIDR.get()
+    }
 }
 
 register_structs! {
@@ -946,7 +972,7 @@ impl GicState {
 pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE + 0x8_0000_0000);
 pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE + 0x8_0000_0000);
 pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE + 0x8_0000_0000);
-pub static GICR: GicRedistributor = GicRedistributor::new(Platform::GICH_BASE + 0x8_0000_0000);
+pub static GICR: GicRedistributor = GicRedistributor::new(Platform::GICR_BASE + 0x8_0000_0000);
 
 #[inline(always)]
 pub fn gich_lrs_num() -> usize {
