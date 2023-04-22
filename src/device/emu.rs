@@ -139,6 +139,7 @@ impl EmuDeviceType {
             | EmuDeviceType::EmuDeviceTGPPT
             | EmuDeviceType::EmuDeviceTVirtioBlk
             | EmuDeviceType::EmuDeviceTVirtioNet
+            | EmuDeviceType::EmuDeviceTGICR
             | EmuDeviceType::EmuDeviceTVirtioConsole => true,
             _ => false,
         }
@@ -159,6 +160,7 @@ impl EmuDeviceType {
             8 => EmuDeviceType::EmuDeviceTIOMMU,
             9 => EmuDeviceType::EmuDeviceTICCSRE,
             10 => EmuDeviceType::EmuDeviceTSGIR,
+            11 => EmuDeviceType::EmuDeviceTGICR,
             _ => panic!("Unknown  EmuDeviceType value: {}", value),
         }
     }

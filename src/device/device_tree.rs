@@ -143,8 +143,10 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         assert_eq!(fdt_remove_node(dtb, "/pl031@9010000\0".as_ptr()), 0);
         // pass through the only one uart on qemu-system-aarch64
         // assert_eq!(fdt_remove_node(dtb, "/pl011@9000000\0".as_ptr()), 0);
-
-        //assert_eq!(fdt_remove_node(dtb, "/intc@8000000/v2m@8020000\0".as_ptr()), 0);
+        #[cfg(feature = "gicv3")]
+        assert_eq!(fdt_remove_node(dtb, "/intc@8000000/its@8080000\0".as_ptr()), 0);
+        #[cfg(not(feature = "gicv3"))]
+        assert_eq!(fdt_remove_node(dtb, "/intc@8000000/v2m@8020000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/flash@0\0".as_ptr()), 0);
 
         let len = fdt_size(dtb) as usize;

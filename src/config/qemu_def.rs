@@ -24,6 +24,10 @@ use super::{
     VMDtbDevConfigList,
 };
 
+#[cfg(feature="gicv3")]
+pub const ICC_SRE_ADDR: usize = 3 & 0x3 << 20 | (5 & 0x7 << 17) | (0 & 0x7 << 14) | (12 & 0xf << 10) | (12 & 0xf << 1);
+pub const ICC_SGIR_ADDR: usize = 3 & 0x3 << 20 | (5 & 0x7 << 17) | (0 & 0x7 << 14) | (12 & 0xf << 10) | (11 & 0xf << 1);
+
 #[rustfmt::skip]
 pub fn mvm_config_init() {
     vm_cfg_set_config_name("qemu-default");
@@ -33,12 +37,45 @@ pub fn mvm_config_init() {
         VmEmulatedDeviceConfig {
             name: Some(String::from("vgicd")),
             base_ipa: Platform::GICD_BASE,
+            #[cfg(not(feature="gicv3"))]
             length: 0x1000,
+            #[cfg(feature="gicv3")]
+            length: 0x10000,
             irq_id: 0,
             cfg_list: Vec::new(),
             emu_type: EmuDeviceType::EmuDeviceTGicd,
             mediated: false,
         },
+        #[cfg(feature="gicv3")]
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("vgicr")),
+            base_ipa: Platform::GICR_BASE,
+            length: 0xf60000 * 1,
+            irq_id: 0,
+            cfg_list: Vec::new(),
+            emu_type: EmuDeviceType::EmuDeviceTGICR,
+            mediated: false,
+        },
+        // #[cfg(feature="gicv3")]
+        // VmEmulatedDeviceConfig {
+        //     name: Some(String::from("icc_sre")),
+        //     base_ipa: ICC_SRE_ADDR,
+        //     length: 0,
+        //     irq_id: 0,
+        //     cfg_list: Vec::new(),
+        //     emu_type: EmuDeviceType::EmuDeviceTICCSRE,
+        //     mediated: false,
+        // },
+        // #[cfg(feature="gicv3")]
+        // VmEmulatedDeviceConfig {
+        //     name: Some(String::from("icc_sgir")),
+        //     base_ipa: ICC_SGIR_ADDR,
+        //     length: 0,
+        //     irq_id: 0,
+        //     cfg_list: Vec::new(),
+        //     emu_type: EmuDeviceType::EmuDeviceTSGIR,
+        //     mediated: false,
+        // },
         // VmEmulatedDeviceConfig {
         //     name: Some(String::from("virtio-blk0")),
         //     base_ipa: 0xa000000,
@@ -129,8 +166,10 @@ pub fn mvm_config_init() {
             mediated_block_index: None,
         })),
         cpu: Arc::new(Mutex::new(VmCpuConfig {
-            num: 4,
-            allocate_bitmap: 0b1111,
+            // num: 4,
+            // allocate_bitmap: 0b1111,
+            num: 1,
+            allocate_bitmap: 0b1,
             master: -1,
         })),
         memory: Arc::new(Mutex::new(VmMemoryConfig {

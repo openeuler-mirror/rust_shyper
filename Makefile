@@ -18,7 +18,19 @@ OBJCOPY = ${TOOLCHAIN}-objcopy
 
 IMAGE=rust_shyper
 
+<<<<<<< HEAD
 TARGET_DIR=target/${ARCH}/${PROFILE}
+=======
+qemu_debug:
+	cargo build -Z build-std=${BUILD_STD} --target aarch64-qemu.json --features qemu
+	${TOOLCHAIN}-objcopy target/aarch64-qemu/debug/${IMAGE} -O binary target/aarch64-qemu/debug/${IMAGE}.bin
+	${OBJDUMP} --demangle -d target/aarch64-qemu/debug/${IMAGE} > target/aarch64-qemu/debug/t.txt
+
+qemu_gicv3_debug:
+	cargo build -Z build-std=${BUILD_STD} --target aarch64-qemu.json --features "qemu gicv3"
+	${TOOLCHAIN}-objcopy target/aarch64-qemu/debug/${IMAGE} -O binary target/aarch64-qemu/debug/${IMAGE}.bin
+	${OBJDUMP} --demangle -d target/aarch64-qemu/debug/${IMAGE} > target/aarch64-qemu/debug/t.txt
+>>>>>>> finish vgicv3 but have fdt bug
 
 # Cargo flags.
 CARGO_FLAGS ?= -Z build-std=core,alloc --target ${ARCH}.json --no-default-features --features ${BOARD},${FEATURES}

@@ -2210,6 +2210,8 @@ pub fn gic_maintenance_handler(_arg: usize) {
     // }
     let vgic = vm.vgic();
 
+    print!("misr:{}\n",misr);
+
     if misr & 1 != 0 {
         vgic.handle_trapped_eoir(current_cpu().active_vcpu.clone().unwrap());
     }
@@ -2219,7 +2221,6 @@ pub fn gic_maintenance_handler(_arg: usize) {
     }
 
     if misr & (1 << 2) != 0 {
-        // println!("in gic_maintenance_handler eoir_highest_spilled_active");
         let mut hcr = GICH.hcr();
         while hcr & (0b11111 << 27) != 0 {
             vgic.eoir_highest_spilled_active(current_cpu().active_vcpu.clone().unwrap());
@@ -2227,7 +2228,6 @@ pub fn gic_maintenance_handler(_arg: usize) {
             GICH.set_hcr(hcr);
             hcr = GICH.hcr();
         }
-        // println!("end gic_maintenance_handler eoir_highest_spilled_active");
     }
 }
 

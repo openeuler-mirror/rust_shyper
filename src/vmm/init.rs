@@ -12,8 +12,9 @@ use alloc::vec::Vec;
 
 use crate::arch::{
     emu_intc_handler, emu_intc_init, emu_smmu_handler, partial_passthrough_intc_handler, partial_passthrough_intc_init,
-    vgic_icc_sre_handler, vgic_icc_sgir_handler,
 };
+#[cfg(feature="gicv3")]
+use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
 use crate::arch::PAGE_SIZE;
 use crate::board::*;
@@ -301,6 +302,7 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     return false;
                 }
             }
+            #[cfg(feature="gicv3")]
             EmuDeviceTICCSRE => {
                 emu_register_dev(
                     EmuDeviceTICCSRE,
@@ -311,6 +313,7 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     vgic_icc_sre_handler,
                 );
             }
+            #[cfg(feature="gicv3")]
             EmuDeviceTSGIR => {
                 emu_register_dev(
                     EmuDeviceTSGIR,
@@ -321,7 +324,18 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     vgic_icc_sgir_handler,
                 );
             }
-            
+            #[cfg(feature="gicv3")]
+            EmuDeviceTGICR => {
+                emu_register_dev(
+                    EmuDeviceTGICR,
+                    vm.id(),
+                    idx,
+                    emu_dev.base_ipa,
+                    emu_dev.length,
+                    emul_vgicr_handler,
+                );
+                emu_vgicr_init(vm.clone(), idx);
+            }
             _ => {
                 warn!("vmm_init_emulated_device: unknown emulated device");
                 return false;
@@ -409,6 +423,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                 for emu_cfg in config.emulated_device_list() {
                     match emu_cfg.emu_type {
                         EmuDeviceTGicd => {
+                            print!("trace fdt_setup_gic\n");
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
                             fdt_setup_gic(
                                 dtb,
@@ -423,6 +438,31 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 (Platform::GICC_BASE | 0xF_0000_0000) as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
+                        }
+                        EmuDeviceTGICR => {
+                            #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            trace!("EmuDeviceTGICR");
+                            // fdt_setup_gic(
+                            //     // dtb,
+                            //     // Platform::GICD_BASE as u64,
+                            //     // Platform::GICC_BASE as u64,
+                            //     // emu_cfg.name.unwrap().as_ptr(),
+                            // );
+                            #[cfg(feature = "pi4")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (Platform::GICD_BASE | 0xF_0000_0000) as u64,
+                                (Platform::GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
+                        }
+                        EmuDeviceTSGIR => {
+                            #[cfg(feature = "gicv3")]
+                            trace!("EmuDeviceTSGIR");
+                        }
+                        EmuDeviceTICCSRE => {
+                            #[cfg(feature = "gicv3")]
+                            trace!("EmuDeviceTICCSRE");
                         }
                         EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
                             #[cfg(any(feature = "tx2", feature = "qemu"))]

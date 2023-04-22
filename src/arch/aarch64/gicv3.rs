@@ -66,10 +66,13 @@ pub const GICH_LR_PRIO_LEN: usize = 8;
 pub const GICH_LR_STATE_OFF: usize = 62;
 pub const GICH_LR_GRP_BIT: usize = 1 << 60;
 pub const GICH_LR_PRIO_MSK: usize = (((1 << ((GICH_LR_PRIO_LEN) - 1)) << 1) - 1) << (GICH_LR_PRIO_OFF);
+pub const GICH_HCR_EN_BIT: usize = 1;
+pub const GICH_HCR_NPIE_BIT: usize = 1 << 3;
 const GICH_LR_HW_BIT: usize = 1 << 61;
 const GICH_LR_EOI_BIT: usize = 1 << 41;
 const GICH_NUM_ELRSR: usize = 1;
 const GICH_VTR_MSK: usize = 0b11111;
+
 pub const GIC_SGIS_NUM: usize = 16;
 const GIC_PPIS_NUM: usize = 16;
 pub const GIC_INTS_MAX: usize = INTERRUPT_NUM_MAX;
@@ -174,10 +177,15 @@ register_structs! {
         (0x0008 => IIDR: ReadOnly<u32>),  //Distributor Implementer Identification Register
         (0x000c => TYPER2: ReadOnly<u32>), //Interrupt controller Type Register 2
         (0x0010 => STATUSR: ReadWrite<u32>), //Error Reporting Status Register, optional
+        (0x0014 => reserved0),
         (0x0040 => SETSPI_NSR: WriteOnly<u32>), //Set SPI Register
+        (0x0044 => reserved1),
         (0x0048 => CLRSPI_NSR: WriteOnly<u32>), //Clear SPI Register
+        (0x004c => reserved2),
         (0x0050 => SETSPI_SR: WriteOnly<u32>), //Set SPI, Secure Register
+        (0x0054 => reserved3),
         (0x0058 => CLRSPI_SR: WriteOnly<u32>), //Clear SPI, Secure Register
+        (0x005c => reserved4),
         (0x0080 => IGROUPR: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Group Registers
         (0x0100 => ISENABLER: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Set-Enable Registers
         (0x0180 => ICENABLER: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Clear-Enable Registers
@@ -191,24 +199,13 @@ register_structs! {
         (0x0d00 => IGRPMODR: [ReadWrite<u32>; GIC_CONFIG_REGS_NUM]), //Interrupt Group Modifier Registers
         (0x0e00 => NSACR: [ReadWrite<u32>; GIC_SEC_REGS_NUM]), //Non-secure Access Control Registers
         (0x0f00 => SGIR: WriteOnly<u32>),  //Software Generated Interrupt Register
+        (0x0f04 => reserved6),
         (0x0f10 => CPENDSGIR: [ReadWrite<u32>; GIC_SGI_REGS_NUM]), //SGI Clear-Pending Registers
         (0x0f20 => SPENDSGIR: [ReadWrite<u32>; GIC_SGI_REGS_NUM]), //SGI Set-Pending Registers
-        (0x0f80 => INMIR: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Non-maskable Interrupt Registers
-        (0x1000 => IGROUP: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Group Registers for extended SPI range
-        (0x1200 => ISENABLERE: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Set-Enable for extended SPI range
-        (0x1400 => ICENABLERE: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Clear-Enable for extended SPI range
-        (0x1600 => ISPENDRE: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Set-Pend for extended SPI range
-        (0x1800 => ICPENDRE: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Clear-Pend for extended SPI range
-        (0x1a00 => ISACTIVERE: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Set-Active for extended SPI range
-        (0x1c00 => ICACTIVERE: [ReadWrite<u32>; GIC_INT_REGS_NUM]), //Interrupt Clear-Active for extended SPI range
-        (0x2000 => IPRIORITYRE: [ReadWrite<u32>; GIC_PRIO_REGS_NUM]), //Interrupt Priority for extended SPI range
-        (0x3000 => ICFGRE: [ReadWrite<u32>; GIC_CONFIG_REGS_NUM]), //Extended SPI Configuration Register
-        (0x3400 => IGRPMODRE: [ReadWrite<u32>; GIC_CONFIG_REGS_NUM]), //Interrupt Group Modifier for extended SPI range
-        (0x3600 => NSACRE: [ReadWrite<u32>; GIC_SEC_REGS_NUM]),  //Non-secure Access Control Registers for extended SPI range
-        (0x3b00 => INMIRE: [ReadWrite<u32>; GIC_CONFIG_REGS_NUM]), //Non-maskable Interrupt Registers for Extended SPIs
-        (0x6100 => IROUTER: [ReadWrite<u64>; GIC_INTS_MAX]), //Interrupt Routing Registers
-        (0x8000 => IROUTERE: [ReadWrite<u64>; GIC_INTS_MAX]), //Interrupt Routing Registers for extended SPI range
-        (0xffd0 => reserve4IDR: [ReadOnly<u32>;12]), //Reserved for ID registers
+        (0x0f30 => reserved7),
+        (0x8000 => IROUTER: [ReadWrite<u64>; GIC_INTS_MAX]), //Interrupt Routing Registers for extended SPI range
+        (0xa000 => reserved21),
+        (0xffd0 => ID: [ReadOnly<u32>;((0x10000 - 0xffd0) / size_of::<u32>())]), //Reserved for ID registers
         (0x10000 => @END),
     }
 }
@@ -263,6 +260,10 @@ impl GicDistributor {
 
     pub fn ctlr(&self) -> u32 {
         self.CTLR.get()
+    }
+
+    pub fn id(&self, idx: usize) -> u32 {
+        self.ID[idx].get()
     }
 
     pub fn icfgr(&self, idx: usize) -> u32 {
@@ -321,10 +322,12 @@ impl GicDistributor {
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
         if sgi_num < GIC_SGIS_NUM {
             let mpidr = Platform::cpuid_to_cpuif(cpu_target) & MPIDR_AFF_MSK;
+            print!("{}",mpidr);
             /* We only support two affinity levels */
-            let sgi = (((mpidr) >> 8 & 0xff) << GICC_SGIR_AFF1_OFFSET)
+            let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET)
                 | (1 << (mpidr & 0xff))
                 | ((sgi_num) << GICC_SGIR_SGIINTID_OFF);
+            self.SGIR.set(sgi as u32);
             msr!(ICC_SGI1R_EL1, sgi as u64);
         }
     }
@@ -509,7 +512,7 @@ register_structs! {
         (0x00b8 => reserved14),
         (0x00c0 => SYNCR: ReadOnly<u64>),    // Redistributor Synchronize Register
         (0x00c8 => reserved13),
-        (0xffd0 => ID: [ReadWrite<u32>;((0x10000 - 0xFFD0) / size_of::<u32>())]),
+        (0xffd0 => ID: [ReadOnly<u32>;((0x10000 - 0xFFD0) / size_of::<u32>())]),
         (0x10000 => reserved12),
         (0x10080 => IGROUPR0: ReadWrite<u32>), //SGI_base frame, all below
         (0x10084 => reserved11),
@@ -568,6 +571,7 @@ impl GicRedistributor {
     }
 
     fn init(&self) {
+        GICR[current_cpu().id].IGROUPR0.set(u32::MAX);
         GICR[current_cpu().id].ICENABLER0.set(u32::MAX);
         GICR[current_cpu().id].ICPENDR0.set(u32::MAX);
         GICR[current_cpu().id].ICACTIVER0.set(u32::MAX);
@@ -685,6 +689,10 @@ impl GicRedistributor {
 
     pub fn get_iidr(&self, gicr_id: u32) -> u32 {
         self[gicr_id as usize].IIDR.get()
+    }
+
+    pub fn get_id(&self, gicr_id: u32, index: usize) -> u32 {
+        self[gicr_id as usize].ID[index].get()
     }
 }
 
