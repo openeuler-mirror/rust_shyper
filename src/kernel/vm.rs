@@ -684,7 +684,6 @@ impl Vm {
     }
 
     pub fn vcpuid_to_pcpuid(&self, vcpuid: usize) -> Result<usize, ()> {
-        // println!("vcpuid_to_pcpuid");
         let vm_inner = self.inner.lock();
         if vcpuid < vm_inner.cpu_num {
             let vcpu = vm_inner.vcpu_list[vcpuid].clone();
@@ -891,7 +890,7 @@ impl Vm {
             }
             let rvcpu = self.vcpu(i).clone().unwrap();
             if rvcpu.phys_id() == cpuid {
-                return Some(rvcpu)
+                return Some(rvcpu);
             }
         }
         println!("get_vcpu_by_mpdir:get vcpu fail,error mpdir!");

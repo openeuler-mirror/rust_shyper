@@ -1753,7 +1753,7 @@ impl Vgic {
     }
 
     fn emu_icenabler_access(&self, emu_ctx: &EmuContext) {
-        let reg_idx = (emu_ctx.address & 0xffff) - 0x1400;
+        let reg_idx = emu_ctx.address & 0b1111111;
         let idx = emu_ctx.reg;
         let mut val = if emu_ctx.write { current_cpu().get_gpr(idx) } else { 0 };
         let first_int = reg_idx * 8;
@@ -2139,7 +2139,7 @@ fn vgicr_emul_ctrl_access(emu_ctx: &EmuContext) {
 }
 
 fn vgicr_emul_pidr_access(emu_ctx: &EmuContext, vgicr_id: usize) {
-    if emu_ctx.write {
+    if !emu_ctx.write {
         let pgicr_id = current_cpu()
             .active_vcpu
             .clone()
@@ -2171,7 +2171,7 @@ fn vgic_int_has_other_target(interrupt: VgicInt) -> bool {
     let pri = gic_is_priv(interrupt.id() as usize);
     let mut res: u64;
     mrs!(res, MPIDR_EL1);
-    
+
     let routed_here = !pri && !((interrupt.phys_route() as usize ^ (res as usize & MPIDR_AFF_MSK)) != 0);
     let route_valid = interrupt.phys_route() as usize != GICD_IROUTER_INV;
     let any = !pri && vgic_broadcast(interrupt.clone());
@@ -2321,7 +2321,7 @@ pub fn gic_maintenance_handler(_arg: usize) {
     // }
     let vgic = vm.vgic();
 
-    print!("misr:{}\n",misr);
+    print!("misr:{}\n", misr);
 
     if misr & 1 != 0 {
         vgic.handle_trapped_eoir(current_cpu().active_vcpu.clone().unwrap());
@@ -2357,9 +2357,6 @@ const VGICD_REG_OFFSET_PREFIX_SGIR: usize = 0x1e;
 
 pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     let offset = emu_ctx.address & 0xffff;
-    if emu_ctx.width > 4 {
-        return false;
-    }
 
     let vm = match crate::kernel::active_vm() {
         None => {
@@ -2367,11 +2364,15 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
         }
         Some(x) => x,
     };
+
     let vgic = vm.vgic();
-    let vgicd_offset_prefix = (offset & 0xf80) >> 7;
-    if !vgicd_emu_access_is_vaild(emu_ctx) {
-        return false;
-    }
+    let vgicd_offset_prefix = (offset & 0xff80) >> 7;
+    // no need to check!
+    // if !vgicd_emu_access_is_vaild(emu_ctx) {
+    //     return false;
+    // }
+
+    // println!("DEBUG:emu_int_handler: address:{:x}", emu_ctx.address);
 
     match vgicd_offset_prefix {
         VGICD_REG_OFFSET_PREFIX_ISENABLER => {
@@ -2419,7 +2420,7 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
                         vgic.emu_razwi(emu_ctx);
                     } else if offset >= 0x6000 && offset < 0x8000 {
                         vgic.emu_irouter_access(emu_ctx);
-                    } else if offset >= 0xffd0 && offset < 0x10000 && offset != 0xffe8 {
+                    } else if offset >= 0xffd0 && offset < 0x10000 {
                         //ffe8 is GICD_PIDR2, Peripheral ID2 Register
                         vgic.emu_pidr_access(emu_ctx);
                     } else {
@@ -2435,7 +2436,7 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
 
 pub fn vgicd_emu_access_is_vaild(emu_ctx: &EmuContext) -> bool {
     let offset = emu_ctx.address & 0xffff;
-    let offset_prefix = (offset & 0xf80) >> 7;
+    let offset_prefix = (offset & 0xff80) >> 7;
     match offset_prefix {
         VGICD_REG_OFFSET_PREFIX_CTLR
         | VGICD_REG_OFFSET_PREFIX_ISENABLER
@@ -2639,8 +2640,6 @@ const VGICR_REG_OFFSET_ICFGR1: usize = 0x10c04;
 pub fn emul_vgicr_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     let vgic = current_cpu().active_vcpu.clone().unwrap().vm().unwrap().vgic();
     let vgicr_id = vgicr_get_id(emu_ctx);
-    let base_offset = emu_ctx.address - (GICR.ptr() as usize);
-    let ctx_offset = base_offset & 0x1ffff;
     let offset = emu_ctx.address & 0x1ffff;
 
     match offset {
@@ -2672,9 +2671,9 @@ pub fn emul_vgicr_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
             vgic.emu_icfgr_access(emu_ctx);
         }
         _ => {
-            if ctx_offset >= 0x10400 && ctx_offset < 0x10420 {
+            if offset >= 0x10400 && offset < 0x10420 {
                 vgic.emu_ipriorityr_access(emu_ctx);
-            } else if ctx_offset >= 0xffd0 && ctx_offset < 0x10000 && ctx_offset != 0xffe8 {
+            } else if offset >= 0xffd0 && offset < 0x10000 {
                 vgicr_emul_pidr_access(emu_ctx, vgicr_id as usize);
             } else {
                 vgic.emu_razwi(emu_ctx);

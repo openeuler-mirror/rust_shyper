@@ -2210,7 +2210,6 @@ pub fn gic_maintenance_handler(_arg: usize) {
     // }
     let vgic = vm.vgic();
 
-    print!("misr:{}\n",misr);
 
     if misr & 1 != 0 {
         vgic.handle_trapped_eoir(current_cpu().active_vcpu.clone().unwrap());

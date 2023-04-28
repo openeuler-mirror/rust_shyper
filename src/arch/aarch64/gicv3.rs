@@ -202,8 +202,8 @@ register_structs! {
         (0x0f10 => CPENDSGIR: [ReadWrite<u32>; GIC_SGI_REGS_NUM]), //SGI Clear-Pending Registers
         (0x0f20 => SPENDSGIR: [ReadWrite<u32>; GIC_SGI_REGS_NUM]), //SGI Set-Pending Registers
         (0x0f30 => reserved7),
-        (0x8000 => IROUTER: [ReadWrite<u64>; GIC_INTS_MAX]), //Interrupt Routing Registers for extended SPI range
-        (0xa000 => reserved21),
+        (0x6000 => IROUTER: [ReadWrite<u64>; ((0x8000 - 0x6000) / size_of::<u64>())]), //Interrupt Routing Registers for extended SPI range
+        (0x8000 => reserved21),
         (0xffd0 => ID: [ReadOnly<u32>;((0x10000 - 0xffd0) / size_of::<u32>())]), //Reserved for ID registers
         (0x10000 => @END),
     }
@@ -321,12 +321,13 @@ impl GicDistributor {
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
         if sgi_num < GIC_SGIS_NUM {
             let mpidr = Platform::cpuid_to_cpuif(cpu_target) & MPIDR_AFF_MSK;
-            print!("{}",mpidr);
             /* We only support two affinity levels */
-            let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET)
-                | (1 << (mpidr & 0xff))
-                | ((sgi_num) << GICC_SGIR_SGIINTID_OFF);
-            self.SGIR.set(sgi as u32);
+            // let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET)
+            //     | (1 << (mpidr & 0xff))
+            //     | ((sgi_num) << GICC_SGIR_SGIINTID_OFF);
+            println!("call send_sgi!");
+            let sgi = ((1 << (16 + mpidr)) | (sgi_num & 0b1111)) as u32;
+            //self.SGIR.set(sgi as u32);
             msr!(ICC_SGI1R_EL1, sgi as u64);
         }
     }
@@ -570,6 +571,7 @@ impl GicRedistributor {
     }
 
     fn init(&self) {
+        //todo lock()
         GICR[current_cpu().id].IGROUPR0.set(u32::MAX);
         GICR[current_cpu().id].ICENABLER0.set(u32::MAX);
         GICR[current_cpu().id].ICPENDR0.set(u32::MAX);
@@ -739,10 +741,10 @@ impl GicCpuInterface {
     }
 
     fn init(&self) {
-        msr!(ICC_SRE_EL2, 0x1, "x");
+        msr!(ICC_SRE_EL2, 0b1001, "x");
 
         unsafe {
-            core::arch::asm!("ISB\n\t");
+            core::arch::asm!("isb\n\t");
         }
 
         for i in 0..gich_lrs_num() {
