@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+use tock_registers::interfaces::Readable;
+
 use crate::arch::{gic_cpu_reset, gicc_clear_current_irq};
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::{current_cpu, Vcpu, Vm};
@@ -25,12 +27,6 @@ pub fn interrupt_arch_init() {
     crate::lib::barrier();
 
     if current_cpu().id == 0 {
-        // #[cfg(feature = "gicv3")]
-        // {
-        //     use crate::arch::{GICR,GicDistributor,};
-        //     GICD = GicDistributor::new(Platform::GICD_BASE);
-        //     GICR = GicRedistributor::new(Platform::GICR_BASE);
-        // }
         gic_glb_init();
     }
 
@@ -44,16 +40,19 @@ pub fn interrupt_arch_init() {
 }
 
 pub fn interrupt_arch_enable(int_id: usize, en: bool) {
-    GICD.set_enable(int_id, en);
-    GICD.set_prio(int_id, 0x7f);
     #[cfg(feature = "gicv3")]
     {
-        let mut mpidr: u64;
-        mrs!(mpidr, MPIDR_EL1);
-        GICD.set_route(int_id, mpidr as usize);
+        use crate::arch::{gic_set_enable, gic_set_prio};
+        gic_set_enable(int_id, en);
+        gic_set_prio(int_id, 0x1);
+        GICD.set_route(int_id, cortex_a::registers::MPIDR_EL1.get() as usize);
     }
     #[cfg(not(feature = "gicv3"))]
-    GICD.set_trgt(int_id, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+    {
+        GICD.set_enable(int_id, en);
+        GICD.set_prio(int_id, 0x1);
+        GICD.set_trgt(int_id, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+    }
 }
 
 pub fn interrupt_arch_ipi_send(cpu_id: usize, ipi_id: usize) {

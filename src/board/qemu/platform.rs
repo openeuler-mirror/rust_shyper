@@ -36,7 +36,7 @@ impl PlatOperation for QemuPlatform {
     const GICH_BASE: usize = 0x08030000;
     const GICV_BASE: usize = 0x08040000;
     #[cfg(feature = "gicv3")]
-    const GICR_BASE: usize = 0x80a0000;
+    const GICR_BASE: usize = 0x080a0000;
 
     const SHARE_MEM_BASE: usize = 0x7_0000_0000;
 
@@ -50,6 +50,7 @@ impl PlatOperation for QemuPlatform {
     const DISK_PARTITION_2_SIZE: usize = 8192000;
 
     fn cpuid_to_cpuif(cpuid: usize) -> usize {
+        // PLAT_DESC.cpu_desc.core_list[cpuid].mpidr
         cpuid
     }
 

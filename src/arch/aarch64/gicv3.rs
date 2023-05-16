@@ -26,7 +26,7 @@ pub const MPIDR_AFF_MSK: usize = 0xffff; //we are only supporting 2 affinity lev
 
 // GICD BITS
 const GICD_CTLR_ENS_BIT: usize = 0x1;
-const GICD_CTLR_ENNS_BIT: usize = 0x2;
+const GICD_CTLR_ENNS_BIT: usize = 0b10;
 const GICD_CTLR_ARE_NS_BIT: usize = 0x1 << 4;
 pub const GICD_IROUTER_INV: usize = !MPIDR_AFF_MSK;
 pub const GICD_IROUTER_RES0_MSK: usize = (1 << 40) - 1;
@@ -40,6 +40,8 @@ const GICD_IROUTER_AFF_MSK: usize = GICD_IROUTER_RES0_MSK & !GICD_IROUTER_IRM_BI
 pub const GICR_TYPER_PRCNUM_OFF: usize = 8;
 pub const GICR_TYPER_AFFVAL_OFF: usize = 32;
 pub const GICR_TYPER_LAST_OFF: usize = 4;
+const GICR_WAKER_PSLEEP_BIT: usize = 0x2;
+const GICR_WAKER_CASLEEP_BIT: usize = 0x4;
 
 // GICC BITS
 pub const GICC_CTLR_EN_BIT: usize = 0x1;
@@ -55,23 +57,55 @@ pub const GICC_IAR_ID_LEN: usize = 24;
 pub const GICC_SGIR_IRM_BIT: usize = 1 << 40;
 
 // GICH BITS
-const GICH_HCR_LRENPIE_BIT: usize = 1 << 2;
+pub const GICH_HCR_LRENPIE_BIT: usize = 1 << 2;
 pub const GICH_LR_VID_OFF: usize = 0;
 pub const GICH_LR_VID_LEN: usize = 32;
 pub const GICH_LR_VID_MASK: usize = (((1 << ((GICH_LR_VID_LEN) - 1)) << 1) - 1) << (GICH_LR_VID_OFF);
 pub const GICH_LR_PID_OFF: usize = 32;
 pub const GICH_LR_PID_LEN: usize = 10;
+pub const GICH_LR_PID_MSK: usize = (((1 << ((GICH_LR_PID_LEN) - 1)) << 1) - 1) << (GICH_LR_PID_OFF);
 pub const GICH_LR_PRIO_OFF: usize = 48;
 pub const GICH_LR_PRIO_LEN: usize = 8;
+pub const GICH_LR_STATE_LEN: usize = 2;
 pub const GICH_LR_STATE_OFF: usize = 62;
+pub const GICH_LR_STATE_MSK: usize = (((1 << ((GICH_LR_STATE_LEN) - 1)) << 1) - 1) << (GICH_LR_STATE_OFF);
+pub const GICH_LR_STATE_ACT: usize = (2 << GICH_LR_STATE_OFF) & GICH_LR_STATE_MSK;
+pub const GICH_LR_STATE_PND: usize = (1 << GICH_LR_STATE_OFF) & GICH_LR_STATE_MSK;
 pub const GICH_LR_GRP_BIT: usize = 1 << 60;
 pub const GICH_LR_PRIO_MSK: usize = (((1 << ((GICH_LR_PRIO_LEN) - 1)) << 1) - 1) << (GICH_LR_PRIO_OFF);
+/* Global enable bit for the virtual CPU interface.
+ * When this field is 0:
+ * The virtual CPU interface does not signal any maintenance interrupts.
+ * The virtual CPU interface does not signal any virtual interrupts.
+ * A read of GICV_IAR or GICV_AIAR returns a spurious interrupt ID.
+ */
 pub const GICH_HCR_EN_BIT: usize = 1;
 pub const GICH_HCR_NPIE_BIT: usize = 1 << 3;
-const GICH_LR_HW_BIT: usize = 1 << 61;
-const GICH_LR_EOI_BIT: usize = 1 << 41;
+/* Counts the number of EOIs received that do not have a corresponding entry in the List registers.
+ * The virtual CPU interface increments this field automatically when a matching EOI is received
+ */
+pub const GICH_HCR_EOIC_OFF: usize = 27;
+pub const GICH_HCR_EOIC_LEN: usize = 5;
+pub const GICH_HCR_EOIC_MSK: usize = (((1 << ((GICH_HCR_EOIC_LEN) - 1)) << 1) - 1) << (GICH_HCR_EOIC_OFF);
+pub const GICH_LR_HW_BIT: usize = 1 << 61;
+pub const GICH_LR_EOI_BIT: usize = 1 << 41;
+/* End Of Interrupt.
+ * This maintenance interrupt is asserted when at least one bit in GICH_EISR == 1.
+ */
+pub const GICH_MISR_EOI:usize = 1;
+/* No Pending.
+ * This maintenance interrupt is asserted
+ * when GICH_HCR.NPIE == 1 and no List register is in the pending state.
+ */
+pub const GICH_MISR_NP:usize = 1 << 3;
+/* List Register Entry Not Present.
+ * This maintenance interrupt is asserted
+ * when GICH_HCR.LRENPIE == 1 and GICH_HCR.EOICount is nonzero.
+ */
+pub const GICH_MISR_LRPEN:usize = 1 << 2;
 const GICH_NUM_ELRSR: usize = 1;
 const GICH_VTR_MSK: usize = 0b11111;
+
 pub const GIC_SGIS_NUM: usize = 16;
 const GIC_PPIS_NUM: usize = 16;
 pub const GIC_INTS_MAX: usize = INTERRUPT_NUM_MAX;
@@ -96,7 +130,7 @@ pub const GICD_TYPER_CPUNUM_OFF: usize = 5;
 // pub const GICD_TYPER_CPUNUM_LEN: usize = 3;
 pub const GICD_TYPER_CPUNUM_MSK: usize = 0b11111;
 const GICD_TYPER_ITLINESNUM_LEN: usize = 0b11111;
-const ICC_CTLR_EOIMODE_BIT: usize = 0x1 << 1;
+pub const ICC_CTLR_EOIMODE_BIT: usize = 0x1 << 1;
 
 pub static GIC_LRS_NUM: Mutex<usize> = Mutex::new(0);
 
@@ -123,11 +157,11 @@ pub fn show_en_interrupt() {
 }
 
 pub fn gic_prio_reg(int_id: usize) -> usize {
-    int_id * GIC_PRIO_BITS / 32
+    (int_id * GIC_PRIO_BITS) / 32
 }
 
 pub fn gic_prio_off(int_id: usize) -> usize {
-    int_id * GIC_PRIO_BITS % 32
+    (int_id * GIC_PRIO_BITS) % 32
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -276,15 +310,16 @@ impl GicDistributor {
     fn global_init(&self) {
         let int_num = gic_max_spi();
 
-        for i in GIC_PRIVINT_NUM / 32..int_num / 32 {
+        for i in (GIC_PRIVINT_NUM / 32)..(int_num / 32) {
+            self.IGROUPR[i].set(u32::MAX);
             self.ICENABLER[i].set(u32::MAX);
             self.ICPENDR[i].set(u32::MAX);
             self.ICACTIVER[i].set(u32::MAX);
         }
 
-        for i in GIC_PRIVINT_NUM / 4..int_num * 8 / 32 {
+        for i in (GIC_PRIVINT_NUM * 8 / 32)..(int_num * 8 / 32) {
             self.IPRIORITYR[i].set(u32::MAX);
-            self.ITARGETSR[i].set(0);
+            //self.ITARGETSR[i].set(0);
         }
 
         for i in GIC_PRIVINT_NUM..GIC_INTS_MAX {
@@ -292,42 +327,21 @@ impl GicDistributor {
         }
 
         let prev = self.CTLR.get();
+
         self.CTLR
-            .set(prev | GICD_CTLR_ARE_NS_BIT as u32 | GICD_CTLR_ENNS_BIT as u32);
-    }
+            .set(prev | (GICD_CTLR_ARE_NS_BIT << 1) as u32 | GICD_CTLR_ENNS_BIT as u32);
+        let after = self.CTLR.get();
 
-    fn cpu_init(&self) {
-        for i in 0..GIC_PRIVINT_NUM / 32 {
-            /*
-             * Make sure all private interrupts are not enabled, non pending,
-             * non active.
-             */
-            self.ICENABLER[i].set(u32::MAX);
-            self.ICPENDR[i].set(u32::MAX);
-            self.ICACTIVER[i].set(u32::MAX);
-        }
-
-        /* Clear any pending SGIs. */
-        for i in 0..(GIC_SGIS_NUM * 8) / 32 {
-            self.CPENDSGIR[i].set(u32::MAX);
-        }
-
-        /* All interrupts have lowest priority possible by default */
-        for i in 0..(GIC_PRIVINT_NUM * 8) / 32 {
-            self.IPRIORITYR[i].set(u32::MAX);
-        }
+        println!("after current ctlr:{:b}", after);
     }
 
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
         if sgi_num < GIC_SGIS_NUM {
             let mpidr = Platform::cpuid_to_cpuif(cpu_target) & MPIDR_AFF_MSK;
             /* We only support two affinity levels */
-            // let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET)
-            //     | (1 << (mpidr & 0xff))
-            //     | ((sgi_num) << GICC_SGIR_SGIINTID_OFF);
-            println!("call send_sgi!");
-            let sgi = ((1 << (16 + mpidr)) | (sgi_num & 0b1111)) as u32;
-            //self.SGIR.set(sgi as u32);
+            let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET)
+                | (1 << (mpidr & 0xff))
+                | ((sgi_num) << GICC_SGIR_SGIINTID_OFF);
             msr!(ICC_SGI1R_EL1, sgi as u64);
         }
     }
@@ -341,11 +355,11 @@ impl GicDistributor {
     pub fn set_prio(&self, int_id: usize, prio: u8) {
         let idx = ((int_id) * GIC_PRIO_BITS) / 32;
         let off = (int_id * GIC_PRIO_BITS) % 32;
-        let mask = (1 << (GIC_PRIO_BITS) - 1) << off;
+        let mask = ((1 << (GIC_PRIO_BITS)) - 1) << off;
 
         let lock = GICD_LOCK.lock();
 
-        let prev = self.IPRIORITYR[idx].get();
+        let prev: u32 = self.IPRIORITYR[idx].get();
         let value = (prev & !(mask as u32)) | (((prio as u32) << off) & mask as u32);
         self.IPRIORITYR[idx].set(value);
 
@@ -372,10 +386,11 @@ impl GicDistributor {
     }
 
     pub fn set_enable(&self, int_id: usize, en: bool) {
+        println!("gicd::set_enbale: en {}, int_id {}", en, int_id);
         let reg_id = int_id / 32;
         let mask = 1 << (int_id % 32);
 
-        let lock = GICD_LOCK.lock();
+        // let lock = GICD_LOCK.lock();
 
         if en {
             add_en_interrupt(int_id);
@@ -384,41 +399,41 @@ impl GicDistributor {
             self.ICENABLER[reg_id].set(mask);
         }
 
-        drop(lock);
+        // drop(lock);
     }
 
     pub fn get_pend(&self, int_id: usize) -> bool {
         let reg_id = int_id / 32;
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
         (self.ISPENDR[reg_id].get() & (mask as u32)) != 0
     }
 
     pub fn get_act(&self, int_id: usize) -> bool {
         let reg_id = int_id / 32;
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
         (self.ISACTIVER[reg_id].get() & (mask as u32)) != 0
     }
 
     pub fn set_pend(&self, int_id: usize, pend: bool) {
         let lock = GICD_LOCK.lock();
 
-        if gic_is_sgi(int_id) {
-            let reg_ind = int_id / 4;
-            let off = (int_id % 4) * 8;
-            if pend {
-                self.SPENDSGIR[reg_ind].set(1 << (off + current_cpu().id));
-            } else {
-                self.CPENDSGIR[reg_ind].set(0b11111111 << off);
-            }
+        // if gic_is_sgi(int_id) {
+        //     let reg_ind = int_id / 4;
+        //     let off = (int_id % 4) * 8;
+        //     if pend {
+        //         self.SPENDSGIR[reg_ind].set(1 << (off + current_cpu().id));
+        //     } else {
+        //         self.CPENDSGIR[reg_ind].set(0b11111111 << off);
+        //     }
+        // } else {
+        let reg_ind = int_id / 32;
+        let mask = 1 << (int_id % 32);
+        if pend {
+            self.ISPENDR[reg_ind].set(mask);
         } else {
-            let reg_ind = int_id / 32;
-            let mask = 1 << int_id % 32;
-            if pend {
-                self.ISPENDR[reg_ind].set(mask);
-            } else {
-                self.ICPENDR[reg_ind].set(mask);
-            }
+            self.ICPENDR[reg_ind].set(mask);
         }
+        // }
 
         drop(lock);
     }
@@ -571,14 +586,17 @@ impl GicRedistributor {
     }
 
     fn init(&self) {
-        //todo lock()
-        GICR[current_cpu().id].IGROUPR0.set(u32::MAX);
-        GICR[current_cpu().id].ICENABLER0.set(u32::MAX);
-        GICR[current_cpu().id].ICPENDR0.set(u32::MAX);
-        GICR[current_cpu().id].ICACTIVER0.set(u32::MAX);
+        let waker = self[current_cpu().id].WAKER.get();
+        self[current_cpu().id].WAKER.set(waker & !GICR_WAKER_PSLEEP_BIT as u32);
+        while (self[current_cpu().id].WAKER.get() & GICR_WAKER_CASLEEP_BIT as u32) != 0 {}
+
+        self[current_cpu().id].IGROUPR0.set(u32::MAX);
+        self[current_cpu().id].ICENABLER0.set(u32::MAX);
+        self[current_cpu().id].ICPENDR0.set(u32::MAX);
+        self[current_cpu().id].ICACTIVER0.set(u32::MAX);
 
         for i in 0..gic_prio_reg(GIC_PRIVINT_NUM) as usize {
-            GICR[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
+            self[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
         }
     }
 
@@ -610,7 +628,7 @@ impl GicRedistributor {
     pub fn set_icfgr(&self, int_id: usize, cfg: u8, gicr_id: u32) {
         let reg_id = (int_id * GIC_CONFIG_BITS) / (size_of::<u32>() * 8);
         let off = (int_id * GIC_CONFIG_BITS) % (size_of::<u32>() * 8);
-        let mask = (1 << (GIC_CONFIG_BITS) - 1) << (off);
+        let mask = ((1 << (GIC_CONFIG_BITS)) - 1) << (off);
 
         let lock = GICR_LOCK.lock();
 
@@ -634,16 +652,16 @@ impl GicRedistributor {
         let lock = GICR_LOCK.lock();
 
         if pend {
-            self[gicr_id as usize].ISPENDR0.set((1 << int_id) as u32);
+            self[gicr_id as usize].ISPENDR0.set((1 << (int_id % 32)) as u32);
         } else {
-            self[gicr_id as usize].ICPENDR0.set((1 << int_id) as u32);
+            self[gicr_id as usize].ICPENDR0.set((1 << (int_id % 32)) as u32);
         }
 
         drop(lock);
     }
 
     pub fn get_pend(&self, int_id: usize, gicr_id: u32) -> bool {
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
         if gic_is_priv(int_id) {
             (self[gicr_id as usize].ISPENDR0.get() as usize & mask) != 0
         } else {
@@ -652,7 +670,7 @@ impl GicRedistributor {
     }
 
     pub fn set_act(&self, int_id: usize, act: bool, gicr_id: u32) {
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
 
         let lock = GICR_LOCK.lock();
 
@@ -666,7 +684,7 @@ impl GicRedistributor {
     }
 
     pub fn get_act(&self, int_id: usize, gicr_id: u32) -> bool {
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
         if gic_is_priv(int_id) {
             (self[gicr_id as usize].ISACTIVER0.get() as usize & mask) != 0
         } else {
@@ -675,17 +693,25 @@ impl GicRedistributor {
     }
 
     pub fn set_enable(&self, int_id: usize, en: bool, gicr_id: u32) {
-        let mask = 1 << int_id % 32;
+        println!("IGROUPR:{:#x}",self[gicr_id as usize].IGROUPR0.get());
+        println!("WAKER:{:#x}",self[gicr_id as usize].WAKER.get());
+        println!("ICFGR1:{:#x}",self[gicr_id as usize].ICFGR1.get());
+        let mask = 1 << (int_id % 32);
 
         let lock = GICR_LOCK.lock();
 
         if en {
-            self[gicr_id as usize].ISENABLER0.set(mask as u32);
+            add_en_interrupt(int_id);
+            self[gicr_id as usize].ISENABLER0.set(mask);
         } else {
-            self[gicr_id as usize].ICENABLER0.set(mask as u32);
+            self[gicr_id as usize].ICENABLER0.set(mask);
         }
 
         drop(lock);
+    }
+
+    pub fn get_enable(&self, int_id: usize,gicr_id: u32) -> u32{
+        self[gicr_id as usize].ISENABLER0.get()
     }
 
     pub fn get_iidr(&self, gicr_id: u32) -> u32 {
@@ -694,6 +720,14 @@ impl GicRedistributor {
 
     pub fn get_id(&self, gicr_id: u32, index: usize) -> u32 {
         self[gicr_id as usize].ID[index].get()
+    }
+
+    pub fn get_ctrl(&self,gicr_id: u32) -> u32 {
+        self[gicr_id as usize].CTLR.get()
+    }
+
+    pub fn is_enabler(&self, gicr_id: u32) -> u32{
+        self[gicr_id as usize].ISENABLER0.get()
     }
 }
 
@@ -741,11 +775,13 @@ impl GicCpuInterface {
     }
 
     fn init(&self) {
-        msr!(ICC_SRE_EL2, 0b1001, "x");
+        msr!(ICC_SRE_EL2, 0b1, "x");
 
         unsafe {
-            core::arch::asm!("isb\n\t");
+            core::arch::asm!("isb");
         }
+
+        println!("gich_lrs_num:{}", gich_lrs_num());
 
         for i in 0..gich_lrs_num() {
             GICH.set_lr(i, 0);
@@ -844,6 +880,7 @@ impl GicHypervisorInterface {
         msr!(ICH_HCR_EL2, hcr, "x")
     }
 
+    // These registers can be used to locate a usable List register when the hypervisor is delivering an interrupt to a Guest OS.
     pub fn elrsr(&self) -> u32 {
         let elrsrc: u32;
         mrs!(elrsrc, ICH_ELRSR_EL2, "x");
@@ -856,24 +893,25 @@ impl GicHypervisorInterface {
         eisrc
     }
 
-    pub fn lr(&self, lr_idx: usize) -> u32 {
-        let lrc: u32;
+    pub fn lr(&self, lr_idx: usize) -> usize {
+        let lrc: usize;
         match lr_idx {
-            0 => mrs!(lrc, ICH_LR0_EL2, "x"),
-            1 => mrs!(lrc, ICH_LR1_EL2, "x"),
-            2 => mrs!(lrc, ICH_LR2_EL2, "x"),
-            3 => mrs!(lrc, ICH_LR3_EL2, "x"),
-            4 => mrs!(lrc, ICH_LR4_EL2, "x"),
-            5 => mrs!(lrc, ICH_LR5_EL2, "x"),
-            6 => mrs!(lrc, ICH_LR6_EL2, "x"),
-            7 => mrs!(lrc, ICH_LR7_EL2, "x"),
-            8 => mrs!(lrc, ICH_LR8_EL2, "x"),
-            9 => mrs!(lrc, ICH_LR9_EL2, "x"),
-            10 => mrs!(lrc, ICH_LR10_EL2, "x"),
-            11 => mrs!(lrc, ICH_LR11_EL2, "x"),
-            12 => mrs!(lrc, ICH_LR12_EL2, "x"),
-            13 => mrs!(lrc, ICH_LR13_EL2, "x"),
-            14 => mrs!(lrc, ICH_LR14_EL2, "x"),
+            0 => mrs!(lrc, ICH_LR0_EL2),
+            1 => mrs!(lrc, ICH_LR1_EL2),
+            2 => mrs!(lrc, ICH_LR2_EL2),
+            3 => mrs!(lrc, ICH_LR3_EL2),
+            4 => mrs!(lrc, ICH_LR4_EL2),
+            5 => mrs!(lrc, ICH_LR5_EL2),
+            6 => mrs!(lrc, ICH_LR6_EL2),
+            7 => mrs!(lrc, ICH_LR7_EL2),
+            8 => mrs!(lrc, ICH_LR8_EL2),
+            9 => mrs!(lrc, ICH_LR9_EL2),
+            10 => mrs!(lrc, ICH_LR10_EL2),
+            11 => mrs!(lrc, ICH_LR11_EL2),
+            12 => mrs!(lrc, ICH_LR12_EL2),
+            13 => mrs!(lrc, ICH_LR13_EL2),
+            14 => mrs!(lrc, ICH_LR14_EL2),
+            15 => mrs!(lrc, ICH_LR15_EL2),
             _ => panic!("gic: trying to read inexistent list register"),
         };
         lrc
@@ -889,23 +927,24 @@ impl GicHypervisorInterface {
         self.APR[apr_idx].get()
     }
 
-    pub fn set_lr(&self, lr_idx: usize, val: u32) {
+    pub fn set_lr(&self, lr_idx: usize, val: usize) {
         match lr_idx {
-            0 => msr!(ICH_LR0_EL2, val, "x"),
-            1 => msr!(ICH_LR1_EL2, val, "x"),
-            2 => msr!(ICH_LR2_EL2, val, "x"),
-            3 => msr!(ICH_LR3_EL2, val, "x"),
-            4 => msr!(ICH_LR4_EL2, val, "x"),
-            5 => msr!(ICH_LR5_EL2, val, "x"),
-            6 => msr!(ICH_LR6_EL2, val, "x"),
-            7 => msr!(ICH_LR7_EL2, val, "x"),
-            8 => msr!(ICH_LR8_EL2, val, "x"),
-            9 => msr!(ICH_LR9_EL2, val, "x"),
-            10 => msr!(ICH_LR10_EL2, val, "x"),
-            11 => msr!(ICH_LR11_EL2, val, "x"),
-            12 => msr!(ICH_LR12_EL2, val, "x"),
-            13 => msr!(ICH_LR13_EL2, val, "x"),
-            14 => msr!(ICH_LR14_EL2, val, "x"),
+            0 => msr!(ICH_LR0_EL2, val),
+            1 => msr!(ICH_LR1_EL2, val),
+            2 => msr!(ICH_LR2_EL2, val),
+            3 => msr!(ICH_LR3_EL2, val),
+            4 => msr!(ICH_LR4_EL2, val),
+            5 => msr!(ICH_LR5_EL2, val),
+            6 => msr!(ICH_LR6_EL2, val),
+            7 => msr!(ICH_LR7_EL2, val),
+            8 => msr!(ICH_LR8_EL2, val),
+            9 => msr!(ICH_LR9_EL2, val),
+            10 => msr!(ICH_LR10_EL2, val),
+            11 => msr!(ICH_LR11_EL2, val),
+            12 => msr!(ICH_LR12_EL2, val),
+            13 => msr!(ICH_LR13_EL2, val),
+            14 => msr!(ICH_LR14_EL2, val),
+            15 => msr!(ICH_LR15_EL2, val),
             _ => panic!("gic: trying to write inexistent list register"),
         }
     }
@@ -955,7 +994,7 @@ impl GicState {
 
         mrs!(self.hcr, ICH_HCR_EL2, "x");
         for i in 0..gich_lrs_num() {
-            self.lr[i] = GICH.lr(i);
+            self.lr[i] = GICH.lr(i) as u32;
         }
     }
 
@@ -973,7 +1012,7 @@ impl GicState {
 
         msr!(ICH_HCR_EL2, self.hcr, "x");
         for i in 0..gich_lrs_num() {
-            GICH.set_lr(i, self.lr[i]);
+            GICH.set_lr(i, self.lr[i] as usize);
         }
     }
 }
@@ -1027,16 +1066,16 @@ pub fn gicc_clear_current_irq(for_hypervisor: bool) {
         return;
     }
     let gicc = &GICC;
-    gicc.EOIR.set(irq);
+    gicc.set_eoir(irq);
     if for_hypervisor {
-        gicc.DIR.set(irq);
+        gicc.set_dir(irq);
     }
     let irq = 0;
     current_cpu().current_irq = irq;
 }
 
 pub fn gicc_get_current_irq() -> (usize, usize) {
-    let iar = GICC.IAR.get();
+    let iar = GICC.iar();
     let irq = iar as usize;
     current_cpu().current_irq = irq;
     let id = bit_extract(iar as usize, GICC_IAR_ID_OFF, GICC_IAR_ID_LEN);

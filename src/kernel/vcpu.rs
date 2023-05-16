@@ -145,9 +145,19 @@ impl Vcpu {
 
         for irq_state in inner.gic_ctx.irq_state.iter() {
             if irq_state.id != 0 {
-                GICD.set_enable(irq_state.id as usize, irq_state.enable != 0);
-                GICD.set_prio(irq_state.id as usize, irq_state.priority);
-                GICD.set_trgt(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+                #[cfg(feature = "gicv3")]
+                {
+                    use crate::arch::{gic_set_enable, gic_set_prio};
+                    gic_set_enable(irq_state.id as usize, irq_state.enable != 0);
+                    gic_set_prio(irq_state.id as usize, irq_state.priority);
+                    GICD.set_route(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+                }
+                #[cfg(not(feature = "gicv3"))]
+                {
+                    GICD.set_enable(irq_state.id as usize, irq_state.enable != 0);
+                    GICD.set_prio(irq_state.id as usize, irq_state.priority);
+                    GICD.set_trgt(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+                }
             }
         }
 
