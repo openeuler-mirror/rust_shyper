@@ -1820,7 +1820,7 @@ impl Vgic {
             }
         } else {
             // TODO: CPENDSGIR and SPENDSGIR access
-            unimplemented!();
+            warn!("unimplemented: CPENDSGIR and SPENDSGIR access");
         }
     }
 

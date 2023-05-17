@@ -1,4 +1,5 @@
 # Path
+# please make a rootfs image by yourself
 DISK = vm0.img
 
 # Compile
@@ -25,27 +26,27 @@ qemu_release:
 
 tx2:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2.json --features tx2
-	bash upload
+	# bash upload
 	${OBJDUMP} --demangle -d target/aarch64-tx2/debug/${IMAGE} > target/aarch64-tx2/debug/t.txt
 
 tx2_release:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2.json --features tx2 --release
-	bash upload_release
+	# bash upload_release
 	${OBJDUMP} --demangle -d target/aarch64-tx2/release/${IMAGE} > target/aarch64-tx2/release/t.txt
 
 tx2_ramdisk:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2.json --features "tx2 ramdisk" --release
-	bash upload_release
+	# bash upload_release
 	${OBJDUMP} --demangle -d target/aarch64-tx2/release/${IMAGE} > target/aarch64-tx2/release/t.txt
 
 tx2_update:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2-update.json --features "tx2 update" --release
-	bash upload_update
+	# bash upload_update
 	${OBJDUMP} --demangle -d target/aarch64-tx2-update/release/${IMAGE} > target/aarch64-tx2-update/release/update.txt
 
 pi4_release:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-pi4.json --features pi4 --release
-	bash pi4_upload_release
+	# bash pi4_upload_release
 	${OBJDUMP} --demangle -d target/aarch64-pi4/release/${IMAGE} > target/aarch64-pi4/release/t.txt
 
 

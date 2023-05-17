@@ -440,10 +440,7 @@ impl Vm {
                 panic!("set_emu_devs: set an exsit emu dev");
             }
         }
-        while idx > vm_inner.emu_devs.len() {
-            println!("set_emu_devs: push a None emu dev");
-            vm_inner.emu_devs.push(EmuDevs::None);
-        }
+        vm_inner.emu_devs.resize(idx, EmuDevs::None);
         vm_inner.emu_devs.push(emu);
     }
 

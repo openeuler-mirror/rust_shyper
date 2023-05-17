@@ -21,7 +21,12 @@ The list of supported (and work in progress) platforms is presented below:
 
 ## How to Build
 
-Tools for compiling: please install [aarch64-none-elf toolchain](https://developer.arm.com/downloads/-/gnu-a) and [cargo-binutils](https://crates.io/crates/cargo-binutils/0.3.6)
+Tools for compiling: please install:
+- [Rust](https://www.rust-lang.org/tools/install)
+- [aarch64-none-elf toolchain](https://developer.arm.com/downloads/-/gnu-a)
+- [cargo-binutils](https://crates.io/crates/cargo-binutils/0.3.6) (optional)
+- QEMU, or qemu-system-aarch64 (optional)
+- u-boot-tools (optional)
 
 Simply run `make`
 
@@ -37,7 +42,7 @@ Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to
 
 MVM is a privileged VM that can monitor the status of other VMs through privileged interfaces provided by the hypervisor. We implement a dedicated Linux kernel module for MVM. Through this module, MVM can make a hypercall to realize specific functions, such as VM configuration, VM migration and hypervisor live-update. Generally, there is only one MVM, and it will monopolize core 0.
 
-The kernel module on Rpi Linux5.4.Y (for Raspberry Pi 4 Model B) and NVIDIA L4T 32.6.1 (for Jestion TX2) as MVM has been tested.
+The kernel module on NVIDIA L4T 32.6.1 (for Jestion TX2) as MVM has been tested.
 
 ## How to Run Guest VM
 
