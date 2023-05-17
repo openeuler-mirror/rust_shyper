@@ -21,7 +21,12 @@ Rust-Shyper是由北航计算机学院操作系统研究团队，在华为技术
 
 ## 如何编译
 
-需要的额外工具：[aarch64-none-elf的编译工具链](https://developer.arm.com/downloads/-/gnu-a)以及[cargo-binutils](https://crates.io/crates/cargo-binutils/0.3.6)
+编译需要的工具：
+- [Rust](https://www.rust-lang.org/tools/install)
+- [aarch64-none-elf的编译工具链](https://developer.arm.com/downloads/-/gnu-a)
+- [cargo-binutils](https://crates.io/crates/cargo-binutils/0.3.6) (可选的)
+- QEMU, or qemu-system-aarch64 (可选的)
+- u-boot-tools (可选的)
 
 只需要使用`make`工具即可
 
@@ -39,7 +44,7 @@ MVM 是一个可以通过Hypervisor提供的私有特权接口来监控其他虚
 
 通常情况下，MVM仅允许存在一个，且MVM会独占0号核心。
 
-该内核模块在如下系统作为MVM时，经测试可以正常运行：Rpi Linux5.4.Y (for Raspberry Pi 4 Model B) 和 NVIDIA L4T 32.6.1 (for Jestion TX2).
+该内核模块在如下系统作为MVM时，经测试可以正常运行：NVIDIA L4T 32.6.1 (for Jestion TX2).
 
 ## 如何启动客户虚拟机（Guest VM）
 

@@ -9,16 +9,23 @@
 // See the Mulan PSL v2 for more details.
 
 use std::process::Command;
-use cmake::Config;
+use std::fs;
 
 fn main() {
-    let dst = Config::new("libfdt-binding")
-        .profile("release")
-        .build_target("all")
-        .build()
-        .join("build");
-    println!("cargo:rustc-link-search=native={}", dst.display());
-    println!("cargo:rustc-link-lib=static=fdt-binding");
+    let files = fs::read_dir("libfdt-binding").unwrap().into_iter().filter_map(|f| {
+        let f = f.as_ref().unwrap();
+        if f.file_type().unwrap().is_file() && matches!(f.path().extension(), Some(ext) if ext == "c") {
+            Some(f.path())
+        } else {
+            None
+        }
+    });
+    cc::Build::new()
+        .compiler("aarch64-none-elf-gcc")
+        .include("libfdt-binding")
+        .files(files)
+        .flag("-w")
+        .compile("fdt-binding");
     // note: add error checking yourself.
     let output = Command::new("date").arg("+\"%Y-%m-%d %H:%M:%S %Z\"").output().unwrap();
     let build_time = String::from_utf8(output.stdout).unwrap();

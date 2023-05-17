@@ -24,7 +24,7 @@ panic = "abort"
 debug = true
 
 [build-dependencies]
-cmake = "0.1"
+cc = "1.0"
 
 [dependencies]
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
