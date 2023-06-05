@@ -52,7 +52,7 @@ pub fn mvm_config_init() {
         VmEmulatedDeviceConfig {
             name: Some(String::from("vgicr")),
             base_ipa: Platform::GICR_BASE,
-            length: 0x20000 * PLAT_DESC.cpu_desc.num,
+            length: 0xf60000,
             irq_id: 25,
             cfg_list: Vec::new(),
             emu_type: EmuDeviceType::EmuDeviceTGICR,
@@ -113,10 +113,12 @@ pub fn mvm_config_init() {
         PassthroughRegion { ipa: Platform::UART_0_ADDR, pa: Platform::UART_0_ADDR, length: 0x1000, dev_property: true },
         #[cfg(not(feature = "gicv3"))]
         PassthroughRegion { ipa: Platform::GICC_BASE, pa: Platform::GICV_BASE, length: 0x2000, dev_property: true },
+        #[cfg(feature = "gicv3")]
+        PassthroughRegion { ipa: 0x8080000, pa: 0x8080000, length: 0x20000, dev_property: true }, //pass-through gicv3-its
         // pass-througn virtio blk/net
         PassthroughRegion { ipa: 0x0a003000, pa: 0x0a003000, length: 0x1000, dev_property: true },
     ];
-    pt_dev_config.irqs = vec![33, 27, 32 + 0x28, 32 + 0x29];
+    pt_dev_config.irqs = vec![33,27, 72, 73,74,75,76,77,78,79];
     pt_dev_config.streams_ids = vec![];
     // pt_dev_config.push(VmPassthroughDeviceConfig {
     //     name: Some(String::from("serial0")),

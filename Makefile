@@ -55,7 +55,7 @@ pi4:
 rk3588_release:
 	cargo build -Z build-std=${BUILD_STD} --target aarch64-rk3588.json --features "rk3588 gicv3" --release
 	bash rk3588_upload_release
-	${OBJDUMP} --demangle -d target/aarch64-rk3588/release/${IMAGE} > target/aarch64-tx2/release/t.txt
+	${OBJDUMP} --demangle -d target/aarch64-rk3588/release/${IMAGE} > target/aarch64-rk3588/release/t.txt
 
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
 	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
@@ -65,7 +65,7 @@ QEMU_SERIAL_OPTIONS = -serial mon:stdio #\
 	-serial telnet:localhost:12345,server
 
 QEMU_NETWORK_OPTIONS = -netdev tap,id=tap0,ifname=tap0,script=no,downscript=no -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=tap0
-
+#/home/cwm/c-hyper/syberx-hypervisor/build/shyper_qemuv3.bin
 QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.25
 
 run: qemu

@@ -286,8 +286,6 @@ impl GicDistributor {
     }
 
     pub fn set_enable(&self, int_id: usize, en: bool) {
-
-        println!("gicv2 set_enable:{int_id} {en}");
         let idx = int_id / 32;
         let bit = 1 << (int_id % 32);
 
@@ -298,7 +296,6 @@ impl GicDistributor {
         } else {
             self.ICENABLER[idx].set(bit);
         }
-        println!("after gicv2 set_enable:{:x} icenable:{:x}",self.ISENABLER[idx].get(),self.ICENABLER[idx].get());
         drop(lock);
     }
 

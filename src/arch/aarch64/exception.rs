@@ -221,7 +221,7 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
     current_cpu().set_ctx(ctx);
     match exception_class() {
         0x24 => {
-            // println!("Core[{}] data_abort_handler", cpu_id());
+            //println!("Core[{}] data_abort_handler", current_cpu().id);
             data_abort_handler();
         }
         0x17 => {
@@ -254,17 +254,7 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
 extern "C" fn lower_aarch64_irq(ctx: *mut ContextFrame) {
     current_cpu().set_ctx(ctx);
     let (id, src) = gicc_get_current_irq();
-    // if current_cpu().id == 2 {
-    //     println!(
-    //         "Core[{}] lower_aarch64_irq {} 0x{:x}  x30 {:x} x19 {:x} x0 {:x}",
-    //         current_cpu().id,
-    //         id,
-    //         current_cpu().get_elr(),
-    //         current_cpu().get_gpr(30),
-    //         current_cpu().get_gpr(19),
-    //         current_cpu().get_gpr(0)
-    //     );
-    // }
+    // println!("lower_aarch64_irq:{id}");
     match fresh_status() {
         FreshStatus::FreshVM | FreshStatus::Start => {
             // if active_vm().unwrap().has_interrupt(id) {

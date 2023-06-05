@@ -33,7 +33,7 @@ global_asm!(include_str!("start_pi4.S"));
 global_asm!(include_str!("start_qemu.S"));
 
 #[cfg(feature = "rk3588")]
-global_asm!(include_str!("start.S"));
+global_asm!(include_str!("start_rk3588.S"));
 
 // const PHYSICAL_ADDRESS_LIMIT_GB: usize = BOARD_PHYSICAL_ADDRESS_LIMIT >> 30;
 // const PAGE_SIZE: usize = 4096;
@@ -132,7 +132,7 @@ impl BlockDescriptor {
 #[repr(C)]
 #[repr(align(4096))]
 pub struct PageTables {
-    lvl1: [BlockDescriptor; ENTRY_PER_PAGE],
+    entry: [BlockDescriptor; ENTRY_PER_PAGE],
 }
 
 const LVL1_SHIFT: usize = 30;
@@ -141,7 +141,7 @@ const PLATFORM_PHYSICAL_LIMIT_GB: usize = 16;
 #[no_mangle]
 // #[link_section = ".text.boot"]
 pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables) {
-    let lvl1_base = lvl1_pt as *const _ as usize;
+    let lvl1_base: usize = lvl1_pt as *const _ as usize;
     let lvl2_base = lvl2_pt as *const _ as usize;
     memset_safe(lvl1_base as *mut u8, 0, PAGE_SIZE);
     memset_safe(lvl2_base as *mut u8, 0, PAGE_SIZE);
@@ -151,31 +151,31 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         use crate::arch::pt_lvl2_idx;
         for i in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             let output_addr = i << LVL1_SHIFT;
-            lvl1_pt.lvl1[i] = if output_addr >= PLAT_DESC.mem_desc.base {
+            lvl1_pt.entry[i] = if output_addr >= PLAT_DESC.mem_desc.base {
                 BlockDescriptor::new(output_addr, false)
             } else {
                 BlockDescriptor::invalid()
             }
         }
         // for i in PLATFORM_PHYSICAL_LIMIT_GB..ENTRY_PER_PAGE {
-        //     pt.lvl1[i] = BlockDescriptor::invalid();
+        //     pt.entry[i] = BlockDescriptor::invalid();
         // }
 
         // map the devices to HIGH 32GB, whose offset is 2^35 = 0x8_0000_0000
-        lvl1_pt.lvl1[32] = BlockDescriptor::table(lvl2_base);
+        lvl1_pt.entry[32] = BlockDescriptor::table(lvl2_base);
         // 0x200000 ~ 2MB
         // UART0 ~ 0x3000000 - 0x3200000 (0x3100000)
         // UART1 ~ 0xc200000 - 0xc400000 (0xc280000)
         // EMMC ~ 0x3400000 - 0x3600000 (0x3460000)
         // GIC  ~ 0x3800000 - 0x3a00000 (0x3881000)
         // SMMU ~ 0x12000000 - 0x13000000
-        lvl2_pt.lvl1[pt_lvl2_idx(0x3000000)] = BlockDescriptor::new(0x3000000, true);
-        lvl2_pt.lvl1[pt_lvl2_idx(0xc200000)] = BlockDescriptor::new(0xc200000, true);
-        // lvl2_pt.lvl1[pt_lvl2_idx(0x3400000)] = BlockDescriptor::new(0x3400000, true);
-        lvl2_pt.lvl1[pt_lvl2_idx(0x3800000)] = BlockDescriptor::new(0x3800000, true);
+        lvl2_pt.entry[pt_lvl2_idx(0x3000000)] = BlockDescriptor::new(0x3000000, true);
+        lvl2_pt.entry[pt_lvl2_idx(0xc200000)] = BlockDescriptor::new(0xc200000, true);
+        // lvl2_pt.entry[pt_lvl2_idx(0x3400000)] = BlockDescriptor::new(0x3400000, true);
+        lvl2_pt.entry[pt_lvl2_idx(0x3800000)] = BlockDescriptor::new(0x3800000, true);
         for i in 0..(0x100_0000 / 0x200000) {
             let addr = 0x12000000 + i * 0x200000;
-            lvl2_pt.lvl1[pt_lvl2_idx(addr)] = BlockDescriptor::new(addr, true);
+            lvl2_pt.entry[pt_lvl2_idx(addr)] = BlockDescriptor::new(addr, true);
         }
     }
     #[cfg(feature = "pi4")]
@@ -186,76 +186,77 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         // crate::driver::putc('e' as u8);
         // println!("pt");
         // 0x0_0000_0000 ~ 0x0_c000_0000 --> normal memory (3GB)
-        lvl1_pt.lvl1[0] = BlockDescriptor::new(0, false);
-        lvl1_pt.lvl1[1] = BlockDescriptor::new(0x40000000, false);
-        lvl1_pt.lvl1[2] = BlockDescriptor::new(0x80000000, false);
-        lvl1_pt.lvl1[3] = BlockDescriptor::table(lvl2_base);
+        lvl1_pt.entry[0] = BlockDescriptor::new(0, false);
+        lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, false);
+        lvl1_pt.entry[2] = BlockDescriptor::new(0x80000000, false);
+        lvl1_pt.entry[3] = BlockDescriptor::table(lvl2_base);
         // 0x0_c000_0000 ~ 0x0_fc00_0000 --> normal memory (960MB)
         for i in 0..480 {
-            lvl2_pt.lvl1[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), false);
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), false);
         }
         // 0x0_fc00_0000 ~ 0x1_0000_0000 --> device memory (64MB)
         for i in 480..512 {
-            lvl2_pt.lvl1[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), true);
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), true);
         }
         // 0x1_0000_0000 ~ 0x2_0000_0000 --> normal memory (4GB)
-        lvl1_pt.lvl1[4] = BlockDescriptor::new(0x100000000, false);
-        lvl1_pt.lvl1[5] = BlockDescriptor::new(0x140000000, false);
-        lvl1_pt.lvl1[6] = BlockDescriptor::new(0x180000000, false);
-        lvl1_pt.lvl1[7] = BlockDescriptor::new(0x1c0000000, false);
+        lvl1_pt.entry[4] = BlockDescriptor::new(0x100000000, false);
+        lvl1_pt.entry[5] = BlockDescriptor::new(0x140000000, false);
+        lvl1_pt.entry[6] = BlockDescriptor::new(0x180000000, false);
+        lvl1_pt.entry[7] = BlockDescriptor::new(0x1c0000000, false);
         for i in 8..512 {
-            lvl1_pt.lvl1[i] = BlockDescriptor::invalid();
+            lvl1_pt.entry[i] = BlockDescriptor::invalid();
         }
         // 0x8_0000_0000 + 0x0_c000_0000
-        lvl1_pt.lvl1[32 + 3] = BlockDescriptor::table(lvl2_base);
+        lvl1_pt.entry[32 + 3] = BlockDescriptor::table(lvl2_base);
     }
     #[cfg(feature = "qemu")]
     {
         use crate::arch::LVL2_SHIFT;
         for index in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             let pa = index << LVL1_SHIFT;
-            lvl1_pt.lvl1[index] = BlockDescriptor::new(pa, pa < PLAT_DESC.mem_desc.base);
+            lvl1_pt.entry[index] = BlockDescriptor::new(pa, pa < PLAT_DESC.mem_desc.base);
         }
-        lvl1_pt.lvl1[32] = BlockDescriptor::table(lvl2_base);
+        lvl1_pt.entry[32] = BlockDescriptor::table(lvl2_base);
         for (index, pa) in (0..PLAT_DESC.mem_desc.base).step_by(1 << LVL2_SHIFT).enumerate() {
             if index >= 512 {
                 break;
             }
-            lvl2_pt.lvl1[index] = BlockDescriptor::new(pa, true);
+            lvl2_pt.entry[index] = BlockDescriptor::new(pa, true);
         }
     }
-    //todo
     #[cfg(feature = "rk3588")]
     {
-        use crate::arch::pt_lvl2_idx;
-        for i in 0..PLATFORM_PHYSICAL_LIMIT_GB {
-            let output_addr = i << LVL1_SHIFT;
-            lvl1_pt.lvl1[i] = if output_addr >= PLAT_DESC.mem_desc.base {
-                BlockDescriptor::new(output_addr, false)
-            } else {
-                BlockDescriptor::invalid()
-            }
+        use crate::arch::LVL2_SHIFT;
+        // 0x0020_0000 ~ 0xc000_0000 --> normal memory (3GB)
+        lvl1_pt.entry[0] = BlockDescriptor::new(0, false);
+        lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, false);
+        lvl1_pt.entry[2] = BlockDescriptor::new(0x80000000, false);
+        lvl1_pt.entry[3] = BlockDescriptor::table(lvl2_base);
+        // 0xc000_0000 ~ 0xf000_0000 --> normal memory (768MB)
+        const DEVICE_BOUND: usize = (0xf000_0000 - 0xc000_0000) / (1 << LVL2_SHIFT);
+        for i in 0..DEVICE_BOUND {
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), false);
         }
-        // for i in PLATFORM_PHYSICAL_LIMIT_GB..ENTRY_PER_PAGE {
-        //     pt.lvl1[i] = BlockDescriptor::invalid();
-        // }
-
-        // map the devices to HIGH 32GB, whose offset is 2^35 = 0x8_0000_0000
-        lvl1_pt.lvl1[32] = BlockDescriptor::table(lvl2_base);
+        // 0x0_f000_0000 ~ 0x1_0000_0000 --> device memory (256MB)
+        for i in DEVICE_BOUND..512 {
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), true);
+        }
+        // 0x1_0000_0000 ~ 0x2_0000_0000 --> normal memory (4GB)
+        lvl1_pt.entry[4] = BlockDescriptor::new(0x100000000, false);
+        lvl1_pt.entry[5] = BlockDescriptor::new(0x140000000, false);
+        lvl1_pt.entry[6] = BlockDescriptor::new(0x180000000, false);
+        lvl1_pt.entry[7] = BlockDescriptor::new(0x1c0000000, false);
+        for i in 8..512 {
+            lvl1_pt.entry[i] = BlockDescriptor::invalid();
+        }
+        lvl1_pt.entry[32 + (0xf000_0000 >> LVL1_SHIFT)] = BlockDescriptor::table(lvl2_base);
+        // map the devices offset 32GB 0x8_0000_0000
         // 0x200000 ~ 2MB
-        // UART0 ~ 0x3000000 - 0x3200000 (0x3100000)
-        // UART1 ~ 0xc200000 - 0xc400000 (0xc280000)
-        // EMMC ~ 0x3400000 - 0x3600000 (0x3460000)
-        // GIC  ~ 0x3800000 - 0x3a00000 (0x3881000)
-        // SMMU ~ 0x12000000 - 0x13000000
-        lvl2_pt.lvl1[pt_lvl2_idx(0x3000000)] = BlockDescriptor::new(0x3000000, true);
-        lvl2_pt.lvl1[pt_lvl2_idx(0xc200000)] = BlockDescriptor::new(0xc200000, true);
-        // lvl2_pt.lvl1[pt_lvl2_idx(0x3400000)] = BlockDescriptor::new(0x3400000, true);
-        lvl2_pt.lvl1[pt_lvl2_idx(0x3800000)] = BlockDescriptor::new(0x3800000, true);
-        for i in 0..(0x100_0000 / 0x200000) {
-            let addr = 0x12000000 + i * 0x200000;
-            lvl2_pt.lvl1[pt_lvl2_idx(addr)] = BlockDescriptor::new(addr, true);
-        }
+        // UART0 ~ 0xfea00000 - 0xfec00000 (0xfeb50000)
+        // UART1 ~ 0xfea00000 - 0xfec00000 (0xfebc0000)
+        // EMMC ~ 0xfe200000 - 0xfe400000 (0xfe2e0000)
+        // GIC  ~ 0xfe600000 - 0xfe800000 (0xfe600000)
+        // SMMU1 ~ 0xfc800000 - 0xfce00000 (0xfc900000  size:0x200000;0xfcb00000  size:0x200000)
     }
 }
 
@@ -270,7 +271,7 @@ pub extern "C" fn mmu_init(pt: &PageTables) {
             + MAIR_EL2::Attr2_Normal_Outer::NonCacheable
             + MAIR_EL2::Attr2_Normal_Inner::NonCacheable,
     );
-    TTBR0_EL2.set(&pt.lvl1 as *const _ as u64);
+    TTBR0_EL2.set(&pt.entry as *const _ as u64);
 
     TCR_EL2.write(
         TCR_EL2::PS::Bits_48

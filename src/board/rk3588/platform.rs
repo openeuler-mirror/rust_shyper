@@ -15,37 +15,38 @@ use crate::board::{
     PlatMemRegion,
 };
 use crate::board::SchedRule::RoundRobin;
-use crate::device::ARM_CORTEX_A57;
+use crate::device::ARM_CORTEX_A55;
+use crate::device::ARM_CORTEX_A76;
 #[allow(unused_imports)]
 use crate::device::ARM_NVIDIA_DENVER;
 
 pub struct Rk3588Platform;
 
 impl PlatOperation for Rk3588Platform {
-    const UART_0_ADDR: usize = 0x3200000;
-    const UART_1_ADDR: usize = 0xc290000;
+    const UART_0_ADDR: usize = 0xfeb50000;
+    const UART_1_ADDR: usize = 0xfebc0000;
 
-    const UART_0_INT: usize = 32 + 0x70;
-    const UART_1_INT: usize = 32 + 0x72;
+    const UART_0_INT: usize = 32 + 0x12d;
+    const UART_1_INT: usize = 32 + 0x134;
 
-    const HYPERVISOR_UART_BASE: usize = Self::UART_1_ADDR;
+    const HYPERVISOR_UART_BASE: usize = Self::UART_0_ADDR;
 
-    const GICD_BASE: usize = 0x3881000;
-    const GICC_BASE: usize = 0x3882000;
-    const GICH_BASE: usize = 0x3884000;
-    const GICV_BASE: usize = 0x3886000;
-    const GICR_BASE: usize = 0x3887000;
+    const GICD_BASE: usize = 0xfe600000;
+    const GICC_BASE: usize = 0xfe610000;
+    const GICH_BASE: usize = 0xfe620000;
+    const GICV_BASE: usize = 0xfe630000;
+    const GICR_BASE: usize = 0xfe680000;
 
     // start sector number (LBA)
-    const DISK_PARTITION_0_START: usize = 43643256;
-    const DISK_PARTITION_1_START: usize = 4104;
-    const DISK_PARTITION_2_START: usize = 45740408;
+    const DISK_PARTITION_0_START: usize = 16384;
+    const DISK_PARTITION_1_START: usize = 32768;
+    const DISK_PARTITION_2_START: usize = 40960;
 
     // size in sector (512-byte)
     // pub const DISK_PARTITION_TOTAL_SIZE: usize = 31457280;
-    const DISK_PARTITION_0_SIZE: usize = 2097152;
-    const DISK_PARTITION_1_SIZE: usize = 41943040;
-    const DISK_PARTITION_2_SIZE: usize = 8388608;
+    const DISK_PARTITION_0_SIZE: usize = 16384;
+    const DISK_PARTITION_1_SIZE: usize = 8192;
+    const DISK_PARTITION_2_SIZE: usize = 524288;
 
     const SHARE_MEM_BASE: usize = 0xd_0000_0000;
 
@@ -72,26 +73,54 @@ impl PlatOperation for Rk3588Platform {
 
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
-        num: 4,
+        num: 1,
         core_list: &[
             PlatCpuCoreConfig {
-                name: ARM_CORTEX_A57,
-                mpidr: 0x80000100,
+                //cluster0
+                name: ARM_CORTEX_A55,
+                mpidr: 0x06,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
-                name: ARM_CORTEX_A57,
-                mpidr: 0x80000101,
+                //cluster0
+                name: ARM_CORTEX_A55,
+                mpidr: 0x07,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
-                name: ARM_CORTEX_A57,
-                mpidr: 0x80000102,
+                //cluster0
+                name: ARM_CORTEX_A55,
+                mpidr: 0x08,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
-                name: ARM_CORTEX_A57,
-                mpidr: 0x80000103,
+                //cluster0
+                name: ARM_CORTEX_A55,
+                mpidr: 0x09,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                //cluster1
+                name: ARM_CORTEX_A76,
+                mpidr: 0x0a,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                //cluster1
+                name: ARM_CORTEX_A76,
+                mpidr: 0x0b,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                //cluster2
+                name: ARM_CORTEX_A76,
+                mpidr: 0x0c,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                //cluster2
+                name: ARM_CORTEX_A76,
+                mpidr: 0x0d,
                 sched: RoundRobin,
             },
         ],
@@ -99,19 +128,27 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
     mem_desc: PlatMemoryConfig {
         regions: &[
             PlatMemRegion {
-                base: 0x80000000,
+                base: 0x200000,
+                size: 0x8200000,
+            },
+            PlatMemRegion {
+                base: 0x9400000,
+                size: 0x6c00000,
+            },
+            PlatMemRegion {
+                base: 0x1000_0000,
+                size: 0xe000_0000,
+            },
+            PlatMemRegion {
+                base: 0xf0000000,
                 size: 0x10000000,
             },
             PlatMemRegion {
-                base: 0x90000000,
-                size: 0x60000000,
-            },
-            PlatMemRegion {
-                base: 0xf0200000,
-                size: 0x185600000,
+                base: 0x100000000,
+                size: 0x100000000,
             },
         ],
-        base: 0x80000000,
+        base: 0x200000,
     },
     arch_desc: ArchDesc {
         gic_desc: GicDesc {
@@ -119,17 +156,17 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             gicc_addr: Platform::GICC_BASE,
             gich_addr: Platform::GICH_BASE,
             gicv_addr: Platform::GICV_BASE,
-            gicr_addr: Platform::GICV_BASE,
+            gicr_addr: Platform::GICR_BASE,
             maintenance_int_id: 25,
         },
         smmu_desc: SmmuDesc {
-            base: 0x12000000,
-            interrupt_id: 187,
-            global_mask: 0x7f80,
+            base: 0xfcb00000,
+            interrupt_id: 0x17d,
+            global_mask: 0, //0x200000
         },
         cluster_desc: ClusterDesc {
-            num: 2,
-            core_num: &[2, 2],
+            num: 3,
+            core_num: &[4, 2, 2],
         },
     },
 };

@@ -43,6 +43,7 @@ default-features = false
 features = ["register_types"]
 
 [features]
+default = ["gicv3"]
 tx2 = []
 qemu = []
 pi4 = []

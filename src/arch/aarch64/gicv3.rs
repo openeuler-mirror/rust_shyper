@@ -92,17 +92,17 @@ pub const GICH_LR_EOI_BIT: usize = 1 << 41;
 /* End Of Interrupt.
  * This maintenance interrupt is asserted when at least one bit in GICH_EISR == 1.
  */
-pub const GICH_MISR_EOI:usize = 1;
+pub const GICH_MISR_EOI: usize = 1;
 /* No Pending.
  * This maintenance interrupt is asserted
  * when GICH_HCR.NPIE == 1 and no List register is in the pending state.
  */
-pub const GICH_MISR_NP:usize = 1 << 3;
+pub const GICH_MISR_NP: usize = 1 << 3;
 /* List Register Entry Not Present.
  * This maintenance interrupt is asserted
  * when GICH_HCR.LRENPIE == 1 and GICH_HCR.EOICount is nonzero.
  */
-pub const GICH_MISR_LRPEN:usize = 1 << 2;
+pub const GICH_MISR_LRPEN: usize = 1 << 2;
 const GICH_NUM_ELRSR: usize = 1;
 const GICH_VTR_MSK: usize = 0b11111;
 
@@ -329,10 +329,7 @@ impl GicDistributor {
         let prev = self.CTLR.get();
 
         self.CTLR
-            .set(prev | (GICD_CTLR_ARE_NS_BIT << 1) as u32 | GICD_CTLR_ENNS_BIT as u32);
-        let after = self.CTLR.get();
-
-        println!("after current ctlr:{:b}", after);
+            .set(prev | GICD_CTLR_ARE_NS_BIT as u32 | GICD_CTLR_ENNS_BIT as u32);
     }
 
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
@@ -380,17 +377,15 @@ impl GicDistributor {
         let lock = GICD_LOCK.lock();
         let prev = self.ITARGETSR[idx].get();
         let value = (prev & !mask) | (((trgt as u32) << off) & mask);
-        // println!("idx {}, val {:x}", idx, value);
         self.ITARGETSR[idx].set(value);
         drop(lock);
     }
 
     pub fn set_enable(&self, int_id: usize, en: bool) {
-        println!("gicd::set_enbale: en {}, int_id {}", en, int_id);
         let reg_id = int_id / 32;
         let mask = 1 << (int_id % 32);
 
-        // let lock = GICD_LOCK.lock();
+        let lock = GICD_LOCK.lock();
 
         if en {
             add_en_interrupt(int_id);
@@ -399,7 +394,7 @@ impl GicDistributor {
             self.ICENABLER[reg_id].set(mask);
         }
 
-        // drop(lock);
+        drop(lock);
     }
 
     pub fn get_pend(&self, int_id: usize) -> bool {
@@ -417,15 +412,6 @@ impl GicDistributor {
     pub fn set_pend(&self, int_id: usize, pend: bool) {
         let lock = GICD_LOCK.lock();
 
-        // if gic_is_sgi(int_id) {
-        //     let reg_ind = int_id / 4;
-        //     let off = (int_id % 4) * 8;
-        //     if pend {
-        //         self.SPENDSGIR[reg_ind].set(1 << (off + current_cpu().id));
-        //     } else {
-        //         self.CPENDSGIR[reg_ind].set(0b11111111 << off);
-        //     }
-        // } else {
         let reg_ind = int_id / 32;
         let mask = 1 << (int_id % 32);
         if pend {
@@ -433,7 +419,6 @@ impl GicDistributor {
         } else {
             self.ICPENDR[reg_ind].set(mask);
         }
-        // }
 
         drop(lock);
     }
@@ -604,7 +589,7 @@ impl GicRedistributor {
         let reg_id = gic_prio_reg(int_id);
         let off = gic_prio_off(int_id);
         let mask = (((1 << ((GIC_PRIO_BITS) - 1)) << 1) - 1) << (off);
-        let lock = GICR_LOCK.lock();
+        let lock = GICR_LOCK.lock(); //lock is for per core
 
         self[gicr_id as usize].IPRIORITYR[reg_id].set(
             (self[gicr_id as usize].IPRIORITYR[reg_id].get() & !mask as u32) | (((prio as usize) << off) & mask) as u32,
@@ -693,9 +678,6 @@ impl GicRedistributor {
     }
 
     pub fn set_enable(&self, int_id: usize, en: bool, gicr_id: u32) {
-        println!("IGROUPR:{:#x}",self[gicr_id as usize].IGROUPR0.get());
-        println!("WAKER:{:#x}",self[gicr_id as usize].WAKER.get());
-        println!("ICFGR1:{:#x}",self[gicr_id as usize].ICFGR1.get());
         let mask = 1 << (int_id % 32);
 
         let lock = GICR_LOCK.lock();
@@ -710,7 +692,7 @@ impl GicRedistributor {
         drop(lock);
     }
 
-    pub fn get_enable(&self, int_id: usize,gicr_id: u32) -> u32{
+    pub fn get_enable(&self, _int_id: usize, gicr_id: u32) -> u32 {
         self[gicr_id as usize].ISENABLER0.get()
     }
 
@@ -722,12 +704,16 @@ impl GicRedistributor {
         self[gicr_id as usize].ID[index].get()
     }
 
-    pub fn get_ctrl(&self,gicr_id: u32) -> u32 {
+    pub fn get_ctrl(&self, gicr_id: u32) -> u32 {
         self[gicr_id as usize].CTLR.get()
     }
 
-    pub fn is_enabler(&self, gicr_id: u32) -> u32{
+    pub fn is_enabler(&self, gicr_id: u32) -> u32 {
         self[gicr_id as usize].ISENABLER0.get()
+    }
+
+    pub fn get_igroup(&self, gicr_id: u32) -> u32 {
+        self[gicr_id as usize].IGROUPR0.get()
     }
 }
 
@@ -775,13 +761,11 @@ impl GicCpuInterface {
     }
 
     fn init(&self) {
-        msr!(ICC_SRE_EL2, 0b1, "x");
+        msr!(ICC_SRE_EL2, 0b1001, "x");
 
         unsafe {
             core::arch::asm!("isb");
         }
-
-        println!("gich_lrs_num:{}", gich_lrs_num());
 
         for i in 0..gich_lrs_num() {
             GICH.set_lr(i, 0);
@@ -790,10 +774,9 @@ impl GicCpuInterface {
         msr!(ICC_PMR_EL1, 0xff, "x");
         msr!(ICC_BPR1_EL1, 0x0, "x");
         msr!(ICC_CTLR_EL1, ICC_CTLR_EOIMODE_BIT, "x");
-        let hcr: u32;
-        mrs!(hcr, ICH_HCR_EL2, "x");
+        let hcr = mrsr!(ICH_HCR_EL2, "x");
         msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT as u32, "x");
-        msr!(ICC_IGRPEN1_EL1, 0x1, "x")
+        msr!(ICC_IGRPEN1_EL1, 0x1, "x");
     }
 
     pub fn iar(&self) -> u32 {
@@ -912,7 +895,7 @@ impl GicHypervisorInterface {
             13 => mrs!(lrc, ICH_LR13_EL2),
             14 => mrs!(lrc, ICH_LR14_EL2),
             15 => mrs!(lrc, ICH_LR15_EL2),
-            _ => panic!("gic: trying to read inexistent list register"),
+            _ => lrc = 0,
         };
         lrc
     }
@@ -960,8 +943,8 @@ pub struct GicState {
     pub eoir: u32,
     pub rpr: u32,
     pub hppir: u32,
-    priv_isenabler: u32,
-    priv_ipriorityr: [u32; GIC_PRIVINT_NUM / 4],
+    pub priv_isenabler: u32,
+    pub priv_ipriorityr: [u32; GIC_PRIVINT_NUM / 4],
     pub hcr: u32,
     pub lr: [u32; GIC_LIST_REGS_NUM],
 }
@@ -986,41 +969,42 @@ impl GicState {
     pub fn save_state(&mut self) {
         mrs!(self.pmr, ICC_PMR_EL1, "x");
         mrs!(self.bpr, ICC_BPR1_EL1, "x");
+        mrs!(self.hcr, ICH_HCR_EL2, "x");
         self.priv_isenabler = GICR[current_cpu().id].ISENABLER0.get();
 
         for i in 0..GIC_PRIVINT_NUM / 4 {
-            self.priv_ipriorityr[i] = GICR[current_cpu().id].IPRIORITYR[i].get();
+            self.priv_ipriorityr[i] = GICR.get_prio(i, current_cpu().id as u32) as u32;
         }
-
-        mrs!(self.hcr, ICH_HCR_EL2, "x");
         for i in 0..gich_lrs_num() {
             self.lr[i] = GICH.lr(i) as u32;
         }
     }
 
     pub fn restore_state(&self) {
-        msr!(ICC_SRE_EL2, GICC_SRE_SRE_BIT, "x");
+        msr!(ICC_SRE_EL2, 0b1001, "x");
         msr!(ICC_CTLR_EL1, GICC_CTLR_EOIMODE_BIT, "x");
         msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
         msr!(ICC_PMR_EL1, self.pmr, "x");
         msr!(ICC_BPR1_EL1, self.bpr, "x");
+        msr!(ICH_HCR_EL2, self.hcr, "x");
         GICR[current_cpu().id].ISENABLER0.set(self.priv_isenabler);
 
+        //todo: have bug to fix, it maybe the problem of PRIORITYR promote
         for i in 0..GIC_PRIVINT_NUM / 4 {
-            GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
+            // GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
+            GICR[current_cpu().id].IPRIORITYR[i].set(0);
         }
 
-        msr!(ICH_HCR_EL2, self.hcr, "x");
         for i in 0..gich_lrs_num() {
             GICH.set_lr(i, self.lr[i] as usize);
         }
     }
 }
 
-pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE + 0x8_0000_0000);
-pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE + 0x8_0000_0000);
-pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE + 0x8_0000_0000);
-pub static GICR: GicRedistributor = GicRedistributor::new(Platform::GICR_BASE + 0x8_0000_0000);
+pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE);
+pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE);
+pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE);
+pub static GICR: GicRedistributor = GicRedistributor::new(Platform::GICR_BASE);
 
 #[inline(always)]
 pub fn gich_lrs_num() -> usize {

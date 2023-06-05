@@ -122,7 +122,6 @@ pub fn restore_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
 }
 
 pub fn save_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
-    // println!("save_vcpu_gic");
     match cur_vcpu {
         None => {
             trgt_vcpu.gic_save_context();

@@ -13,6 +13,8 @@ use alloc::sync::Arc;
 use spin::Mutex;
 
 pub const ARM_CORTEX_A57: u8 = 0;
+pub const ARM_CORTEX_A55: u8 = 1;
+pub const ARM_CORTEX_A76: u8 = 2;
 pub const ARM_NVIDIA_DENVER: u8 = 1;
 
 #[derive(Clone)]

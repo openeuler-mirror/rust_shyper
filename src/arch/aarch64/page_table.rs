@@ -118,7 +118,6 @@ pub fn pt_map_banked_cpu(cpu: &mut Cpu) -> usize {
     use core::mem::size_of;
     let page_num = round_up(size_of::<Cpu>(), PAGE_SIZE) / PAGE_SIZE;
 
-    // println!("cpu page num is {}", page_num);
     for i in 0..page_num {
         cpu.cpu_pt.lvl3[pt_lvl3_idx(CPU_BANKED_ADDRESS) + i] = (cpu_addr + i * PAGE_SIZE) | PTE_S1_NORMAL | PTE_PAGE;
     }
@@ -126,8 +125,9 @@ pub fn pt_map_banked_cpu(cpu: &mut Cpu) -> usize {
     // println!("cpu addr {:x}", cpu_addr);
     // println!("lvl2 addr {:x}", lvl2_addr);
     // println!("lvl3 addr {:x}", lvl3_addr);
-
-    &(cpu.cpu_pt.lvl1) as *const _ as usize
+    let ret: usize = &(cpu.cpu_pt.lvl1) as *const _ as usize;
+    //print!("1");
+    ret
 }
 
 #[repr(transparent)]
@@ -279,14 +279,8 @@ impl PageTable {
     }
 
     pub fn map(&self, ipa: usize, pa: usize, pte: usize) {
-        // if ipa >= 0x4_0000_0000 {
-        //     println!("map ipa 0x{:x} to pa 0x{:x}", ipa, pa);
-        // }
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());
         let mut l1e = directory.entry(pt_lvl1_idx(ipa));
-        // if ipa >= 0x4_0000_0000 {
-        //     println!("l1e {:x}", l1e.0);
-        // }
         if !l1e.valid() {
             let result = crate::kernel::mem_page_alloc();
             if let Ok(frame) = result {
@@ -315,18 +309,12 @@ impl PageTable {
         } else if l2e.to_pte() & 0b11 == PTE_BLOCK {
             println!("map lvl 2 already mapped with 2mb 0x{:x}", l2e.to_pte());
         }
-        // if ipa >= 0x4_0000_0000 {
-        //     println!("l2e {:x}", l2e.0);
-        // }
         let l3e = l2e.entry(pt_lvl3_idx(ipa));
         if l3e.valid() {
             println!("map lvl 3 already mapped with 0x{:x}", l3e.to_pte());
         } else {
             l2e.set_entry(pt_lvl3_idx(ipa), Aarch64PageTableEntry::from_pa(pa | PTE_TABLE | pte));
         }
-        // if ipa >= 0x4_0000_0000 {
-        //     println!("l3e {:x}", l3e.0);
-        // }
     }
 
     pub fn unmap(&self, ipa: usize) {

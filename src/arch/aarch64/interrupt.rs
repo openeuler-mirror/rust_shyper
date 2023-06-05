@@ -8,7 +8,6 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use tock_registers::interfaces::Readable;
 
 use crate::arch::{gic_cpu_reset, gicc_clear_current_irq};
 use crate::board::{Platform, PlatOperation};
@@ -42,6 +41,7 @@ pub fn interrupt_arch_init() {
 pub fn interrupt_arch_enable(int_id: usize, en: bool) {
     #[cfg(feature = "gicv3")]
     {
+        use tock_registers::interfaces::Readable;
         use crate::arch::{gic_set_enable, gic_set_prio};
         gic_set_enable(int_id, en);
         gic_set_prio(int_id, 0x1);

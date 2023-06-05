@@ -17,7 +17,6 @@ use crate::arch::{
 use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
 use crate::arch::PAGE_SIZE;
-use crate::board::*;
 use crate::config::vm_cfg_entry;
 use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init};
 use crate::device::create_fdt;
@@ -152,7 +151,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 if name.is_empty() {
                     panic!("kernel image name empty")
                 } else {
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110"));
                 }
             }
             None => {
@@ -226,7 +225,6 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     emu_dev.length,
                     emu_intc_handler,
                 );
-                print!("vgicd address:{},length:{}", emu_dev.base_ipa, emu_dev.length);
                 emu_intc_init(vm.clone(), idx);
             }
             EmuDeviceTGPPT => {
@@ -412,7 +410,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             #[cfg(feature = "rk3588")]
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@90000000\0".as_ptr());
             // FDT+TIMER
-            fdt_add_timer(dtb, 0x8);
+            fdt_add_timer(dtb, 0xf04);
             // FDT+BOOTCMD
             fdt_set_bootcmd(dtb, config.cmdline.as_ptr());
             #[cfg(feature = "tx2")]
@@ -432,13 +430,13 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                             //     Platform::GICR_BASE as u64,
                             //     emu_cfg.name.unwrap().as_ptr(),
                             // );
-                            #[cfg(feature = "pi4")]
-                            let _r = fdt_setup_gic(
-                                dtb,
-                                (Platform::GICD_BASE | 0xF_0000_0000) as u64,
-                                (Platform::GICC_BASE | 0xF_0000_0000) as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
-                            );
+                            // #[cfg(feature = "pi4")]
+                            // let _r = fdt_setup_gic(
+                            //     dtb,
+                            //     (Platform::GICD_BASE | 0xF_0000_0000) as u64,
+                            //     (Platform::GICC_BASE | 0xF_0000_0000) as u64,
+                            //     emu_cfg.name.unwrap().as_ptr(),
+                            // );
                         }
                         EmuDeviceTGICR => {
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
@@ -449,13 +447,13 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                             //     Platform::GICC_BASE as u64,
                             //     emu_cfg.name.unwrap().as_ptr(),
                             // );
-                            #[cfg(feature = "pi4")]
-                            let _r = fdt_setup_gic(
-                                dtb,
-                                (Platform::GICD_BASE | 0xF_0000_0000) as u64,
-                                (Platform::GICC_BASE | 0xF_0000_0000) as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
-                            );
+                            // #[cfg(feature = "pi4")]
+                            // let _r = fdt_setup_gic(
+                            //     dtb,
+                            //     (Platform::GICD_BASE | 0xF_0000_0000) as u64,
+                            //     (Platform::GICC_BASE | 0xF_0000_0000) as u64,
+                            //     emu_cfg.name.unwrap().as_ptr(),
+                            // );
                         }
                         EmuDeviceTSGIR => {
                             #[cfg(feature = "gicv3")]

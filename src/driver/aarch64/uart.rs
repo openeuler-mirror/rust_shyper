@@ -15,7 +15,7 @@ use crate::board::{Platform, PlatOperation};
 pub fn putc(byte: u8) {
     const UART_BASE: usize = Platform::HYPERVISOR_UART_BASE + 0x8_0000_0000;
     // ns16550
-    #[cfg(feature = "tx2")]
+    #[cfg(any(feature = "tx2", feature = "rk3588"))]
     unsafe {
         if byte == '\n' as u8 {
             putc('\r' as u8);
@@ -31,13 +31,5 @@ pub fn putc(byte: u8) {
         }
         while (ptr::read_volatile((UART_BASE as usize + 24) as *const u32) & (1 << 5)) != 0 {}
         ptr::write_volatile(UART_BASE as *mut u32, byte as u32);
-    }
-    #[cfg(feature = "rk3588")]
-    unsafe {
-        if byte == '\n' as u8 {
-            putc('\r' as u8);
-        }
-        while ptr::read_volatile((UART_BASE + 20) as *const u8) & 0x20 == 0 {}
-        ptr::write_volatile(UART_BASE as *mut u8, byte);
     }
 }
