@@ -435,6 +435,7 @@ pub fn async_task_update(
         async_ipi_task_list.push_back(AsyncTask {
             task_data,
             src_vmid: vm_id,
+            priority: vm.priority(),
             state: Arc::new(Mutex::new(*ipi_task.state.lock())),
             task: Arc::new(Mutex::new(Box::pin(async_ipi_req()))),
         })
@@ -483,6 +484,7 @@ pub fn async_task_update(
         async_io_task_list.push_back(AsyncTask {
             task_data,
             src_vmid: vm_id,
+            priority: vm.priority(),
             state: Arc::new(Mutex::new(*io_task.state.lock())),
             task: Arc::new(Mutex::new(Box::pin(async_blk_io_req()))),
         });

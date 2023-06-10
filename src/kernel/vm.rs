@@ -464,6 +464,14 @@ impl Vm {
         vm_inner.intc_dev_id
     }
 
+    pub fn priority(&self) -> usize {
+        self.inner.lock().priority
+    }
+
+    pub fn set_priority(&self, priority: usize) {
+        self.inner.lock().priority = priority;
+    }
+
     pub fn pt_map_range(&self, ipa: usize, len: usize, pa: usize, pte: usize, map_block: bool) {
         let vm_inner = self.inner.lock();
         match &vm_inner.pt {
@@ -918,6 +926,7 @@ pub struct VmInner {
     // emul devs
     pub emu_devs: Vec<EmuDevs>,
     pub med_blk_id: Option<usize>,
+    pub priority: usize,
 }
 
 impl VmInner {
@@ -947,6 +956,7 @@ impl VmInner {
             iommu_ctx_id: None,
             emu_devs: Vec::new(),
             med_blk_id: None,
+            priority: 0,
         }
     }
 
@@ -975,6 +985,7 @@ impl VmInner {
             iommu_ctx_id: None,
             emu_devs: Vec::new(),
             med_blk_id: None,
+            priority: 0,
         }
     }
 }

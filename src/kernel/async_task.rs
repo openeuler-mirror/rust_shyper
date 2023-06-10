@@ -207,6 +207,7 @@ fn set_async_exe_status(status: AsyncExeStatus) {
 pub struct AsyncTask {
     pub task_data: AsyncTaskData,
     pub src_vmid: usize,
+    pub priority: usize,
     pub state: Arc<Mutex<AsyncTaskState>>,
     pub task: Arc<Mutex<Pin<Box<dyn Future<Output = ()> + 'static + Send + Sync>>>>,
 }
@@ -227,11 +228,13 @@ impl AsyncTask {
     pub fn new(
         task_data: AsyncTaskData,
         src_vmid: usize,
+        priority: usize,
         future: impl Future<Output = ()> + 'static + Send + Sync,
     ) -> AsyncTask {
         AsyncTask {
             task_data,
             src_vmid,
+            priority,
             state: Arc::new(Mutex::new(AsyncTaskState::Pending)),
             task: Arc::new(Mutex::new(Box::pin(future))),
         }

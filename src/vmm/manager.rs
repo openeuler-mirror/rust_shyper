@@ -66,6 +66,10 @@ pub fn vmm_push_vm(vm_id: usize) {
     vm.set_config_entry(Some(vm_cfg));
 
     use crate::kernel::vm_if_set_type;
+    match vm_type(vm_id) {
+        crate::kernel::VmType::VmTOs => vm.set_priority(1),
+        crate::kernel::VmType::VmTBma => vm.set_priority(10),
+    }
     vm_if_set_type(vm_id, vm_type(vm_id));
 }
 

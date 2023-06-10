@@ -401,6 +401,7 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                             iov_list: Arc::new(req_node.iov.clone()),
                         }),
                         vm.id(),
+                        vm.priority(),
                         async_blk_io_req(),
                     );
                     add_async_task(task, false);
@@ -455,6 +456,7 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                             iov_list: Arc::new(req_node.iov.clone()),
                         }),
                         vm.id(),
+                        vm.priority(),
                         async_blk_io_req(),
                     );
                     add_async_task(task, false);
@@ -478,6 +480,7 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                         dev: dev.clone(),
                     }),
                     vm.id(),
+                    vm.priority(),
                     async_blk_id_req(),
                 );
                 task.set_state(AsyncTaskState::Finish);
@@ -512,6 +515,7 @@ pub fn virtio_mediated_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) ->
             blk: blk,
         }),
         vm.id(),
+        vm.priority(),
         async_ipi_req(),
     );
     add_async_task(task, true);
