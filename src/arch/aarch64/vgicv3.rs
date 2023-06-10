@@ -2107,7 +2107,7 @@ fn vgic_int_vcpu_is_target(vcpu: &Vcpu, interrupt: &VgicInt) -> bool {
 fn vgic_int_has_other_target(interrupt: VgicInt) -> bool {
     let pri = gic_is_priv(interrupt.id() as usize);
     if pri {
-        return true;
+        return false;
     }
     let mut res: u64;
     mrs!(res, MPIDR_EL1);

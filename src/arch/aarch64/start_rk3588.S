@@ -8,13 +8,15 @@ _start:
     // x1: machid
     // x2: 0
     mov x20, x0
-    mov x0,#0
-    //mrs x0, mpidr_el1
-    //and x0,x0,0b1111 //mask
-    //and x1, x0, #0b10
-    //cbz x0, 2f
-//1:  wfe
-//    b   1b
+    mrs x0, mpidr_el1
+    lsr x0,x0,#8
+    and x1, x0, #0b100
+    cbnz x1, 1f
+    // only cluster 0 cpu 0,1,2,3  can continue
+    and x0, x0, #3
+    b   2f
+1:  wfe
+    b   1b
 
 2:  /*
      * only cluster 0 cpu 0,1,2,3 reach here

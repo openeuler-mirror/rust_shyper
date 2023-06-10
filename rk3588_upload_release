@@ -5,7 +5,7 @@ tftp="tx2@192.168.106.153:/tftp"
 
 aarch64-none-elf-objcopy ${bin}/rust_shyper -O binary ${bin}/shyper.bin
 # gzip ${bin}/shyper.bin
-mkimage -n shyper -A arm64 -O linux -T kernel -C none -a 0x00280000 -e 0x00280000 \
+mkimage -n shyper -A arm64 -O linux -T kernel -C none -a 0x00400000 -e 0x00400000 \
 -d ${bin}/shyper.bin ${bin}/shyperImage
 # rm ${bin}/shyper.bin.gz
 echo "*** Upload Image ***"

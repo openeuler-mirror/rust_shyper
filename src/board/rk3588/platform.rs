@@ -73,54 +73,54 @@ impl PlatOperation for Rk3588Platform {
 
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
-        num: 1,
+        num: 4,
         core_list: &[
             PlatCpuCoreConfig {
                 //cluster0
                 name: ARM_CORTEX_A55,
-                mpidr: 0x06,
+                mpidr: 0x81000000,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
                 //cluster0
                 name: ARM_CORTEX_A55,
-                mpidr: 0x07,
+                mpidr: 0x81000100,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
                 //cluster0
                 name: ARM_CORTEX_A55,
-                mpidr: 0x08,
+                mpidr: 0x81000200,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
                 //cluster0
                 name: ARM_CORTEX_A55,
-                mpidr: 0x09,
+                mpidr: 0x81000300,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
                 //cluster1
                 name: ARM_CORTEX_A76,
-                mpidr: 0x0a,
+                mpidr: 0x81000400,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
                 //cluster1
                 name: ARM_CORTEX_A76,
-                mpidr: 0x0b,
+                mpidr: 0x81000500,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
                 //cluster2
                 name: ARM_CORTEX_A76,
-                mpidr: 0x0c,
+                mpidr: 0x81000600,
                 sched: RoundRobin,
             },
             PlatCpuCoreConfig {
                 //cluster2
                 name: ARM_CORTEX_A76,
-                mpidr: 0x0d,
+                mpidr: 0x81000700,
                 sched: RoundRobin,
             },
         ],

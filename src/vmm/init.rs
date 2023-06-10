@@ -152,6 +152,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                     panic!("kernel image name empty")
                 } else {
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110"));
+                    //vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                 }
             }
             None => {
@@ -410,7 +411,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             #[cfg(feature = "rk3588")]
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@90000000\0".as_ptr());
             // FDT+TIMER
-            fdt_add_timer(dtb, 0xf04);
+            //fdt_add_timer(dtb, 0x04);
             // FDT+BOOTCMD
             fdt_set_bootcmd(dtb, config.cmdline.as_ptr());
             #[cfg(feature = "tx2")]

@@ -61,7 +61,7 @@ mod kernel;
 #[allow(dead_code)]
 mod lib;
 #[allow(dead_code)]
-mod mm; 
+mod mm;
 #[allow(dead_code)]
 mod panic;
 #[allow(dead_code)]
@@ -73,7 +73,6 @@ pub static SYSTEM_FDT: spin::Once<alloc::vec::Vec<u8>> = spin::Once::new();
 
 #[no_mangle]
 pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
-    println!("fdt:{:x}", dtb as *const fdt::myctypes::c_void as usize);
     // const UART0: *mut u8 = 0x0900_0000 as *mut u8;
     // let out_str = b"AArch64 Bare Metal";
     // for byte in out_str {
