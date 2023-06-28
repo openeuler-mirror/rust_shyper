@@ -761,8 +761,6 @@ impl GicCpuInterface {
     }
 
     fn init(&self) {
-        let mipdr = mrsr!(mpidr_el1, "x");
-        println!("core:{} mpidr:{:#x}", current_cpu().id, mipdr);
         msr!(ICC_SRE_EL2, 0b1001, "x");
 
         unsafe {

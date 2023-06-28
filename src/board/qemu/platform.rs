@@ -74,28 +74,28 @@ impl PlatOperation for QemuPlatform {
 
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
-        num: 1,
+        num: 4,
         core_list: &[
             PlatCpuCoreConfig {
                 name: ARM_CORTEX_A57,
                 mpidr: 0,
                 sched: RoundRobin,
             },
-            // PlatCpuCoreConfig {
-            //     name: ARM_CORTEX_A57,
-            //     mpidr: 1,
-            //     sched: RoundRobin,
-            // },
-            // PlatCpuCoreConfig {
-            //     name: ARM_CORTEX_A57,
-            //     mpidr: 2,
-            //     sched: RoundRobin,
-            // },
-            // PlatCpuCoreConfig {
-            //     name: ARM_CORTEX_A57,
-            //     mpidr: 3,
-            //     sched: RoundRobin,
-            // },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 1,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 2,
+                sched: RoundRobin,
+            },
+            PlatCpuCoreConfig {
+                name: ARM_CORTEX_A57,
+                mpidr: 3,
+                sched: RoundRobin,
+            },
         ],
     },
     mem_desc: PlatMemoryConfig {

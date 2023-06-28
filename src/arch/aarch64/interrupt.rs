@@ -8,7 +8,6 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-
 use crate::arch::{gic_cpu_reset, gicc_clear_current_irq};
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::{current_cpu, Vcpu, Vm};
@@ -57,7 +56,7 @@ pub fn interrupt_arch_enable(int_id: usize, en: bool) {
 
 pub fn interrupt_arch_ipi_send(cpu_id: usize, ipi_id: usize) {
     if ipi_id < GIC_SGIS_NUM {
-        GICD.send_sgi(Platform::cpuid_to_cpuif(cpu_id), ipi_id);
+        GICD.send_sgi(cpu_id, ipi_id);
     }
 }
 

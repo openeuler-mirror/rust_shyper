@@ -55,7 +55,7 @@ impl PlatOperation for Rk3588Platform {
     }
 
     fn cpuif_to_cpuid(cpuif: usize) -> usize {
-        cpuif - PLAT_DESC.cpu_desc.num
+        cpuif
     }
 
     fn blk_init() {
@@ -133,11 +133,7 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             },
             PlatMemRegion {
                 base: 0x9400000,
-                size: 0x6c00000,
-            },
-            PlatMemRegion {
-                base: 0x1000_0000,
-                size: 0xe000_0000,
+                size: 0xe6c00000,
             },
             PlatMemRegion {
                 base: 0xf0000000,

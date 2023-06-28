@@ -151,8 +151,8 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 if name.is_empty() {
                     panic!("kernel image name empty")
                 } else {
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110"));
-                    //vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
+                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110"));
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-no-drm"));
                 }
             }
             None => {
@@ -212,7 +212,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
 }
 
 fn vmm_init_emulated_device(vm: Vm) -> bool {
-    let config = vm.config().emulated_device_list();
+    let config: Vec<crate::config::VmEmulatedDeviceConfig> = vm.config().emulated_device_list();
 
     for (idx, emu_dev) in config.iter().enumerate() {
         match emu_dev.emu_type {
@@ -409,7 +409,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             #[cfg(feature = "qemu")]
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@50000000\0".as_ptr());
             #[cfg(feature = "rk3588")]
-            fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@90000000\0".as_ptr());
+            fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@10000000\0".as_ptr());
             // FDT+TIMER
             //fdt_add_timer(dtb, 0x04);
             // FDT+BOOTCMD
