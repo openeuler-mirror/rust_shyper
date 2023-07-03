@@ -108,8 +108,9 @@ pub const HVC_UNILIB_FS_READ: usize = 3;
 pub const HVC_UNILIB_FS_WRITE: usize = 4;
 pub const HVC_UNILIB_FS_LSEEK: usize = 5;
 pub const HVC_UNILIB_FS_STAT: usize = 6;
-pub const HVC_UNILIB_FS_APPEND: usize = 7;
-pub const HVC_UNILIB_FS_FINISHED: usize = 8;
+pub const HVC_UNILIB_FS_UNLINK: usize = 7;
+pub const HVC_UNILIB_FS_APPEND: usize = 0x10;
+pub const HVC_UNILIB_FS_FINISHED: usize = 0x11;
 
 // hvc_config_event
 pub const HVC_CONFIG_ADD_VM: usize = 0;
@@ -436,6 +437,7 @@ fn hvc_unilib_handler(event: usize, x0: usize, x1: usize, x2: usize) -> Result<u
         HVC_UNILIB_FS_WRITE => unilib_fs_write(x0, x1, x2),
         HVC_UNILIB_FS_LSEEK => unilib_fs_lseek(x0, x1, x2),
         HVC_UNILIB_FS_STAT => unilib_fs_stat(),
+        HVC_UNILIB_FS_UNLINK => unilib_fs_unlink(x0, x1),
         HVC_UNILIB_FS_APPEND => unilib_fs_append(x0),
         HVC_UNILIB_FS_FINISHED => unilib_fs_finished(x0),
         _ => {

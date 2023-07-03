@@ -21,7 +21,7 @@ use alloc::collections::BTreeMap;
 use spin::Mutex;
 
 use crate::lib::{memcpy_safe, sleep};
-use crate::kernel::{vm_ipa2pa, active_vm, HVC_UNILIB_FS_INIT, HVC_UNILIB_FS_LSEEK};
+use crate::kernel::{vm_ipa2pa, active_vm, HVC_UNILIB_FS_INIT, HVC_UNILIB_FS_LSEEK, HVC_UNILIB_FS_UNLINK};
 use crate::kernel::{HvcGuestMsg, HvcUniLibMsg, hvc_send_msg_to_vm};
 use crate::kernel::HVC_UNILIB;
 use crate::kernel::{HVC_UNILIB_FS_OPEN, HVC_UNILIB_FS_CLOSE, HVC_UNILIB_FS_READ, HVC_UNILIB_FS_WRITE};
@@ -119,7 +119,7 @@ impl UnilibFS {
     fn loop_for_response(&self) -> usize {
         loop {
             if self.flag() != 0 {
-                println!(
+                trace!(
                     "unilib operation finished, flag {}, value {}",
                     self.flag(),
                     self.value()
@@ -464,4 +464,52 @@ pub fn unilib_fs_lseek(fd: usize, offset: usize, whence: usize) -> Result<usize,
 /// Currently unsupported.
 pub fn unilib_fs_stat() -> Result<usize, ()> {
     unimplemented!("stat is unimplemented");
+}
+
+/// **Unlink** API for unilib fs.
+/// HVC_UNILIB | HVC_UNILIB_FS_UNLINK
+/// Currently unsupported.
+pub fn unilib_fs_unlink(path_start_ipa: usize, path_length: usize) -> Result<usize, ()> {
+    let vm = active_vm().unwrap();
+    let vm_id = vm.id();
+    // println!(
+    //     "VM[{}] unilib fs unlink path_ipa: {:x}, path_length {}",
+    //     vm_id, path_start_ipa, path_length
+    // );
+    // Get fs_cfg struct according to vm_id.
+    let fs_list_lock = UNILIB_FS_LIST.lock();
+    let fs_cfg = match fs_list_lock.get(&vm_id) {
+        Some(cfg) => cfg,
+        None => {
+            println!("VM[{}] doesn't register a unilib fs, return", vm_id);
+            return Err(());
+        }
+    };
+
+    // Copy path to unilib_fs buf, see UnilibFSCfg.
+    let path_pa = vm_ipa2pa(active_vm().unwrap(), path_start_ipa);
+    memcpy_safe(fs_cfg.get_buf(), path_pa as *mut u8, path_length);
+    // Add end '\0' for path buf.
+    unsafe {
+        *((fs_cfg.get_buf() as usize + path_length) as *mut u8) = 0u8;
+    }
+
+    fs_cfg.prepare_for_request();
+
+    // Notify MVM to operate the fs operation.
+    let unilib_msg = HvcUniLibMsg {
+        fid: HVC_UNILIB,
+        event: HVC_UNILIB_FS_UNLINK,
+        vm_id: vm.id(),
+        arg_1: path_length,
+        arg_2: 0,
+        arg_3: 0,
+    };
+    if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
+        println!("unilib fs unlink: failed to notify VM 0");
+        return Err(());
+    }
+
+    // Still, we need to enter a loop, wait for VM to complete operation.
+    Ok(fs_cfg.loop_for_response())
 }
