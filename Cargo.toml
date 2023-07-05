@@ -43,11 +43,11 @@ default-features = false
 features = ["register_types"]
 
 [features]
-default = ["gicv3"]
+default = ["rk3588"]
 tx2 = []
 qemu = []
 pi4 = []
-rk3588 = []
+rk3588 = ["gicv3"]
 gicv3 = []
 update = []
 ramdisk = []

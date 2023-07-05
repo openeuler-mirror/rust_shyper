@@ -24,7 +24,7 @@ pub struct Rk3588Platform;
 
 impl PlatOperation for Rk3588Platform {
     const UART_0_ADDR: usize = 0xfeb50000;
-    const UART_1_ADDR: usize = 0xfebc0000;
+    const UART_1_ADDR: usize = 0xfeba0000;
 
     const UART_0_INT: usize = 32 + 0x12d;
     const UART_1_INT: usize = 32 + 0x134;

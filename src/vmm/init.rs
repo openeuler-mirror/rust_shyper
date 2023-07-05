@@ -148,11 +148,19 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                 }
                 #[cfg(feature = "rk3588")]
-                if name.is_empty() {
-                    panic!("kernel image name empty")
-                } else {
-                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110"));
+                if name == "Linux-5.10" {
+                    println!("MVM {} loading Image", vm.id());
+                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-new"));
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-no-drm"));
+                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-full"));
+                } else if name == "Image_vanilla" {
+                    println!("VM {} loading default Linux Image", vm.id());
+                    #[cfg(feature = "static-config")]
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
+                    #[cfg(not(feature = "static-config"))]
+                    println!("*** Please enable feature `static-config`");
+                } else {
+                    panic!("kernel image name empty")
                 }
             }
             None => {
@@ -604,10 +612,8 @@ pub fn vm_init() {
         super::vmm_init_gvm(0);
         #[cfg(feature = "static-config")]
         {
-            crate::config::init_tmp_config_for_vm1();
-            crate::config::init_tmp_config_for_vm2();
+            crate::config::init_gicv3_config_for_vm1();
             super::vmm_init_gvm(1);
-            super::vmm_init_gvm(2);
         }
     }
 }

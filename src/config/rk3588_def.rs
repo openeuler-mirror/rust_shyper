@@ -59,15 +59,15 @@ pub fn mvm_config_init() {
         //     emu_type: EmuDeviceType::EmuDeviceTVirtioNet,
         //     mediated: false,
         // },
-        // VmEmulatedDeviceConfig {
-        //     name: Some(String::from("virtio_console@a002000")),
-        //     base_ipa: 0xa002000,
-        //     length: 0x1000,
-        //     irq_id: 32 + 0x101,
-        //     cfg_list: vec![1, 0xa002000],
-        //     emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
-        //     mediated: false,
-        // },
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("virtio_console@a002000")),
+            base_ipa: 0xa002000,
+            length: 0x1000,
+            irq_id: 32 + 0x101,
+            cfg_list: vec![1, 0xa002000],
+            emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
+            mediated: false,
+        },
         // VmEmulatedDeviceConfig {
         //     name: Some(String::from("virtio_console@a003000")),
         //     base_ipa: 0xa003000,
@@ -100,7 +100,8 @@ pub fn mvm_config_init() {
     // vm0 passthrough
     let mut pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig::default();
     pt_dev_config.regions = vec![
-        //all
+        // PassthroughRegion { ipa: 0xf0000000, pa: 0xf0000000, length: 0x10000000, dev_property: true },
+        //all, exclude gic
         PassthroughRegion { ipa: 0xfc000000, pa: 0xfc000000, length: 0xfe600000 - 0xfc000000, dev_property: true },
         PassthroughRegion { ipa: 0xfe680000 + 0x100000, pa: 0xfe680000 + 0x100000, length: 0x10000_0000 - (0xfe680000 + 0x100000), dev_property: true },
         // PassthroughRegion { ipa: 0xfd000000, pa: 0xfd000000, length: 0x00100000, dev_property: true },
@@ -223,11 +224,11 @@ pub fn mvm_config_init() {
         os_type: VmType::VmTOs,
         cmdline:
         //String::from("storagemedia=emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 androidboot.verifiedbootstate=orange ro rootwait earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0"),
-        String::from("storagenode=/mmc@fe2e0000 earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 root=/dev/mmcblk0p6 rootfstype=ext4 rootwait rw default_hugepagesz=32M hugepagesz=32M hugepages=4"),
-        // String::from("earlycon=uart8250,mmio32,0xfeb50000 root=/dev/sda1 rw audit=0 rootwait console=ttyFIQ0"),
-        //String::from("emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 root=/dev/nfs nfsroot=192.168.106.153:/tftp/rootfs,proto=tcp rw ip=192.168.106.143:192.168.106.153:192.168.106.1:255.255.255.0::eth0:off default_hugepagesz=32M hugepagesz=32M hugepages=4"),
+        String::from("storagenode=/mmc@fe2e0000 earlycon=uart8250,mmio32,0xfeb50000 console=ttyS7,9600n8 root=/dev/mmcblk0p6 rootfstype=ext4 rootwait rw overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 default_hugepagesz=32M hugepagesz=32M hugepages=4"),
+        // String::from("earlycon=uart8250,mmio32,0xfeb50000 root=/dev/sda1 rootfstype=ext4 rw rootwait console=ttyFIQ0"),
+        // String::from("emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 root=/dev/nfs nfsroot=192.168.106.153:/tftp/rootfs,proto=tcp rw ip=192.168.106.143:192.168.106.153:192.168.106.1:255.255.255.0::eth0:off default_hugepagesz=32M hugepagesz=32M hugepages=4"),
         // String::from("earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 rw rootwait overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0\0"),
-        // String::from("storagemedia=emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 androidboot.verifiedbootstate=orange ro rootwait earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0\0"),
+        // String::from("storagemedia=emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 androidboot.verifiedbootstate=orange rw rootwait earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0\0"),
         image: Arc::new(Mutex::new(VmImageConfig {
             kernel_img_name: Some("Linux-5.10"),
             kernel_load_ipa: 0x20080000,

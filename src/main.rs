@@ -118,5 +118,7 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     println!("Rust-Shyper Hypervisor init ok\n\nStart booting Monitor VM ...");
     vmm_boot_vm(0);
 
-    loop {}
+    loop {
+        core::hint::spin_loop();
+    }
 }

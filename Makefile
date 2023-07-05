@@ -53,7 +53,7 @@ pi4:
 	# bash pi4_upload_release
 
 rk3588_release:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-rk3588.json --features "rk3588 gicv3" --release
+	cargo build -Z build-std=${BUILD_STD} --target aarch64-rk3588.json --features "rk3588" --release
 	bash rk3588_upload_release
 	${OBJDUMP} --demangle -d target/aarch64-rk3588/release/${IMAGE} > target/aarch64-rk3588/release/t.txt
 

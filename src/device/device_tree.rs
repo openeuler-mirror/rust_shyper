@@ -159,10 +159,13 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         use fdt::*;
         println!("fdt orignal size {}", fdt_size(dtb));
 
-        assert_eq!(fdt_remove_node(dtb, "/sram@10f000\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/sram@10f000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core1\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@0\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@100\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/tsadc@fec00000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/memory\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/fiq-debugger\0".as_ptr()), 0);
         let len = fdt_size(dtb);
         println!("fdt after patched size {}", len);
         let slice = core::slice::from_raw_parts(dtb as *const u8, len as usize);
