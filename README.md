@@ -34,7 +34,7 @@ Simply run `make`
 make <platform>
 ```
 
-For example, `make tx2_release` is to build Rust-Shyper for TX2 with opimization. 
+For example, `make tx2` is to build Rust-Shyper for TX2. 
 
 Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to your requirements.
 

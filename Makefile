@@ -4,54 +4,58 @@ DISK = vm0.img
 
 # Compile
 ARCH ?= aarch64
-BUILD_STD = core,alloc
+PROFILE ?= release
+BOARD ?= tx2
+# features, seperate with comma `,`
+FEATURES =
 
 # Toolchain
 TOOLCHAIN=aarch64-none-elf
 QEMU = qemu-system-aarch64
 GDB = ${TOOLCHAIN}-gdb
 OBJDUMP = ${TOOLCHAIN}-objdump
+OBJCOPY = ${TOOLCHAIN}-objcopy
 
 IMAGE=rust_shyper
 
-qemu_debug:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-qemu.json --features qemu
-	${TOOLCHAIN}-objcopy target/aarch64-qemu/debug/${IMAGE} -O binary target/aarch64-qemu/debug/${IMAGE}.bin
-	${OBJDUMP} --demangle -d target/aarch64-qemu/debug/${IMAGE} > target/aarch64-qemu/debug/t.txt
+TARGET_DIR=target/${ARCH}/${PROFILE}
 
-qemu_release:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-qemu.json --features qemu --release
-	${TOOLCHAIN}-objcopy target/aarch64-qemu/release/${IMAGE} -O binary target/aarch64-qemu/release/${IMAGE}.bin
-	${OBJDUMP} --demangle -d target/aarch64-qemu/release/${IMAGE} > target/aarch64-qemu/release/t.txt
+# Cargo flags.
+CARGO_FLAGS ?= -Z build-std=core,alloc --target ${ARCH}.json --no-default-features --features ${BOARD},${FEATURES}
+ifeq (${PROFILE}, release)
+CARGO_FLAGS := ${CARGO_FLAGS} --release
+endif
+
+.PHONY: build qemu tx2 pi4 tx2_update tx2_ramdisk gdb clean
+
+build:
+	cargo build ${CARGO_FLAGS}
+	${OBJDUMP} --demangle -d ${TARGET_DIR}/${IMAGE} > ${TARGET_DIR}/t.txt
+
+qemu:
+	$(MAKE) build BOARD=qemu
+	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
 
 tx2:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2.json --features tx2
-	# bash upload
-	${OBJDUMP} --demangle -d target/aarch64-tx2/debug/${IMAGE} > target/aarch64-tx2/debug/t.txt
-
-tx2_release:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2.json --features tx2 --release
+	$(MAKE) build BOARD=tx2
 	# bash upload_release
-	${OBJDUMP} --demangle -d target/aarch64-tx2/release/${IMAGE} > target/aarch64-tx2/release/t.txt
 
 tx2_ramdisk:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2.json --features "tx2 ramdisk" --release
+	$(MAKE) build BOARD=tx2 FEATURES=ramdisk
 	# bash upload_release
-	${OBJDUMP} --demangle -d target/aarch64-tx2/release/${IMAGE} > target/aarch64-tx2/release/t.txt
 
 tx2_update:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-tx2-update.json --features "tx2 update" --release
+	$(MAKE) build BOARD=tx2 FEATURES=update
 	# bash upload_update
-	${OBJDUMP} --demangle -d target/aarch64-tx2-update/release/${IMAGE} > target/aarch64-tx2-update/release/update.txt
 
-pi4_release:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-pi4.json --features pi4 --release
+pi4:
+	$(MAKE) build BOARD=pi4
 	# bash pi4_upload_release
-	${OBJDUMP} --demangle -d target/aarch64-pi4/release/${IMAGE} > target/aarch64-pi4/release/t.txt
 
 
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
-	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false
+	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
+	-kernel ${TARGET_DIR}/${IMAGE}.bin
 
 QEMU_SERIAL_OPTIONS = -serial mon:stdio #\
 	-serial telnet:localhost:12345,server
@@ -60,20 +64,12 @@ QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-n
 
 QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.25
 
-run: qemu_debug
+run: qemu
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
-		-kernel target/aarch64-qemu/debug/${IMAGE}.bin
 
-run_release: qemu_release
+debug: qemu
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
-		-kernel target/aarch64-qemu/release/${IMAGE}.bin
-
-debug: qemu_debug
-	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
-		-kernel target/aarch64-qemu/debug/${IMAGE}.bin \
 		-s -S
-
-.PHONY: gdb clean
 
 gdb:
 	${GDB} -x gdb/aarch64.gdb

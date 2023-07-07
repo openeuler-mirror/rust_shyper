@@ -34,7 +34,7 @@ Rust-Shyper是由北航计算机学院操作系统研究团队，在华为技术
 make <platform>
 ```
 
-例如, `make tx2_release` 是编译包含优化Rust-Shyper的TX2版本。具体可查看Makefile文件。
+例如, `make tx2` 是编译Rust-Shyper的TX2版本。具体可查看Makefile文件。
 
 主要注意的是，请在编译前，根据需求编辑管理虚拟机（MVM）的配置文件。该文件的路径是 src/config/\<plat\>_def.rs.
 
