@@ -29,7 +29,7 @@ use crate::kernel::{vm, Vm};
 use crate::kernel::{active_vcpu_id, vcpu_run};
 use crate::kernel::interrupt_vm_register;
 use crate::kernel::VM_NUM_MAX;
-use crate::lib::trace;
+use crate::utils::trace;
 
 #[cfg(feature = "ramdisk")]
 pub static CPIO_RAMDISK: &'static [u8] = include_bytes!("../../image/net_rootfs.cpio");
@@ -63,7 +63,7 @@ fn vmm_init_memory(vm: Vm) -> bool {
             "VM {} memory region: ipa=<0x{:x}>, pa=<0x{:x}>, size=<0x{:x}>",
             vm_id, vm_region.ipa_start, pa, vm_region.length
         );
-        vm.pt_map_range(vm_region.ipa_start, vm_region.length, pa, PTE_S2_NORMAL, vm_id == 0);
+        vm.pt_map_range(vm_region.ipa_start, vm_region.length, pa, PTE_S2_NORMAL, false);
 
         vm.add_region(VmPa {
             pa_start: pa,
@@ -122,7 +122,18 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 #[cfg(feature = "tx2")]
                 if name == "L4T" {
                     println!("MVM {} loading Image", vm.id());
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/L4T"));
+                    // vmm_load_image(vm.clone(), include_bytes!("../../image/L4T"));
+                    extern "C" {
+                        fn _binary_vm0img_start();
+                        fn _binary_vm0img_size();
+                    }
+                    let vm0image = unsafe {
+                        core::slice::from_raw_parts(
+                            _binary_vm0img_start as usize as *const u8,
+                            _binary_vm0img_size as usize,
+                        )
+                    };
+                    vmm_load_image(vm.clone(), vm0image);
                 } else if name == "Image_vanilla" {
                     println!("VM {} loading default Linux Image", vm.id());
                     #[cfg(feature = "static-config")]
@@ -132,19 +143,21 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 } else {
                     warn!("Image {} is not supported", name);
                 }
-                #[cfg(feature = "pi4")]
+                #[cfg(any(feature = "qemu", feature = "pi4"))]
                 if name.is_empty() {
                     panic!("kernel image name empty")
                 } else {
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_pi4_5.4.83_tlb"));
-                }
-                // vmm_load_image(vm.clone(), include_bytes!("../../image/Image_pi4_5.4.78"));
-                // vmm_load_image(vm.clone(), include_bytes!("../../image/Image_pi4"));
-                #[cfg(feature = "qemu")]
-                if name.is_empty() {
-                    panic!("kernel image name empty")
-                } else {
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
+                    extern "C" {
+                        fn _binary_vm0img_start();
+                        fn _binary_vm0img_size();
+                    }
+                    let vm0image = unsafe {
+                        core::slice::from_raw_parts(
+                            _binary_vm0img_start as usize as *const u8,
+                            _binary_vm0img_size as usize,
+                        )
+                    };
+                    vmm_load_image(vm.clone(), vm0image);
                 }
             }
             None => {
@@ -174,7 +187,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 Ok(dtb) => {
                     let offset = config.device_tree_load_ipa() - vm.config().memory_region()[0].ipa_start;
                     println!("GVM[{}] dtb addr 0x{:x}", vm.id(), vm.pa_start(0) + offset);
-                    crate::lib::memcpy_safe((vm.pa_start(0) + offset) as *const u8, dtb.as_ptr(), dtb.len());
+                    crate::utils::memcpy_safe((vm.pa_start(0) + offset) as *const u8, dtb.as_ptr(), dtb.len());
                 }
                 _ => {
                     panic!("vmm_setup_config: create fdt for vm{} fail", vm.id());

@@ -21,7 +21,7 @@ use tock_registers::registers::*;
 
 use Operation::*;
 
-use crate::lib::trace;
+use crate::utils::trace;
 
 // use crate::device::*;
 use super::virtio::*;

@@ -86,7 +86,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
     #[cfg(feature = "pi4")]
     unsafe {
         use fdt::*;
-        use crate::lib::round_up;
+        use crate::utils::round_up;
         use crate::arch::PAGE_SIZE;
         let pi_fdt = PI4_DTB_ADDR as *mut fdt::myctypes::c_void;
         let len = round_up(fdt_size(pi_fdt) as usize, PAGE_SIZE) + PAGE_SIZE;
@@ -101,7 +101,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
-        assert_eq!(fdt_disable_node(dtb, "/platform@c000000\0".as_ptr()), 0);
+        // assert_eq!(fdt_disable_node(dtb, "/platform@c000000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/fw-cfg@9020000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/memory@40000000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/virtio_mmio@a000000\0".as_ptr()), 0);

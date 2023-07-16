@@ -17,7 +17,7 @@ use crate::arch::{gicc_clear_current_irq, gicc_get_current_irq};
 use crate::arch::ContextFrame;
 use crate::kernel::{active_vm_id, current_cpu, FRESH_IRQ_LOGIC_LOCK, FRESH_LOGIC_LOCK, fresh_status, FreshStatus};
 use crate::kernel::interrupt_handler;
-use crate::lib::time_current_us;
+use crate::utils::time_current_us;
 
 // use crate::lib::time_current_us;
 

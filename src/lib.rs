@@ -37,7 +37,7 @@ use crate::kernel::{cpu_sched_init, hvc_init, iommu_init};
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => ($crate::lib::_print(format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::utils::_print(format_args!($($arg)*)));
 }
 
 #[macro_export]
@@ -59,11 +59,11 @@ mod driver;
 #[allow(dead_code)]
 mod kernel;
 #[allow(dead_code)]
-mod lib;
-#[allow(dead_code)]
 mod mm;
 #[allow(dead_code)]
 mod panic;
+#[allow(dead_code)]
+mod utils;
 #[allow(dead_code)]
 mod vmm;
 
@@ -108,7 +108,7 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     if cpu_id == 0 {
         mediated_dev_init();
     }
-    crate::lib::barrier();
+    crate::utils::barrier();
     if cpu_id != 0 {
         crate::kernel::cpu_idle();
     }

@@ -20,7 +20,7 @@ use crate::arch::{
 use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
-use crate::lib::memcpy_safe;
+use crate::utils::memcpy_safe;
 
 use super::{CpuState, Vm, VmType};
 

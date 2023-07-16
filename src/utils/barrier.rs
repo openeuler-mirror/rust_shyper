@@ -13,7 +13,7 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use crate::board::PLAT_DESC;
-use crate::lib::round_up;
+use crate::utils::round_up;
 
 struct CpuSyncToken {
     n: usize,

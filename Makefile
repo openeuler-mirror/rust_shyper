@@ -15,7 +15,12 @@ QEMU = qemu-system-aarch64
 GDB = ${TOOLCHAIN}-gdb
 OBJDUMP = ${TOOLCHAIN}-objdump
 OBJCOPY = ${TOOLCHAIN}-objcopy
+LD = ${TOOLCHAIN}-ld
 
+TEXT_START ?= 0x83000000
+VM0_IMAGE_PATH="./image/L4T"
+
+RELOCATE_IMAGE=librust_shyper.a
 IMAGE=rust_shyper
 
 TARGET_DIR=target/${ARCH}/${PROFILE}
@@ -30,26 +35,28 @@ endif
 
 build:
 	cargo build ${CARGO_FLAGS}
+	bash linkimg.sh -i ${TARGET_DIR}/${RELOCATE_IMAGE} -m ${VM0_IMAGE_PATH} \
+		-t ${LD} -f linkers/${ARCH}.ld -s ${TEXT_START} -o ${TARGET_DIR}/${IMAGE}
 	${OBJDUMP} --demangle -d ${TARGET_DIR}/${IMAGE} > ${TARGET_DIR}/t.txt
 
 qemu:
-	$(MAKE) build BOARD=qemu
+	$(MAKE) build BOARD=qemu TEXT_START=0x40080000 VM0_IMAGE_PATH="./image/Image_vanilla"
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
 
 tx2:
-	$(MAKE) build BOARD=tx2
+	$(MAKE) build BOARD=tx2 TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
 	# bash upload_release
 
 tx2_ramdisk:
-	$(MAKE) build BOARD=tx2 FEATURES=ramdisk
+	$(MAKE) build BOARD=tx2 FEATURES=ramdisk TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
 	# bash upload_release
 
 tx2_update:
-	$(MAKE) build BOARD=tx2 FEATURES=update
+	$(MAKE) build BOARD=tx2 FEATURES=update TEXT_START=0x8a000000 VM0_IMAGE_PATH="./image/L4T"
 	# bash upload_update
 
 pi4:
-	$(MAKE) build BOARD=pi4
+	$(MAKE) build BOARD=pi4 TEXT_START=0xf0080000 VM0_IMAGE_PATH="./image/Image_pi4_5.4.83_tlb"
 	# bash pi4_upload_release
 
 

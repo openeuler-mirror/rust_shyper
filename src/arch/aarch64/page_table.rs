@@ -17,8 +17,8 @@ use spin::Mutex;
 use crate::arch::ArchPageTableEntryTrait;
 use crate::arch::WORD_SIZE;
 use crate::kernel::Cpu;
-use crate::lib::{memcpy_safe, memset_safe};
-use crate::lib::round_up;
+use crate::utils::{memcpy_safe, memset_safe};
+use crate::utils::round_up;
 use crate::mm::PageFrame;
 
 use super::{PAGE_SIZE, PTE_PER_PAGE};

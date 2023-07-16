@@ -18,7 +18,7 @@ use tock_registers::registers::*;
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::current_cpu;
 use crate::kernel::INTERRUPT_NUM_MAX;
-use crate::lib::{bit_extract, trace};
+use crate::utils::{bit_extract, trace};
 
 // GICD BITS
 const GICD_CTLR_EN_BIT: usize = 0x1;

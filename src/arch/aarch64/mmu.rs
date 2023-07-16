@@ -13,7 +13,7 @@ use tock_registers::*;
 use tock_registers::interfaces::*;
 
 use crate::board::PLAT_DESC;
-use crate::lib::memset_safe;
+use crate::utils::memset_safe;
 
 use super::interface::*;
 

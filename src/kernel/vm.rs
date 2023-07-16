@@ -25,7 +25,7 @@ use crate::device::EmuDevs;
 use crate::kernel::{
     EmuDevData, get_share_mem, mem_pages_alloc, VirtioMmioData, VM_CONTEXT_RECEIVE, VM_CONTEXT_SEND, VMData,
 };
-use crate::lib::*;
+use crate::utils::*;
 use crate::mm::PageFrame;
 
 use super::vcpu::Vcpu;

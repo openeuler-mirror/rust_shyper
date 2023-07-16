@@ -13,8 +13,8 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 use crate::arch::PAGE_SIZE;
-use crate::lib::{BitAlloc, BitAlloc4K, BitAlloc64K, BitMap};
-use crate::lib::memset_safe;
+use crate::utils::{BitAlloc, BitAlloc4K, BitAlloc64K, BitMap};
+use crate::utils::memset_safe;
 
 use super::AllocError;
 
@@ -123,7 +123,7 @@ impl HeapRegion {
     }
 
     pub fn free_pages(&mut self, base: usize, size: usize) -> bool {
-        use crate::lib::range_in_range;
+        use crate::utils::range_in_range;
         if !range_in_range(base, size * PAGE_SIZE, self.region.base, self.region.size * PAGE_SIZE) {
             panic!(
                 "free_page: out of range (addr 0x{:x} page num {} heap base 0x{:x} heap size 0x{:x})",
@@ -165,7 +165,7 @@ pub static VM_REGION: Mutex<VmRegion> = Mutex::new(VmRegion {
 });
 
 pub fn bits_to_pages(bits: usize) -> usize {
-    use crate::lib::round_up;
+    use crate::utils::round_up;
     round_up(bits, PAGE_SIZE)
 }
 

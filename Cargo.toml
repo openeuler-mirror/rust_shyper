@@ -15,6 +15,9 @@ license = "MulanPSL-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+crate-type = ["staticlib"]
+
 [profile.dev]
 panic = "abort"
 
@@ -43,6 +46,7 @@ default-features = false
 features = ["register_types"]
 
 [features]
+default = ["tx2"]
 tx2 = []
 qemu = []
 pi4 = []

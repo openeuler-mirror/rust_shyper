@@ -17,7 +17,7 @@ use crate::kernel::{
 };
 use crate::kernel::vm_if_reset;
 use crate::vmm::VmmEvent;
-use crate::lib::memset_safe;
+use crate::utils::memset_safe;
 
 pub fn vmm_remove_vm(vm_id: usize) {
     if vm_id == 0 {
@@ -55,7 +55,7 @@ pub fn vmm_remove_vm(vm_id: usize) {
     // remove vm cfg
     vm_cfg_remove_vm_entry(vm_id);
     // remove vm unilib
-    crate::lib::unilib::unilib_fs_remove(vm_id);
+    crate::utils::unilib::unilib_fs_remove(vm_id);
     info!("remove vm[{}] successfully", vm_id);
 }
 
