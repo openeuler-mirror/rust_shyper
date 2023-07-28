@@ -19,4 +19,4 @@ build/
 pi4_upload_release
 *.img
 *.dts
-*.dtb
+/*.dtb
