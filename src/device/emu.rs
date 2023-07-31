@@ -176,7 +176,7 @@ pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
     for emu_dev in &*emu_devs_list {
         let active_vcpu = current_cpu().active_vcpu.clone().unwrap();
         if active_vcpu.vm_id() == emu_dev.vm_id && in_range(ipa, emu_dev.ipa, emu_dev.size - 1) {
-            // if current_cpu().id == 2 {
+            // if current_cpu().id == 1 {
             //     println!("emu dev {:#?} handler", emu_dev.emu_type);
             // }
             let handler = emu_dev.handler;

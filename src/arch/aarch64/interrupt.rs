@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use crate::arch::{gic_cpu_reset, gicc_clear_current_irq};
+#[cfg(not(feature = "gicv3"))]
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::{current_cpu, Vcpu, Vm};
 

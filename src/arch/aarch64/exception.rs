@@ -254,7 +254,9 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
 extern "C" fn lower_aarch64_irq(ctx: *mut ContextFrame) {
     current_cpu().set_ctx(ctx);
     let (id, src) = gicc_get_current_irq();
-    // println!("lower_aarch64_irq:{id}");
+    // if current_cpu().id == 1 && id != 27 {
+    //     println!("lower_aarch64_irq:{id}");
+    // }
     match fresh_status() {
         FreshStatus::FreshVM | FreshStatus::Start => {
             // if active_vm().unwrap().has_interrupt(id) {

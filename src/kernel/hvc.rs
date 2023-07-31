@@ -131,7 +131,7 @@ pub const HVC_IRQ: usize = 32 + 0x10;
 #[cfg(feature = "qemu")]
 pub const HVC_IRQ: usize = 32 + 0x20;
 #[cfg(feature = "rk3588")]
-pub const HVC_IRQ: usize = 32 + 0x20;
+pub const HVC_IRQ: usize = 32 + 0x10;
 
 #[repr(C)]
 pub enum HvcGuestMsg {
@@ -546,6 +546,7 @@ pub fn hvc_guest_notify(vm_id: usize) {
             );
         }
         Some(vcpu) => {
+            // println!("hvc_guest_notify here");
             interrupt_vm_inject(vm, vcpu, HVC_IRQ, 0);
         }
     };

@@ -183,6 +183,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
                 println!("virtio_console_notify_handler: failed to desc addr");
                 return false;
             }
+            // println!("virtio_consle:addr:{:#x}", addr);
             tx_iov.push_data(addr, vq.desc_len(idx) as usize);
 
             len += vq.desc_len(idx) as usize;
@@ -191,6 +192,15 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
             }
             idx = vq.desc_next(idx) as usize;
         }
+        // unsafe {
+        //     let slice = core::slice::from_raw_parts(
+        //         vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx)) as *const u8,
+        //         len as usize,
+        //     );
+        //     use alloc::string::String;
+        //     let s = String::from_utf8_lossy(slice);
+        //     println!("send data:{}", s);
+        // }
 
         if !virtio_console_recv(trgt_vmid, trgt_console_ipa, tx_iov.clone(), len) {
             println!("virtio_console_notify_handler: failed send");
@@ -286,6 +296,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
             );
             return false;
         }
+        // println!("virtio_consle recv:addr:{:#x}", dst);
         let desc_len = rx_vq.desc_len(desc_idx) as usize;
         // dirty pages
         if trgt_vmid != 0 {

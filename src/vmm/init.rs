@@ -426,6 +426,8 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             fdt_set_stdout_path(dtb, "/serial@3100000\0".as_ptr());
             // #[cfg(feature = "pi4")]
             // fdt_set_stdout_path(dtb, "/serial@fe340000\0".as_ptr());
+            #[cfg(feature = "rk3588")]
+            fdt_set_stdout_path(dtb, "/serial@feba0000\0".as_ptr());
 
             if config.emulated_device_list().len() > 0 {
                 for emu_cfg in config.emulated_device_list() {
@@ -473,7 +475,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                             trace!("EmuDeviceTICCSRE");
                         }
                         EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
-                            #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_virtio(
                                 dtb,
                                 emu_cfg.name.unwrap().as_ptr(),
@@ -482,7 +484,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                             );
                         }
                         EmuDeviceTShyper => {
-                            #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_vm_service(
                                 dtb,
                                 emu_cfg.irq_id as u32 - 0x20,

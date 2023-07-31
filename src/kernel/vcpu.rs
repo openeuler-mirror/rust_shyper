@@ -397,7 +397,11 @@ impl VcpuInner {
             vmpidr |= 0x100;
         }
 
-        vmpidr |= self.id;
+        vmpidr |= if cfg!(feature = "rk3588") {
+            0x100_0000 | (self.id << 8)
+        } else {
+            self.phys_id
+        };
         self.vm_ctx.vmpidr_el2 = vmpidr as u64;
     }
 
@@ -411,7 +415,11 @@ impl VcpuInner {
             vmpidr |= 0x100;
         }
 
-        vmpidr |= self.id;
+        vmpidr |= if cfg!(feature = "rk3588") {
+            0x100_0000 | (self.id << 8)
+        } else {
+            self.id
+        };
         self.vm_ctx.vmpidr_el2 = vmpidr as u64;
     }
 

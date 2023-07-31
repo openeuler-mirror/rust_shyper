@@ -880,21 +880,14 @@ impl Vm {
         inner.share_mem_base += len;
     }
 
-    pub fn get_vcpu_by_mpdir(&self, mpdir: usize) -> Option<Vcpu> {
-        for i in 0..self.cpu_num() {
-            let cpuid;
-            if (mpdir >> 8) & 0b1 != 0 {
-                cpuid = 4 + (mpdir & 0xff);
-            } else {
-                cpuid = mpdir & 0xff;
-            }
-            let rvcpu = self.vcpu(i).clone().unwrap();
-            if rvcpu.phys_id() == cpuid {
-                return Some(rvcpu);
-            }
-        }
-        println!("get_vcpu_by_mpdir:get vcpu fail,error mpdir!");
-        return Option::None;
+    pub fn get_vcpu_by_mpidr(&self, mpdir: usize) -> Option<Vcpu> {
+        let inner = self.inner.lock();
+        let cpuid = if (mpdir >> 8) & 0b1 != 0 {
+            4 + (mpdir & 0xff)
+        } else {
+            mpdir & 0xff
+        };
+        inner.vcpu_list.iter().find(|vcpu| vcpu.id() == cpuid).cloned()
     }
 }
 
@@ -1100,10 +1093,15 @@ pub fn ipa2pa(pa_region: &Vec<VmPa>, ipa: usize) -> usize {
     return 0;
 }
 
-pub fn cpuid2mpdir(cpuid: usize) -> usize {
-    if cpuid < 4 {
-        cpuid | (1 << 31)
+pub fn cpuid2mpidr(cpuid: usize) -> usize {
+    if cfg!(feature = "rk3588") {
+        0x81000000 | (cpuid << 8)
     } else {
-        0x100 | (cpuid - 4) | (1 << 31)
+        // qemu
+        if cpuid < 4 {
+            cpuid | (1 << 31)
+        } else {
+            0x100 | (cpuid - 4) | (1 << 31)
+        }
     }
 }

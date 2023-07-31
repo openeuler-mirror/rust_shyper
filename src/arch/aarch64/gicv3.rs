@@ -57,7 +57,6 @@ pub const GICC_IAR_ID_LEN: usize = 24;
 pub const GICC_SGIR_IRM_BIT: usize = 1 << 40;
 
 // GICH BITS
-pub const GICH_HCR_LRENPIE_BIT: usize = 1 << 2;
 pub const GICH_LR_VID_OFF: usize = 0;
 pub const GICH_LR_VID_LEN: usize = 32;
 pub const GICH_LR_VID_MASK: usize = (((1 << ((GICH_LR_VID_LEN) - 1)) << 1) - 1) << (GICH_LR_VID_OFF);
@@ -73,13 +72,14 @@ pub const GICH_LR_STATE_ACT: usize = (2 << GICH_LR_STATE_OFF) & GICH_LR_STATE_MS
 pub const GICH_LR_STATE_PND: usize = (1 << GICH_LR_STATE_OFF) & GICH_LR_STATE_MSK;
 pub const GICH_LR_GRP_BIT: usize = 1 << 60;
 pub const GICH_LR_PRIO_MSK: usize = (((1 << ((GICH_LR_PRIO_LEN) - 1)) << 1) - 1) << (GICH_LR_PRIO_OFF);
-/* Global enable bit for the virtual CPU interface.
- * When this field is 0:
- * The virtual CPU interface does not signal any maintenance interrupts.
- * The virtual CPU interface does not signal any virtual interrupts.
- * A read of GICV_IAR or GICV_AIAR returns a spurious interrupt ID.
+pub const GICH_LR_HW_BIT: usize = 1 << 61;
+pub const GICH_LR_EOI_BIT: usize = 1 << 41;
+/* End Of Interrupt.
+ * This maintenance interrupt is asserted when at least one bit in GICH_EISR == 1.
  */
+pub const GICH_HCR_LRENPIE_BIT: usize = 1 << 2;
 pub const GICH_HCR_EN_BIT: usize = 1;
+pub const GICH_HCR_UIE_BIT: usize = 1 << 1;
 pub const GICH_HCR_NPIE_BIT: usize = 1 << 3;
 /* Counts the number of EOIs received that do not have a corresponding entry in the List registers.
  * The virtual CPU interface increments this field automatically when a matching EOI is received
@@ -87,11 +87,7 @@ pub const GICH_HCR_NPIE_BIT: usize = 1 << 3;
 pub const GICH_HCR_EOIC_OFF: usize = 27;
 pub const GICH_HCR_EOIC_LEN: usize = 5;
 pub const GICH_HCR_EOIC_MSK: usize = (((1 << ((GICH_HCR_EOIC_LEN) - 1)) << 1) - 1) << (GICH_HCR_EOIC_OFF);
-pub const GICH_LR_HW_BIT: usize = 1 << 61;
-pub const GICH_LR_EOI_BIT: usize = 1 << 41;
-/* End Of Interrupt.
- * This maintenance interrupt is asserted when at least one bit in GICH_EISR == 1.
- */
+pub const GICH_MISR_U: usize = 1 << 1;
 pub const GICH_MISR_EOI: usize = 1;
 /* No Pending.
  * This maintenance interrupt is asserted
@@ -105,6 +101,11 @@ pub const GICH_MISR_NP: usize = 1 << 3;
 pub const GICH_MISR_LRPEN: usize = 1 << 2;
 const GICH_NUM_ELRSR: usize = 1;
 const GICH_VTR_MSK: usize = 0b11111;
+const GICH_PMR_MASK: usize = 0xff;
+const GICH_VMCR_VPMR_SHIFT: usize = 24;
+const GICC_IGRPEN1_EN: usize = 0x1;
+const GICH_VMCR_VENG1: usize = 0x1 << 1;
+const GICH_VMCR_VEOIM: usize = 0x1 << 9;
 
 pub const GIC_SGIS_NUM: usize = 16;
 const GIC_PPIS_NUM: usize = 16;
@@ -319,7 +320,6 @@ impl GicDistributor {
 
         for i in (GIC_PRIVINT_NUM * 8 / 32)..(int_num * 8 / 32) {
             self.IPRIORITYR[i].set(u32::MAX);
-            //self.ITARGETSR[i].set(0);
         }
 
         for i in GIC_PRIVINT_NUM..GIC_INTS_MAX {
@@ -437,11 +437,10 @@ impl GicDistributor {
     }
 
     pub fn set_icfgr(&self, int_id: usize, cfg: u8) {
+        let lock = GICD_LOCK.lock();
         let reg_ind = (int_id * GIC_CONFIG_BITS) / 32;
         let off = (int_id * GIC_CONFIG_BITS) % 32;
         let mask = 0b11 << off;
-
-        let lock = GICD_LOCK.lock();
 
         let icfgr = self.ICFGR[reg_ind].get();
         self.ICFGR[reg_ind].set((icfgr & !mask) | (((cfg as u32) << off as u32) & mask));
@@ -761,7 +760,7 @@ impl GicCpuInterface {
     }
 
     fn init(&self) {
-        msr!(ICC_SRE_EL2, 0b1001, "x");
+        msr!(ICC_SRE_EL2, 0b1, "x");
 
         unsafe {
             core::arch::asm!("isb");
@@ -771,12 +770,25 @@ impl GicCpuInterface {
             GICH.set_lr(i, 0);
         }
 
+        let pmr = mrsr!(ICC_PMR_EL1, "x");
         msr!(ICC_PMR_EL1, 0xff, "x");
         msr!(ICC_BPR1_EL1, 0x0, "x");
+        let ctrl = mrsr!(ICC_CTLR_EL1, "x");
         msr!(ICC_CTLR_EL1, ICC_CTLR_EOIMODE_BIT, "x");
-        let hcr = mrsr!(ICH_HCR_EL2, "x");
-        msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT as u32, "x");
-        msr!(ICC_IGRPEN1_EL1, 0x1, "x");
+        let hcr = mrsr!(ICH_HCR_EL2);
+        msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
+        let igrpen1 = mrsr!(ICC_IGRPEN1_EL1, "x");
+        msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
+
+        //set ICH_VMCR_EL2:Interrupt Controller Virtual Machine Control Register Enables the hypervisor to save and restore the virtual machine view of the GIC state.
+        let mut ich_vmcr = (pmr & GICH_PMR_MASK as u32) << GICH_VMCR_VPMR_SHIFT as u32;
+        if igrpen1 & GICC_IGRPEN1_EN as u32 != 0 {
+            ich_vmcr |= GICH_VMCR_VENG1 as u32;
+        }
+        if ctrl & GICC_CTLR_EOIMODE_BIT as u32 != 0 {
+            ich_vmcr |= GICH_VMCR_VEOIM as u32;
+        }
+        msr!(ICH_VMCR_EL2, ich_vmcr as usize);
     }
 
     pub fn iar(&self) -> u32 {
@@ -853,20 +865,20 @@ impl GicHypervisorInterface {
         self.base_addr as *const GicHypervisorInterfaceBlock
     }
 
-    pub fn hcr(&self) -> u32 {
-        let hcrc: u32;
-        mrs!(hcrc, ICH_HCR_EL2, "x");
+    pub fn hcr(&self) -> usize {
+        let hcrc: usize;
+        mrs!(hcrc, ICH_HCR_EL2);
         hcrc
     }
 
-    pub fn set_hcr(&self, hcr: u32) {
-        msr!(ICH_HCR_EL2, hcr, "x")
+    pub fn set_hcr(&self, hcr: usize) {
+        msr!(ICH_HCR_EL2, hcr)
     }
 
     // These registers can be used to locate a usable List register when the hypervisor is delivering an interrupt to a Guest OS.
-    pub fn elrsr(&self) -> u32 {
-        let elrsrc: u32;
-        mrs!(elrsrc, ICH_ELRSR_EL2, "x");
+    pub fn elrsr(&self) -> usize {
+        let elrsrc: usize;
+        mrs!(elrsrc, ICH_ELRSR_EL2);
         elrsrc
     }
 
@@ -897,6 +909,9 @@ impl GicHypervisorInterface {
             15 => mrs!(lrc, ICH_LR15_EL2),
             _ => lrc = 0,
         };
+        if lrc & (1 << 59) == 1 {
+            println!("get lr:{:#b}", lrc);
+        }
         lrc
     }
 
@@ -945,7 +960,7 @@ pub struct GicState {
     pub hppir: u32,
     pub priv_isenabler: u32,
     pub priv_ipriorityr: [u32; GIC_PRIVINT_NUM / 4],
-    pub hcr: u32,
+    pub hcr: usize,
     pub lr: [u32; GIC_LIST_REGS_NUM],
 }
 
@@ -953,7 +968,7 @@ impl GicState {
     pub fn default() -> GicState {
         GicState {
             ctlr: 0,
-            pmr: 0,
+            pmr: 0xff,
             bpr: 0,
             iar: 0,
             eoir: 0,
@@ -967,9 +982,11 @@ impl GicState {
     }
 
     pub fn save_state(&mut self) {
+        println!("save_state");
         mrs!(self.pmr, ICC_PMR_EL1, "x");
         mrs!(self.bpr, ICC_BPR1_EL1, "x");
-        mrs!(self.hcr, ICH_HCR_EL2, "x");
+        mrs!(self.hcr, ICH_HCR_EL2);
+        mrs!(self.ctlr, ICC_CTLR_EL1, "x");
         self.priv_isenabler = GICR[current_cpu().id].ISENABLER0.get();
 
         for i in 0..GIC_PRIVINT_NUM / 4 {
@@ -981,19 +998,25 @@ impl GicState {
     }
 
     pub fn restore_state(&self) {
-        msr!(ICC_SRE_EL2, 0b1001, "x");
-        msr!(ICC_CTLR_EL1, GICC_CTLR_EOIMODE_BIT, "x");
+        msr!(ICC_SRE_EL2, 0b1, "x");
+
+        unsafe {
+            core::arch::asm!("isb");
+        }
+
+        msr!(ICC_CTLR_EL1, GICC_CTLR_EOIMODE_BIT);
         msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
-        msr!(ICC_PMR_EL1, self.pmr, "x");
-        msr!(ICC_BPR1_EL1, self.bpr, "x");
-        msr!(ICH_HCR_EL2, self.hcr, "x");
+        msr!(ICC_PMR_EL1, 0xff, "x");
+        msr!(ICC_BPR1_EL1, 0x0, "x");
+        let hcr = mrsr!(ICH_HCR_EL2);
+        msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
         GICR[current_cpu().id].ISENABLER0.set(self.priv_isenabler);
 
         //todo: have bug to fix, it maybe the problem of PRIORITYR promote
-        for i in 0..GIC_PRIVINT_NUM / 4 {
-            // GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
-            GICR[current_cpu().id].IPRIORITYR[i].set(0);
-        }
+        // for i in 0..GIC_PRIVINT_NUM / 4 {
+        //     GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
+        //     // GICR[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
+        // }
 
         for i in 0..gich_lrs_num() {
             GICH.set_lr(i, self.lr[i] as usize);
