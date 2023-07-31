@@ -26,7 +26,7 @@ ifeq (${PROFILE}, release)
 CARGO_FLAGS := ${CARGO_FLAGS} --release
 endif
 
-.PHONY: build qemu tx2 pi4 tx2_update tx2_ramdisk gdb clean
+.PHONY: build qemu qemu_gicv3 tx2 pi4 tx2_update tx2_ramdisk rk3588_release gdb clean
 
 build:
 	cargo build ${CARGO_FLAGS}
@@ -34,6 +34,10 @@ build:
 
 qemu:
 	$(MAKE) build BOARD=qemu
+	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
+
+qemu_gicv3:
+	$(MAKE) build BOARD=qemu FEATURES=gicv3
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
 
 tx2:
@@ -53,11 +57,15 @@ pi4:
 	# bash pi4_upload_release
 
 rk3588_release:
-	cargo build -Z build-std=${BUILD_STD} --target aarch64-rk3588.json --features "rk3588" --release
+	$(MAKE) build BOARD=rk3588
 	bash rk3588_upload_release
 	${OBJDUMP} --demangle -d target/aarch64-rk3588/release/${IMAGE} > target/aarch64-rk3588/release/t.txt
 
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
+	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
+	-kernel ${TARGET_DIR}/${IMAGE}.bin
+
+QEMU_COMMON_OPTIONS_GICV3 = -machine virt,virtualization=on,gic-version=3\
 	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
 	-kernel ${TARGET_DIR}/${IMAGE}.bin
 
@@ -70,6 +78,9 @@ QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-
 
 run: qemu
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
+
+run_gicv3: qemu_gicv3
+	${QEMU} ${QEMU_COMMON_OPTIONS_GICV3} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
 
 debug: qemu
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
