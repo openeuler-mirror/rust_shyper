@@ -61,6 +61,18 @@ insmod tools/shyper.ko
 sudo tools/shyper system daemon [mediated-cfg.json] &
 ```
 
+mediated-cfg.json is used for guest VM as virtio block. For example:
+
+```
+{
+    "mediated": [
+        "/dev/sda2",
+        "/dev/nvme0n1p2",
+        "~/vm0.img"
+    ]
+}
+```
+
 **Step 3**: Configure a VM through profile
 
 ```bash
