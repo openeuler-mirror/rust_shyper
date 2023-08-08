@@ -67,6 +67,18 @@ insmod tools/shyper.ko
 sudo tools/shyper system daemon [mediated-cfg.json] &
 ```
 
+mediated-cfg.json用于配置其他guest VM的virtio中介磁盘，示例如下：
+
+```
+{
+    "mediated": [
+        "/dev/sda2",
+        "/dev/nvme0n1p2",
+        "~/vm0.img"
+    ]
+}
+```
+
 **Step 3**: 通过配置文件来配置一个客户虚拟机
 
 ```bash
