@@ -206,8 +206,9 @@ then you can interact with the guest VM.
 
 ## Publications
 
-1. Siran Li, Lei Wang, Keyang Hu, Ce Mo, Bo Jiang, VM Migration and Live-Update for Reliable Embedded Hypervisor. In: Dong, W., Talpin, JP. (eds) Dependable Software Engineering. Theories, Tools, and Applications. SETTA 2022. Lecture Notes in Computer Science, vol 13649. Springer, Cham. https://doi.org/10.1007/978-3-031-21213-0_4
-2. Yicong Shen, Lei Wang, Yuanzhi Liang, Siran Li, Bo Jiang, "Shyper: An embedded hypervisor applying hierarchical resource isolation strategies for mixed-criticality systems," 2022 Design, Automation & Test in Europe Conference & Exhibition (DATE), Antwerp, Belgium, 2022, pp. 1287-1292, doi: 10.23919/DATE54114.2022.9774664.
+1. C. Mo, L. Wang, S. Li, K. Hu, B. Jiang. Rust-Shyper: A reliable embedded hypervisor supporting VM migration and hypervisor live-update, Journal of Systems Architecture (2023), doi: https://doi.org/10.1016/j.sysarc.2023.102948.
+2. Li, S., Wang, L., Hu, K., Mo, C., Jiang, B. (2022). VM Migration and Live-Update for Reliable Embedded Hypervisor. In: Dong, W., Talpin, JP. (eds) Dependable Software Engineering. Theories, Tools, and Applications. SETTA 2022. Lecture Notes in Computer Science, vol 13649. Springer, Cham. https://doi.org/10.1007/978-3-031-21213-0_4
+3. Y. Shen, L. Wang, Y. Liang, S. Li and B. Jiang, "Shyper: An embedded hypervisor applying hierarchical resource isolation strategies for mixed-criticality systems," 2022 Design, Automation & Test in Europe Conference & Exhibition (DATE), Antwerp, Belgium, 2022, pp. 1287-1292, doi: 10.23919/DATE54114.2022.9774664.
 
 For more information about Rust-Shyper, see the following slides [Rust Embedded Hypervisor with VM Migration and Live-update](./doc/%E5%9F%BA%E4%BA%8ERust%E7%9A%84%E5%B5%8C%E5%85%A5%E5%BC%8F%E8%99%9A%E6%8B%9F%E6%9C%BA%E7%9B%91%E8%A7%86%E5%99%A8%E5%8F%8A%E7%83%AD%E6%9B%B4%E6%96%B0%E6%8A%80%E6%9C%AF%EF%BC%88%E7%8E%8B%E9%9B%B7%EF%BC%89.pdf)
 
