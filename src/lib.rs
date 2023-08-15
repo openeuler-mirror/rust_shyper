@@ -33,7 +33,7 @@ use kernel::{cpu_init, interrupt_init, mem_init, timer_init};
 use mm::heap_init;
 use vmm::{vm_init, vmm_boot_vm};
 
-use crate::kernel::{cpu_sched_init, hvc_init, iommu_init};
+use crate::kernel::{cpu_sched_init, hvc_init, iommu_init, current_cpu};
 
 #[macro_export]
 macro_rules! print {
@@ -73,12 +73,9 @@ pub static SYSTEM_FDT: spin::Once<alloc::vec::Vec<u8>> = spin::Once::new();
 
 #[no_mangle]
 pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
-    // const UART0: *mut u8 = 0x0900_0000 as *mut u8;
-    // let out_str = b"AArch64 Bare Metal";
-    // for byte in out_str {
-    //     crate::driver::uart::putc(*byte);
-    // }
-    // tegra_emmc_blk_read(0, 0, 0 as *mut _);
+    // #[cfg(feature="qemu")]
+    // board::Platform::parse_dtb(dtb);
+
     if cpu_id == 0 {
         #[cfg(feature = "tx2")]
         println!("Welcome to TX2 Rust-Shyper Hypervisor!");

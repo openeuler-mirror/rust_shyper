@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+extern crate fdt_rs;
+
 // TODO: move these core name to device
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
@@ -18,6 +20,8 @@ use crate::board::{
 use crate::board::SchedRule::RoundRobin;
 use crate::device::ARM_CORTEX_A57;
 use crate::driver::{read, write};
+
+use fdt_rs::base::DevTree;
 
 pub struct QemuPlatform;
 
@@ -124,3 +128,31 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
         },
     },
 };
+
+// impl QemuPlatform {
+//     pub fn parse_dtb(dtb: *mut fdt::myctypes::c_void) {
+//         _parse_dtb(dtb);
+//     }
+// }
+
+// fn _parse_dtb(dtb: *mut fdt::myctypes::c_void) {
+//     let dev_tree = unsafe { fdt_rs::base::DevTree::from_raw_pointer(dtb as *const u8) };
+
+//     let mut iter = match dev_tree {
+//         Ok(dt) => dt,
+//         Err(error) => panic!("Error: {:?}", error),
+//     };
+
+//     let mut iter = iter.items();
+
+//     loop {
+//         let nodes = iter.next_node();
+//         match nodes {
+//             Ok(node) => match node {
+//                 Some(dtn) => println!("dtn : {:#?}", dtn.name().unwrap()),
+//                 None => println!("dtn : None"),
+//             },
+//             Err(error) => break,
+//         }
+//     }
+// }

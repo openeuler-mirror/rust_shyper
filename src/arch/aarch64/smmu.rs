@@ -67,7 +67,8 @@ const SMMUV2_TCR_TG0_4K: usize = 0;
 const SMMUV2_TCR_IRGN0_WB_RA_WA: usize = 1 << 8;
 const SMMUV2_TCR_ORGN0_WB_RA_WA: usize = 1 << 10;
 const SMMUV2_TCR_SH0_IS: usize = 0x3 << 12;
-const SMMUV2_TCR_SL0_1: usize = 0x1 << 6;
+const SMMUV2_TCR_SL0_12: usize = 0x1 << 6;
+const SMMUV2_TCR_SL0_01: usize = 0x2 << 6;
 
 const SMMUV2_SCTLR_CFIE: usize = 1 << 6;
 const SMMUV2_SCTLR_CFRE: usize = 1 << 5;
@@ -574,15 +575,29 @@ impl SmmuV2 {
         rs1.CBAR[context_id].set((vm_id as u32) & 0xFF);
         rs1.CBA2R[context_id].set(1); // CBA2R_RW64_64BIT
 
-        let ps = 1; // PASize, 36-bit
-        let t0sz = 28;
-        let tcr = ((ps & 0x7) << SMMUV2_TCR_PS_OFF)
-            | (t0sz & 0x1F)
-            | SMMUV2_TCR_TG0_4K
-            | SMMUV2_TCR_ORGN0_WB_RA_WA
-            | SMMUV2_TCR_IRGN0_WB_RA_WA
-            | SMMUV2_TCR_SH0_IS
-            | SMMUV2_TCR_SL0_1;
+        let ps = if cfg!(feature = "lvl4") {
+            0b100 // PASize, 44-bit
+        } else {
+            1 // PASize, 36-bit
+        };
+        let t0sz = if cfg!(feature = "lvl4") { 64 - 44 } else { 28 };
+        let tcr = if cfg!(feature = "lvl4") {
+            ((ps & 0x7) << SMMUV2_TCR_PS_OFF)
+                | (t0sz & 0x1F)
+                | SMMUV2_TCR_TG0_4K
+                | SMMUV2_TCR_ORGN0_WB_RA_WA
+                | SMMUV2_TCR_IRGN0_WB_RA_WA
+                | SMMUV2_TCR_SH0_IS
+                | SMMUV2_TCR_SL0_01
+        } else {
+            ((ps & 0x7) << SMMUV2_TCR_PS_OFF)
+                | (t0sz & 0x1F)
+                | SMMUV2_TCR_TG0_4K
+                | SMMUV2_TCR_ORGN0_WB_RA_WA
+                | SMMUV2_TCR_IRGN0_WB_RA_WA
+                | SMMUV2_TCR_SH0_IS
+                | SMMUV2_TCR_SL0_12
+        };
         self.context_bank[context_id].TCR.set(tcr as u32);
         self.context_bank[context_id]
             .TTBR0

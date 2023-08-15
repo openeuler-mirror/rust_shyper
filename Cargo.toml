@@ -45,6 +45,10 @@ version = "0.7.0"
 default-features = false
 features = ["register_types"]
 
+[dependencies.fdt-rs]
+version = "x"
+default-features = false
+
 [features]
 default = ["tx2"]
 tx2 = []
@@ -53,3 +57,4 @@ pi4 = []
 update = []
 ramdisk = []
 static-config = []
+lvl4 = []

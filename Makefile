@@ -45,7 +45,7 @@ qemu:
 
 tx2:
 	$(MAKE) build BOARD=tx2 TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
-	# bash upload_release
+	bash upload_release
 
 tx2_ramdisk:
 	$(MAKE) build BOARD=tx2 FEATURES=ramdisk TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
