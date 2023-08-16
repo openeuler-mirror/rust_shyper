@@ -433,38 +433,25 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                 for emu_cfg in config.emulated_device_list() {
                     match emu_cfg.emu_type {
                         EmuDeviceTGicd => {
-                            // print!("trace fdt_setup_gic\n");
-                            // #[cfg(any(feature = "tx2", feature = "qemu"))]
-                            // fdt_setup_gic(
-                            //     dtb,
-                            //     Platform::GICD_BASE as u64,
-                            //     Platform::GICR_BASE as u64,
-                            //     emu_cfg.name.unwrap().as_ptr(),
-                            // );
-                            // #[cfg(feature = "pi4")]
-                            // let _r = fdt_setup_gic(
-                            //     dtb,
-                            //     (Platform::GICD_BASE | 0xF_0000_0000) as u64,
-                            //     (Platform::GICC_BASE | 0xF_0000_0000) as u64,
-                            //     emu_cfg.name.unwrap().as_ptr(),
-                            // );
+                            print!("trace fdt_setup_gic\n");
+                            #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            fdt_setup_gic(
+                                dtb,
+                                Platform::GICD_BASE as u64,
+                                Platform::GICR_BASE as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
+                            #[cfg(feature = "pi4")]
+                            let _r = fdt_setup_gic(
+                                dtb,
+                                (Platform::GICD_BASE | 0xF_0000_0000) as u64,
+                                (Platform::GICC_BASE | 0xF_0000_0000) as u64,
+                                emu_cfg.name.unwrap().as_ptr(),
+                            );
                         }
                         EmuDeviceTGICR => {
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
                             print!("trace fdt_setup_gicr\n");
-                            // fdt_setup_gic(
-                            //     dtb,
-                            //     Platform::GICD_BASE as u64,
-                            //     Platform::GICC_BASE as u64,
-                            //     emu_cfg.name.unwrap().as_ptr(),
-                            // );
-                            // #[cfg(feature = "pi4")]
-                            // let _r = fdt_setup_gic(
-                            //     dtb,
-                            //     (Platform::GICD_BASE | 0xF_0000_0000) as u64,
-                            //     (Platform::GICC_BASE | 0xF_0000_0000) as u64,
-                            //     emu_cfg.name.unwrap().as_ptr(),
-                            // );
                         }
                         EmuDeviceTSGIR => {
                             #[cfg(feature = "gicv3")]

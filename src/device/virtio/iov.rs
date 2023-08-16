@@ -116,7 +116,7 @@ impl VirtioIov {
         let mut src_ptr = inner.vector[0].buf;
         let mut dst_vlen_remain = dst.get_len(0);
         let mut src_vlen_remain = inner.vector[0].len;
-        let mut len = remain.clone();
+        // let mut len = remain.clone();
         let mut remain = remain;
         // println!(
         //     "dst_vlen_remain {}, src_vlen_remain {}, remain {}",

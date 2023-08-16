@@ -982,7 +982,6 @@ impl GicState {
     }
 
     pub fn save_state(&mut self) {
-        println!("save_state");
         mrs!(self.pmr, ICC_PMR_EL1, "x");
         mrs!(self.bpr, ICC_BPR1_EL1, "x");
         mrs!(self.hcr, ICH_HCR_EL2);

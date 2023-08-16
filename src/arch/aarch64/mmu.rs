@@ -12,7 +12,6 @@ use core::arch::global_asm;
 use tock_registers::*;
 use tock_registers::interfaces::*;
 
-use crate::board::PLAT_DESC;
 use crate::lib::memset_safe;
 
 use super::interface::*;
@@ -148,6 +147,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
 
     #[cfg(feature = "tx2")]
     {
+        use crate::board::PLAT_DESC;
         use crate::arch::pt_lvl2_idx;
         for i in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             let output_addr = i << LVL1_SHIFT;
@@ -212,6 +212,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     #[cfg(feature = "qemu")]
     {
         use crate::arch::LVL2_SHIFT;
+        use crate::board::PLAT_DESC;
         for index in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             let pa = index << LVL1_SHIFT;
             lvl1_pt.entry[index] = BlockDescriptor::new(pa, pa < PLAT_DESC.mem_desc.base);

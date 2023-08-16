@@ -63,17 +63,26 @@ pub fn mvm_config_init() {
             name: Some(String::from("virtio_net@f0000000")),
             base_ipa: 0xf000_0000,
             length: 0x1000,
-            irq_id: 99,
+            irq_id: 499,
             cfg_list: vec![0x74, 0x56, 0xaa, 0x0f, 0x47, 0xd0],
             emu_type: EmuDeviceType::EmuDeviceTVirtioNet,
             mediated: false,
         },
         VmEmulatedDeviceConfig {
             name: Some(String::from("virtio_console@f0010000")),
-            base_ipa: 0xf001_0000,
-            length: 0x10000,
-            irq_id: 100,
-            cfg_list: vec![1, 0xf004_0000],
+            base_ipa: 0xf000_1000,
+            length: 0x1000,
+            irq_id: 500,
+            cfg_list: vec![1, 0xf0140000],
+            emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
+            mediated: false,
+        },
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("virtio_console@f0100000")),
+            base_ipa: 0xf000_2000,
+            length: 0x1000,
+            irq_id: 500,
+            cfg_list: vec![2, 0xf001_1000],
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
         },
@@ -109,12 +118,13 @@ pub fn mvm_config_init() {
         PassthroughRegion { ipa: 0xfeb50000, pa: 0xfeb50000, length: 0x100, dev_property: true },
         // serial@feba000——ttyS7
         PassthroughRegion { ipa: 0xfeba0000, pa: 0xfeba0000, length: 0x100, dev_property: true },
+        PassthroughRegion { ipa: 0x0, pa: 0x0, length: 0x200000, dev_property: true },
     ];
     pt_dev_config.irqs = vec![
         20,  //fsc_interrupt_int_n
         23,  //ARM-PMU
         26,  //arch-timer
-        27,  //timer
+        INTERRUPT_IRQ_GUEST_TIMER,  //timer
         30,  //ptimer
         105, //dmc 32 + 0x49
         118, //fea10000.dma-controller

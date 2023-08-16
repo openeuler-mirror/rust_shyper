@@ -267,7 +267,6 @@ impl VgicInt {
         match vgic_int.phys {
             VgicIntPhys::Route(route) => route,
             _ => {
-                println!("now the interupt is {}", vgic_int.id);
                 panic!("must get route!")
             }
         }
@@ -330,7 +329,6 @@ impl VgicInt {
                 return Some(vcpu.clone());
             }
             None => {
-                // println!("vgic_int {} owner vcpu is none", vgic_int.id);
                 return None;
             }
         }
@@ -1009,9 +1007,9 @@ impl Vgic {
         // if there is no empty then, replace one
         if lr_ind.is_none() {
             let mut pend_found = 0;
-            let mut act_found = 0;
-            let mut min_prio_act = 0;
-            let mut min_prio_pend = 0;
+            // let mut act_found = 0;
+            let mut min_prio_act = interrupt.prio() as usize;
+            let mut min_prio_pend = interrupt.prio() as usize;
             let mut min_id_act = interrupt.id() as usize;
             let mut min_id_pend = interrupt.id() as usize;
             let mut act_ind = None;
@@ -1030,7 +1028,7 @@ impl Vgic {
                         min_prio_act = lr_prio;
                         act_ind = Some(i);
                     }
-                    act_found += 1;
+                    // act_found += 1;
                 } else if lr_state & GICH_LR_STATE_PND != 0 {
                     if lr_prio > min_prio_pend || (lr_prio == min_prio_pend && lr_id > min_id_pend) {
                         min_id_pend = lr_id;
@@ -1038,16 +1036,9 @@ impl Vgic {
                         pend_ind = Some(i);
                     }
                     pend_found += 1;
-                    println!("add_lr:{}", lr);
                 }
             }
 
-            println!(
-                "pend_found:{} act_found:{} interrupt:{}",
-                pend_found,
-                act_found,
-                interrupt.id()
-            );
             // replace pend first
             if pend_found > 1 {
                 lr_ind = pend_ind;
@@ -1063,7 +1054,6 @@ impl Vgic {
                     )
                     .unwrap();
                 let spilled_int_lock;
-                println!("replace interr:{}", spilled_int.id());
                 if spilled_int.id() != interrupt.id() {
                     spilled_int_lock = spilled_int.lock.lock();
                 }
@@ -1080,14 +1070,11 @@ impl Vgic {
             }
             None => {
                 // turn on maintenance interrupts
-                println!("get here 3");
-                if vgic_get_state(interrupt) & IrqState::IrqSPend.to_num() != 0 {
-                    println!("get here");
-                    let hcr = GICH.hcr();
-                    //No Pending Interrupt Enable. Enables the signaling of a maintenance interrupt when there are no List registers with the State field set to 0b01
-                    println!("get here 2");
-                    GICH.set_hcr(hcr | GICH_HCR_NPIE_BIT);
-                }
+                // if vgic_get_state(interrupt) & IrqState::IrqSPend.to_num() != 0 {
+                let hcr = GICH.hcr();
+                //No Pending Interrupt Enable. Enables the signaling of a maintenance interrupt when there are no List registers with the State field set to 0b01
+                GICH.set_hcr(hcr | GICH_HCR_NPIE_BIT);
+                // }
             }
         }
 
@@ -2023,7 +2010,6 @@ impl Vgic {
 
             match interrupt_opt {
                 Some(interrupt) => {
-                    // println!("refill int {}", interrupt.id());
                     vgic_int_get_owner(vcpu.clone(), interrupt.clone());
                     self.write_lr(vcpu.clone(), interrupt.clone(), lr_idx_opt.unwrap());
                     has_pending = has_pending || prev_pend;
@@ -2200,16 +2186,14 @@ fn vgic_get_state(interrupt: VgicInt) -> usize {
 }
 
 fn vgic_int_yield_owner(vcpu: Vcpu, interrupt: VgicInt) {
-    if !vgic_owns(vcpu, interrupt.clone()) {
-        return;
-    }
-    if gic_is_priv(interrupt.id() as usize) || interrupt.in_lr() {
+    if !vgic_owns(vcpu, interrupt.clone())
+        || interrupt.in_lr()
+        || (vgic_get_state(interrupt.clone()) & IrqState::IrqSActive.to_num() != 0)
+    {
         return;
     }
 
-    if vgic_get_state(interrupt.clone()) & IrqState::IrqSActive.to_num() == 0 {
-        interrupt.clear_owner();
-    }
+    interrupt.clear_owner();
 }
 
 #[inline(always)]
@@ -2311,12 +2295,6 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     //     emu_ctx.write,
     //     current_cpu().get_gpr(emu_ctx.reg)
     // );
-    // no need to check!
-    // if !vgicd_emu_access_is_vaild(emu_ctx) {
-    //     return false;
-    // }
-
-    // println!("DEBUG:emu_int_handler: address:{:x}", emu_ctx.address);
 
     match vgicd_offset_prefix {
         VGICD_REG_OFFSET_PREFIX_ISENABLER => {
@@ -2363,12 +2341,6 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
                     } else if offset >= 0x800 && offset < 0xc00 {
                         vgic.emu_razwi(emu_ctx);
                     } else if offset >= 0x6000 && offset < 0x8000 {
-                        println!(
-                            "emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
-                            emu_ctx.address,
-                            emu_ctx.write,
-                            current_cpu().get_gpr(emu_ctx.reg)
-                        );
                         vgic.emu_irouter_access(emu_ctx);
                     } else if offset >= 0xffd0 && offset < 0x10000 {
                         //ffe8 is GICD_PIDR2, Peripheral ID2 Register
@@ -2380,7 +2352,6 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
             }
         }
     }
-    // println!("finish emu_intc_handler");
     true
 }
 
@@ -2425,10 +2396,6 @@ pub fn partial_passthrough_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext
         return false;
     }
     let offset = emu_ctx.address & 0xfff;
-    // println!(
-    //     "partial_passthrough_intc_handler: {} offset_prefix 0x{:x}, offset 0x{:x}",
-    //     if emu_ctx.write { "write" } else { "read" }, offset_prefix, offset
-    // );
     if emu_ctx.write {
         // todo: add offset match
         let val = current_cpu().get_gpr(emu_ctx.reg);

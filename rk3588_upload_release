@@ -1,6 +1,6 @@
 #!/bin/bash
 
-bin="./target/aarch64-rk3588/release"
+bin="./target/aarch64/release"
 tftp="tx2@192.168.106.153:/tftp"
 
 aarch64-none-elf-objcopy ${bin}/rust_shyper -O binary ${bin}/shyper.bin
