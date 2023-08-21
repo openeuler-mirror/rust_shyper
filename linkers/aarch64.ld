@@ -1,4 +1,7 @@
 ENTRY(_start)
+TARGET(binary)
+INPUT("vm0img")
+OUTPUT_FORMAT(default)
 SECTIONS
 {
     . = TEXT_START;
@@ -21,6 +24,7 @@ SECTIONS
 
     .data : {
         *(.data*)
+        vm0img(.vm0image)
     }
 
     . = ALIGN(4096);

@@ -18,7 +18,7 @@ use crate::kernel::{
     IpiInnerMsg, set_front_io_task_state, vm, vm_ipa2pa, VM_LIST,
 };
 use crate::kernel::{ipi_register, IpiMessage, IpiType};
-use crate::lib::trace;
+use crate::utils::trace;
 
 pub static MEDIATED_BLK_LIST: Mutex<Vec<MediatedBlk>> = Mutex::new(Vec::new());
 

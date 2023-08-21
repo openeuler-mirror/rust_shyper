@@ -20,7 +20,7 @@ use alloc::collections::BTreeMap;
 
 use spin::Mutex;
 
-use crate::lib::{memcpy_safe, sleep};
+use crate::utils::{memcpy_safe, sleep};
 use crate::kernel::{vm_ipa2pa, active_vm, HVC_UNILIB_FS_INIT, HVC_UNILIB_FS_LSEEK, HVC_UNILIB_FS_UNLINK};
 use crate::kernel::{HvcGuestMsg, HvcUniLibMsg, hvc_send_msg_to_vm};
 use crate::kernel::HVC_UNILIB;

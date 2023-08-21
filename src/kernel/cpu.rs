@@ -20,7 +20,7 @@ use crate::arch::cpu_interrupt_unmask;
 use crate::board::PLATFORM_CPU_NUM_MAX;
 use crate::kernel::{SchedType, Vcpu, VcpuArray, VcpuState, Vm, Scheduler};
 use crate::kernel::IpiMessage;
-use crate::lib::trace;
+use crate::utils::trace;
 
 pub const CPU_MASTER: usize = 0;
 pub const CPU_STACK_SIZE: usize = PAGE_SIZE * 128;
@@ -300,7 +300,7 @@ pub fn cpu_init() {
     current_cpu().set_ctx((sp - size) as *mut _);
     println!("Core {} init ok", cpu_id);
 
-    crate::lib::barrier();
+    crate::utils::barrier();
     // println!("after barrier cpu init");
     use crate::board::PLAT_DESC;
     if cpu_id == 0 {

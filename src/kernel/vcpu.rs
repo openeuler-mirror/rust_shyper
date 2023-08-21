@@ -20,7 +20,7 @@ use crate::arch::{
 use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
-use crate::lib::memcpy_safe;
+use crate::utils::memcpy_safe;
 
 use super::{CpuState, Vm, VmType};
 
@@ -374,7 +374,21 @@ impl VcpuInner {
         self.vm_ctx.sctlr_el1 = 0x30C50830;
         self.vm_ctx.cntkctl_el1 = 0;
         self.vm_ctx.pmcr_el0 = 0;
-        self.vm_ctx.vtcr_el2 = 0x8001355c;
+        if cfg!(feature = "lvl4") {
+            use cortex_a::registers::VTCR_EL2;
+            let vtcr = (1 << 31)
+                + (VTCR_EL2::PS::PA_44B_16TB
+                    + VTCR_EL2::TG0::Granule4KB
+                    + VTCR_EL2::SH0::Inner
+                    + VTCR_EL2::ORGN0::NormalWBRAWA
+                    + VTCR_EL2::IRGN0::NormalWBRAWA
+                    + VTCR_EL2::SL0.val(0b10) // 10: If TG0 is 00 (4KB granule), start at level 0.
+                    + VTCR_EL2::T0SZ.val(64 - 44))
+                .value;
+            self.vm_ctx.vtcr_el2 = vtcr;
+        } else {
+            self.vm_ctx.vtcr_el2 = 0x8001355c;
+        }
         // }
         let mut vmpidr = 0;
         vmpidr |= 1 << 31;

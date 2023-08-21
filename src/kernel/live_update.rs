@@ -40,7 +40,7 @@ use crate::kernel::{
     SchedulerUpdate, SHARE_MEM_LIST, timer_irq_handler, UsedInfo, Vcpu, VCPU_LIST, VcpuInner, vm, Vm, VM_IF_LIST,
     vm_ipa2pa, VM_LIST, VM_NUM_MAX, VM_REGION, VmInterface, VmRegion, logger_init,
 };
-use crate::lib::{BitAlloc256, BitMap, FlexBitmap, time_current_us};
+use crate::utils::{BitAlloc256, BitMap, FlexBitmap, time_current_us};
 use crate::mm::{heap_init, PageFrame};
 use crate::vmm::vmm_ipi_handler;
 

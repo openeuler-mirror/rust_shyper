@@ -11,7 +11,7 @@
 use crate::arch::PAGE_SIZE;
 use crate::board::*;
 use crate::kernel::mem_shared_mem_init;
-use crate::lib::{memset_safe, round_up};
+use crate::utils::{memset_safe, round_up};
 use crate::mm::PageFrame;
 
 use super::mem_region::*;

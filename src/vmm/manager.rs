@@ -29,8 +29,8 @@ use crate::kernel::HVC_CONFIG;
 use crate::kernel::HVC_CONFIG_UPLOAD_KERNEL_IMAGE;
 use crate::kernel::HVC_VMM;
 use crate::kernel::HVC_VMM_REBOOT_VM;
-use crate::lib::sleep;
-use crate::lib::{bit_extract, memcpy_safe, memset_safe};
+use crate::utils::sleep;
+use crate::utils::{bit_extract, memcpy_safe, memset_safe};
 use crate::vmm::{vmm_cpu_assign_vcpu, vmm_boot, vmm_init_image, vmm_setup_config, vmm_cpu_remove_vcpu};
 
 #[derive(Copy, Clone)]

@@ -10,7 +10,7 @@
 
 use crate::arch::PAGE_SIZE;
 use crate::kernel::{mem_heap_free, mem_heap_alloc, AllocError};
-use crate::lib::{memset_safe, trace};
+use crate::utils::{memset_safe, trace};
 
 #[derive(Debug)]
 pub struct PageFrame {

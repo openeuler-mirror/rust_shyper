@@ -17,7 +17,7 @@
 
 use alloc::vec::Vec;
 
-use crate::lib::bit_get;
+use crate::utils::bit_get;
 
 pub trait BitAlloc {
     // The bitmap has a total of CAP bits, numbered from 0 to CAP-1 inclusively.

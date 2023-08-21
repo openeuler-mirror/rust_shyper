@@ -25,8 +25,8 @@ use crate::kernel::{
     vm_if_ivc_arg, vm_if_ivc_arg_ptr, vm_if_mem_map_dirty_sum, vm_if_mem_map_page_num, vm_if_set_ivc_arg_ptr,
     VM_NUM_MAX, VMData,
 };
-use crate::lib::{func_barrier, memcpy_safe, round_up, set_barrier_num, trace};
-use crate::lib::unilib::*;
+use crate::utils::{func_barrier, memcpy_safe, round_up, set_barrier_num, trace};
+use crate::utils::unilib::*;
 use crate::vmm::{get_vm_id, vmm_boot_vm, vmm_list_vm, vmm_migrate_boot, vmm_reboot_vm, vmm_remove_vm};
 
 pub static VM_STATE_FLAG: Mutex<usize> = Mutex::new(0);
