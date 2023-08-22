@@ -50,7 +50,7 @@ version = "x"
 default-features = false
 
 [features]
-default = ["tx2"]
+# default = ["rk3588"]
 tx2 = []
 qemu = []
 pi4 = []

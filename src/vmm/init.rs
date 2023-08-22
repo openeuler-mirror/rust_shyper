@@ -17,6 +17,7 @@ use crate::arch::{
 use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
 use crate::arch::PAGE_SIZE;
+use crate::board::*;
 use crate::config::vm_cfg_entry;
 use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init};
 use crate::device::create_fdt;
@@ -163,9 +164,17 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 #[cfg(feature = "rk3588")]
                 if name == "Linux-5.10" {
                     println!("MVM {} loading Image", vm.id());
-                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-new"));
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-no-drm"));
-                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-full"));
+                    extern "C" {
+                        fn _binary_vm0img_start();
+                        fn _binary_vm0img_size();
+                    }
+                    let vm0image = unsafe {
+                        core::slice::from_raw_parts(
+                            _binary_vm0img_start as usize as *const u8,
+                            _binary_vm0img_size as usize,
+                        )
+                    };
+                    vmm_load_image(vm.clone(), vm0image);
                 } else if name == "Image_vanilla" {
                     println!("VM {} loading default Linux Image", vm.id());
                     #[cfg(feature = "static-config")]
@@ -447,11 +456,12 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                     match emu_cfg.emu_type {
                         EmuDeviceTGicd => {
                             print!("trace fdt_setup_gic\n");
+                            #[cfg(not(feature = "gicv3"))]
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
                             fdt_setup_gic(
                                 dtb,
                                 Platform::GICD_BASE as u64,
-                                Platform::GICR_BASE as u64,
+                                Platform::GICC_BASE as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                             #[cfg(feature = "pi4")]

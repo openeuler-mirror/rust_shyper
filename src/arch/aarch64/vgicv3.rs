@@ -24,7 +24,7 @@ use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, VgicCpuPrivDat
 use crate::kernel::{active_vm, active_vm_id};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm, vm};
-use crate::lib::{bit_extract, bit_get, bit_set, bitmap_find_nth, ptr_read_write};
+use crate::utils::{bit_extract, bit_get, bit_set, bitmap_find_nth, ptr_read_write};
 
 use super::gicv3::*;
 

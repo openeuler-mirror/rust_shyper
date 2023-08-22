@@ -49,14 +49,21 @@ pub fn interrupt_arch_enable(int_id: usize, en: bool) {
     }
     #[cfg(not(feature = "gicv3"))]
     {
-        GICD.set_enable(int_id, en);
-        GICD.set_prio(int_id, 0x1);
-        GICD.set_trgt(int_id, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+        if en {
+            GICD.set_prio(int_id, 0x1);
+            GICD.set_trgt(int_id, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+            GICD.set_enable(int_id, en);
+        } else {
+            GICD.set_enable(int_id, en);
+        }
     }
 }
 
 pub fn interrupt_arch_ipi_send(cpu_id: usize, ipi_id: usize) {
     if ipi_id < GIC_SGIS_NUM {
+        #[cfg(not(feature = "gicv3"))]
+        GICD.send_sgi(Platform::cpuid_to_cpuif(cpu_id), ipi_id);
+        #[cfg(feature = "gicv3")]
         GICD.send_sgi(cpu_id, ipi_id);
     }
 }

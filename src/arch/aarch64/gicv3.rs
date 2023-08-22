@@ -18,7 +18,7 @@ use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 
 use crate::board::{Platform, PlatOperation};
-use crate::lib::bit_extract;
+use crate::utils::bit_extract;
 use crate::kernel::current_cpu;
 use crate::kernel::INTERRUPT_NUM_MAX;
 

@@ -44,7 +44,7 @@ qemu:
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
 
 qemu_gicv3:
-	$(MAKE) build BOARD=qemu FEATURES=gicv3
+	$(MAKE) build BOARD=qemu FEATURES=gicv3 TEXT_START=0x40080000 VM0_IMAGE_PATH="./image/Image_vanilla"
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
 
 tx2:
@@ -64,7 +64,7 @@ pi4:
 	# bash pi4_upload_release
 
 rk3588:
-	$(MAKE) build BOARD=rk3588
+	$(MAKE) build BOARD=rk3588 TEXT_START=0x00400000 VM0_IMAGE_PATH="./image/Image-5.10.110-no-drm"
 	bash rk3588_upload_release
 
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
