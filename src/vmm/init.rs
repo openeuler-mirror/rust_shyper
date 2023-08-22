@@ -13,9 +13,10 @@ use alloc::vec::Vec;
 use crate::arch::{
     emu_intc_handler, emu_intc_init, emu_smmu_handler, partial_passthrough_intc_handler, partial_passthrough_intc_init,
 };
+#[cfg(feature = "gicv3")]
+use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
 use crate::arch::PAGE_SIZE;
-use crate::board::*;
 use crate::config::vm_cfg_entry;
 use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init};
 use crate::device::create_fdt;
@@ -159,6 +160,21 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                     };
                     vmm_load_image(vm.clone(), vm0image);
                 }
+                #[cfg(feature = "rk3588")]
+                if name == "Linux-5.10" {
+                    println!("MVM {} loading Image", vm.id());
+                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-new"));
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-no-drm"));
+                    // vmm_load_image(vm.clone(), include_bytes!("../../image/Image-5.10.110-full"));
+                } else if name == "Image_vanilla" {
+                    println!("VM {} loading default Linux Image", vm.id());
+                    #[cfg(feature = "static-config")]
+                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
+                    #[cfg(not(feature = "static-config"))]
+                    println!("*** Please enable feature `static-config`");
+                } else {
+                    panic!("kernel image name empty")
+                }
             }
             None => {
                 // nothing to do, its a dynamic configuration
@@ -217,7 +233,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
 }
 
 fn vmm_init_emulated_device(vm: Vm) -> bool {
-    let config = vm.config().emulated_device_list();
+    let config: Vec<crate::config::VmEmulatedDeviceConfig> = vm.config().emulated_device_list();
 
     for (idx, emu_dev) in config.iter().enumerate() {
         match emu_dev.emu_type {
@@ -307,6 +323,40 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     return false;
                 }
             }
+            #[cfg(feature = "gicv3")]
+            EmuDeviceTICCSRE => {
+                emu_register_dev(
+                    EmuDeviceTICCSRE,
+                    vm.id(),
+                    idx,
+                    emu_dev.base_ipa,
+                    emu_dev.length,
+                    vgic_icc_sre_handler,
+                );
+            }
+            #[cfg(feature = "gicv3")]
+            EmuDeviceTSGIR => {
+                emu_register_dev(
+                    EmuDeviceTSGIR,
+                    vm.id(),
+                    idx,
+                    emu_dev.base_ipa,
+                    emu_dev.length,
+                    vgic_icc_sgir_handler,
+                );
+            }
+            #[cfg(feature = "gicv3")]
+            EmuDeviceTGICR => {
+                emu_register_dev(
+                    EmuDeviceTGICR,
+                    vm.id(),
+                    idx,
+                    emu_dev.base_ipa,
+                    emu_dev.length,
+                    emul_vgicr_handler,
+                );
+                emu_vgicr_init(vm.clone(), idx);
+            }
             _ => {
                 warn!("vmm_init_emulated_device: unknown emulated device");
                 return false;
@@ -379,24 +429,29 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@200000\0".as_ptr());
             #[cfg(feature = "qemu")]
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@50000000\0".as_ptr());
+            #[cfg(feature = "rk3588")]
+            fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@10000000\0".as_ptr());
             // FDT+TIMER
-            fdt_add_timer(dtb, 0x8);
+            //fdt_add_timer(dtb, 0x04);
             // FDT+BOOTCMD
             fdt_set_bootcmd(dtb, config.cmdline.as_ptr());
             #[cfg(feature = "tx2")]
             fdt_set_stdout_path(dtb, "/serial@3100000\0".as_ptr());
             // #[cfg(feature = "pi4")]
             // fdt_set_stdout_path(dtb, "/serial@fe340000\0".as_ptr());
+            #[cfg(feature = "rk3588")]
+            fdt_set_stdout_path(dtb, "/serial@feba0000\0".as_ptr());
 
             if config.emulated_device_list().len() > 0 {
                 for emu_cfg in config.emulated_device_list() {
                     match emu_cfg.emu_type {
                         EmuDeviceTGicd => {
+                            print!("trace fdt_setup_gic\n");
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
                             fdt_setup_gic(
                                 dtb,
                                 Platform::GICD_BASE as u64,
-                                Platform::GICC_BASE as u64,
+                                Platform::GICR_BASE as u64,
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                             #[cfg(feature = "pi4")]
@@ -407,8 +462,20 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                         }
-                        EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
+                        EmuDeviceTGICR => {
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            print!("trace fdt_setup_gicr\n");
+                        }
+                        EmuDeviceTSGIR => {
+                            #[cfg(feature = "gicv3")]
+                            trace!("EmuDeviceTSGIR");
+                        }
+                        EmuDeviceTICCSRE => {
+                            #[cfg(feature = "gicv3")]
+                            trace!("EmuDeviceTICCSRE");
+                        }
+                        EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
+                            #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_virtio(
                                 dtb,
                                 emu_cfg.name.unwrap().as_ptr(),
@@ -417,7 +484,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                             );
                         }
                         EmuDeviceTShyper => {
-                            #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_vm_service(
                                 dtb,
                                 emu_cfg.irq_id as u32 - 0x20,
@@ -547,10 +614,8 @@ pub fn vm_init() {
         super::vmm_init_gvm(0);
         #[cfg(feature = "static-config")]
         {
-            crate::config::init_tmp_config_for_vm1();
-            crate::config::init_tmp_config_for_vm2();
+            crate::config::init_gicv3_config_for_vm1();
             super::vmm_init_gvm(1);
-            super::vmm_init_gvm(2);
         }
     }
 }

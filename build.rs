@@ -39,6 +39,8 @@ fn main() {
         0xf0080000_u64
     } else if cfg!(feature = "qemu") {
         0x40080000_u64
+    } else if cfg!(feature = "rk3588") {
+        0x00400000_u64
     } else {
         panic!("Unsupported platform!");
     };

@@ -16,11 +16,15 @@ pub use self::pi4::{Pi4Platform as Platform, PLAT_DESC};
 pub use self::qemu::{QemuPlatform as Platform, PLAT_DESC};
 #[cfg(feature = "tx2")]
 pub use self::tx2::{Tx2Platform as Platform, PLAT_DESC};
+#[cfg(feature = "rk3588")]
+pub use self::rk3588::{Rk3588Platform as Platform, PLAT_DESC};
 
 #[cfg(feature = "pi4")]
 mod pi4;
 mod platform_common;
 #[cfg(feature = "qemu")]
 mod qemu;
+#[cfg(feature = "rk3588")]
+mod rk3588;
 #[cfg(feature = "tx2")]
 mod tx2;

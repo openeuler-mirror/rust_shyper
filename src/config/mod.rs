@@ -17,12 +17,16 @@ pub use self::pi4_def::*;
 pub use self::qemu_def::*;
 #[cfg(feature = "tx2")]
 pub use self::tx2_def::*;
+#[cfg(feature = "rk3588")]
+pub use self::rk3588_def::*;
 
 mod config;
 #[cfg(feature = "pi4")]
 mod pi4_def;
 #[cfg(feature = "qemu")]
 mod qemu_def;
+#[cfg(feature = "rk3588")]
+mod rk3588_def;
 #[cfg(feature = "tx2")]
 mod tx2_def;
 #[cfg(feature = "static-config")]

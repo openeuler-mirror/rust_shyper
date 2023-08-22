@@ -391,6 +391,7 @@ impl VmContext {
         // MSR!(CNTV_TVAL_EL0, {0:x}", in(reg) self.cntv_tval_el0, "x");
 
         // MSR!(VPIDR_EL2, self.vpidr_el2, "x");
+        // println!("vmpidr_el2:{:#x}", self.vmpidr_el2);
         msr!(VMPIDR_EL2, self.vmpidr_el2);
 
         msr!(SP_EL0, self.sp_el0);

@@ -83,6 +83,8 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
         println!("Welcome to Qemu Rust-Shyper Hypervisor!");
         #[cfg(feature = "pi4")]
         println!("Welcome to PI4 Rust-Shyper Hypervisor!");
+        #[cfg(feature = "rk3588")]
+        println!("Welcome to rk3588 Rust-Shyper Hypervisor!");
         println!("Built At {}", env!("BUILD_TIME"));
 
         #[cfg(feature = "pi4")]
@@ -113,5 +115,7 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     println!("Rust-Shyper Hypervisor init ok\n\nStart booting Monitor VM ...");
     vmm_boot_vm(0);
 
-    loop {}
+    loop {
+        core::hint::spin_loop();
+    }
 }

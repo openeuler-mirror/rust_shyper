@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use crate::arch::{gic_cpu_reset, gicc_clear_current_irq};
+#[cfg(not(feature = "gicv3"))]
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::{current_cpu, Vcpu, Vm};
 
@@ -38,20 +39,25 @@ pub fn interrupt_arch_init() {
 }
 
 pub fn interrupt_arch_enable(int_id: usize, en: bool) {
-    let cpu_id = current_cpu().id;
-    if en {
-        GICD.set_prio(int_id, 0x7f);
-        GICD.set_trgt(int_id, 1 << Platform::cpuid_to_cpuif(cpu_id));
-
+    #[cfg(feature = "gicv3")]
+    {
+        use tock_registers::interfaces::Readable;
+        use crate::arch::{gic_set_enable, gic_set_prio};
+        gic_set_enable(int_id, en);
+        gic_set_prio(int_id, 0x1);
+        GICD.set_route(int_id, cortex_a::registers::MPIDR_EL1.get() as usize);
+    }
+    #[cfg(not(feature = "gicv3"))]
+    {
         GICD.set_enable(int_id, en);
-    } else {
-        GICD.set_enable(int_id, en);
+        GICD.set_prio(int_id, 0x1);
+        GICD.set_trgt(int_id, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
     }
 }
 
 pub fn interrupt_arch_ipi_send(cpu_id: usize, ipi_id: usize) {
     if ipi_id < GIC_SGIS_NUM {
-        GICD.send_sgi(Platform::cpuid_to_cpuif(cpu_id), ipi_id);
+        GICD.send_sgi(cpu_id, ipi_id);
     }
 }
 

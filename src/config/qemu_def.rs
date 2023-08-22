@@ -24,6 +24,12 @@ use super::{
     VMDtbDevConfigList,
 };
 
+#[cfg(feature = "gicv3")]
+pub const ICC_SRE_ADDR: usize =
+    ((3 & 0x3) << 20) | ((5 & 0x7) << 17) | ((0 & 0x7) << 14) | ((12 & 0xf) << 10) | ((12 & 0xf) << 1);
+pub const ICC_SGIR_ADDR: usize =
+    ((3 & 0x3) << 20) | ((5 & 0x7) << 17) | ((0 & 0x7) << 14) | ((12 & 0xf) << 10) | ((11 & 0xf) << 1);
+
 #[rustfmt::skip]
 pub fn mvm_config_init() {
     vm_cfg_set_config_name("qemu-default");
@@ -33,10 +39,43 @@ pub fn mvm_config_init() {
         VmEmulatedDeviceConfig {
             name: Some(String::from("vgicd")),
             base_ipa: Platform::GICD_BASE,
+            #[cfg(not(feature="gicv3"))]
             length: 0x1000,
-            irq_id: 0,
+            #[cfg(feature="gicv3")]
+            length: 0x10000,
+            irq_id: 25,
             cfg_list: Vec::new(),
             emu_type: EmuDeviceType::EmuDeviceTGicd,
+            mediated: false,
+        },
+        #[cfg(feature="gicv3")]
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("vgicr")),
+            base_ipa: Platform::GICR_BASE,
+            length: 0xf60000,
+            irq_id: 25,
+            cfg_list: Vec::new(),
+            emu_type: EmuDeviceType::EmuDeviceTGICR,
+            mediated: false,
+        },
+        #[cfg(feature="gicv3")]
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("icc_sre")),
+            base_ipa: ICC_SRE_ADDR,
+            length: 2,
+            irq_id: 0,
+            cfg_list: Vec::new(),
+            emu_type: EmuDeviceType::EmuDeviceTICCSRE,
+            mediated: false,
+        },
+        #[cfg(feature="gicv3")]
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("icc_sgir")),
+            base_ipa: ICC_SGIR_ADDR,
+            length: 2,
+            irq_id: 0,
+            cfg_list: Vec::new(),
+            emu_type: EmuDeviceType::EmuDeviceTSGIR,
             mediated: false,
         },
         // VmEmulatedDeviceConfig {
@@ -72,11 +111,14 @@ pub fn mvm_config_init() {
     let mut pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig::default();
     pt_dev_config.regions = vec![
         PassthroughRegion { ipa: Platform::UART_0_ADDR, pa: Platform::UART_0_ADDR, length: 0x1000, dev_property: true },
+        #[cfg(not(feature = "gicv3"))]
         PassthroughRegion { ipa: Platform::GICC_BASE, pa: Platform::GICV_BASE, length: 0x2000, dev_property: true },
+        #[cfg(feature = "gicv3")]
+        PassthroughRegion { ipa: 0x8080000, pa: 0x8080000, length: 0x20000, dev_property: true }, //pass-through gicv3-its
         // pass-througn virtio blk/net
         PassthroughRegion { ipa: 0x0a003000, pa: 0x0a003000, length: 0x1000, dev_property: true },
     ];
-    pt_dev_config.irqs = vec![33, 27, 32 + 0x28, 32 + 0x29];
+    pt_dev_config.irqs = vec![33,27, 72, 73,74,75,76,77,78,79];
     pt_dev_config.streams_ids = vec![];
     // pt_dev_config.push(VmPassthroughDeviceConfig {
     //     name: Some(String::from("serial0")),
@@ -129,8 +171,10 @@ pub fn mvm_config_init() {
             mediated_block_index: None,
         })),
         cpu: Arc::new(Mutex::new(VmCpuConfig {
-            num: 4,
-            allocate_bitmap: 0b1111,
+            // num: 4,
+            // allocate_bitmap: 0b1111,
+            num: 1,
+            allocate_bitmap: 0b1,
             master: -1,
         })),
         memory: Arc::new(Mutex::new(VmMemoryConfig {

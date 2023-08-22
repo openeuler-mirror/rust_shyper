@@ -245,7 +245,6 @@ impl GicDistributor {
     }
 
     pub fn send_sgi(&self, cpu_if: usize, sgi_num: usize) {
-        // println!("Core {} send ipi to cpu {}", cpu_id(), cpu_if);
         self.SGIR.set(((1 << (16 + cpu_if)) | (sgi_num & 0b1111)) as u32);
     }
 
@@ -287,7 +286,6 @@ impl GicDistributor {
     }
 
     pub fn set_enable(&self, int_id: usize, en: bool) {
-        // println!("gicd::set_enbale: en {}, int_id {}", en, int_id);
         let idx = int_id / 32;
         let bit = 1 << (int_id % 32);
 

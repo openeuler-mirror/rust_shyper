@@ -17,6 +17,8 @@ use crate::arch::{
     ContextFrame, ContextFrameTrait, cpu_interrupt_unmask, GIC_INTS_MAX, GIC_SGI_REGS_NUM, GICC, GicContext, GICD,
     GICH, VmContext, timer_arch_get_counter,
 };
+#[cfg(feature = "gicv3")]
+use crate::arch::{GIC_PRIVINT_NUM};
 use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
@@ -145,9 +147,19 @@ impl Vcpu {
 
         for irq_state in inner.gic_ctx.irq_state.iter() {
             if irq_state.id != 0 {
-                GICD.set_enable(irq_state.id as usize, irq_state.enable != 0);
-                GICD.set_prio(irq_state.id as usize, irq_state.priority);
-                GICD.set_trgt(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+                #[cfg(feature = "gicv3")]
+                {
+                    use crate::arch::{gic_set_enable, gic_set_prio};
+                    gic_set_enable(irq_state.id as usize, irq_state.enable != 0);
+                    gic_set_prio(irq_state.id as usize, irq_state.priority);
+                    GICD.set_route(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+                }
+                #[cfg(not(feature = "gicv3"))]
+                {
+                    GICD.set_enable(irq_state.id as usize, irq_state.enable != 0);
+                    GICD.set_prio(irq_state.id as usize, irq_state.priority);
+                    GICD.set_trgt(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
+                }
             }
         }
 
@@ -285,7 +297,7 @@ impl Vcpu {
     }
 
     pub fn vcpu_ctx_addr(&self) -> usize {
-        let inner = self.inner.lock();
+        let inner: spin::MutexGuard<VcpuInner> = self.inner.lock();
         inner.vcpu_ctx_addr()
     }
 
@@ -399,7 +411,11 @@ impl VcpuInner {
             vmpidr |= 0x100;
         }
 
-        vmpidr |= self.id;
+        vmpidr |= if cfg!(feature = "rk3588") {
+            0x100_0000 | (self.id << 8)
+        } else {
+            self.phys_id
+        };
         self.vm_ctx.vmpidr_el2 = vmpidr as u64;
     }
 
@@ -413,7 +429,11 @@ impl VcpuInner {
             vmpidr |= 0x100;
         }
 
-        vmpidr |= self.id;
+        vmpidr |= if cfg!(feature = "rk3588") {
+            0x100_0000 | (self.id << 8)
+        } else {
+            self.id
+        };
         self.vm_ctx.vmpidr_el2 = vmpidr as u64;
     }
 
@@ -444,7 +464,17 @@ impl VcpuInner {
         for i in 0..gich_lrs_num() {
             self.vm_ctx.gic_state.lr[i] = 0;
         }
-        self.vm_ctx.gic_state.hcr |= 1 << 2;
+        self.vm_ctx.gic_state.hcr |= 1 << 2; // init hcr
+
+        #[cfg(feature = "gicv3")]
+        {
+            self.vm_ctx.gic_state.pmr = 0xff; //init PMR
+            self.vm_ctx.gic_state.bpr = 0x0; //init BPR1
+            self.vm_ctx.gic_state.priv_isenabler = 0; // init ISENABLE
+            for i in 0..GIC_PRIVINT_NUM / 4 {
+                self.vm_ctx.gic_state.priv_ipriorityr[i] = u32::MAX; //init priority
+            }
+        }
     }
 
     fn context_ext_regs_store(&mut self) {

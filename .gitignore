@@ -21,3 +21,5 @@ pi4_upload_release
 *.dts
 *.dtb
 /*.ld
+/kvm
+/rk3588_devcie_tree

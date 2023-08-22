@@ -11,7 +11,10 @@
 pub use self::context_frame::*;
 pub use self::cpu::*;
 pub use self::exception::*;
+#[cfg(not(feature = "gicv3"))]
 pub use self::gic::*;
+#[cfg(feature = "gicv3")]
+pub use self::gicv3::*;
 pub use self::interface::*;
 pub use self::interrupt::*;
 pub use self::mmu::*;
@@ -25,7 +28,10 @@ pub use self::sync::*;
 pub use self::timer::*;
 pub use self::tlb::*;
 pub use self::vcpu::*;
+#[cfg(not(feature = "gicv3"))]
 pub use self::vgic::*;
+#[cfg(feature = "gicv3")]
+pub use self::vgicv3::*;
 
 #[macro_use]
 mod regs;
@@ -34,7 +40,10 @@ mod cache;
 mod context_frame;
 mod cpu;
 mod exception;
+#[cfg(not(feature = "gicv3"))]
 mod gic;
+#[cfg(feature = "gicv3")]
+mod gicv3;
 mod interface;
 mod interrupt;
 mod mmu;
@@ -46,4 +55,7 @@ mod sync;
 mod timer;
 mod tlb;
 mod vcpu;
+#[cfg(not(feature = "gicv3"))]
 mod vgic;
+#[cfg(feature = "gicv3")]
+mod vgicv3;

@@ -105,6 +105,10 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             psci_guest_sys_reset();
             r = 0;
         }
+        //SMC32: Trusted OS Calls UID
+        0xbf00ff01 => {
+            r = smc_call(0xbf00ff01, x1, x2, x3).0;
+        }
         #[cfg(feature = "tx2")]
         TEGRA_SIP_GET_ACTMON_CLK_COUNTERS => {
             let result = smc_call(fid, x1, x2, x3);

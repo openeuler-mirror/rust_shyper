@@ -14,7 +14,7 @@ extern crate fdt_rs;
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
 use crate::board::{
-    PlatOperation, Platform, PlatCpuCoreConfig, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
+    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
     PlatMemRegion,
 };
 use crate::board::SchedRule::RoundRobin;
@@ -39,6 +39,8 @@ impl PlatOperation for QemuPlatform {
     const GICC_BASE: usize = 0x08010000;
     const GICH_BASE: usize = 0x08030000;
     const GICV_BASE: usize = 0x08040000;
+    #[cfg(feature = "gicv3")]
+    const GICR_BASE: usize = 0x080a0000;
 
     const SHARE_MEM_BASE: usize = 0x7_0000_0000;
 
@@ -52,6 +54,7 @@ impl PlatOperation for QemuPlatform {
     const DISK_PARTITION_2_SIZE: usize = 8192000;
 
     fn cpuid_to_cpuif(cpuid: usize) -> usize {
+        // PLAT_DESC.cpu_desc.core_list[cpuid].mpidr
         cpuid
     }
 
@@ -119,6 +122,8 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             gicc_addr: Platform::GICC_BASE,
             gich_addr: Platform::GICH_BASE,
             gicv_addr: Platform::GICV_BASE,
+            #[cfg(feature = "gicv3")]
+            gicr_addr: Platform::GICR_BASE,
             maintenance_int_id: 25,
         },
         smmu_desc: SmmuDesc {
@@ -126,6 +131,7 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             interrupt_id: 0,
             global_mask: 0,
         },
+        cluster_desc: ClusterDesc { num: 1, core_num: &[4] },
     },
 };
 

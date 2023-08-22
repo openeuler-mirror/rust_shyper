@@ -684,7 +684,6 @@ impl Vm {
     }
 
     pub fn vcpuid_to_pcpuid(&self, vcpuid: usize) -> Result<usize, ()> {
-        // println!("vcpuid_to_pcpuid");
         let vm_inner = self.inner.lock();
         if vcpuid < vm_inner.cpu_num {
             let vcpu = vm_inner.vcpu_list[vcpuid].clone();
@@ -879,6 +878,16 @@ impl Vm {
     pub fn add_share_mem_base(&self, len: usize) {
         let mut inner = self.inner.lock();
         inner.share_mem_base += len;
+    }
+
+    pub fn get_vcpu_by_mpidr(&self, mpdir: usize) -> Option<Vcpu> {
+        let inner = self.inner.lock();
+        let cpuid = if (mpdir >> 8) & 0b1 != 0 {
+            4 + (mpdir & 0xff)
+        } else {
+            mpdir & 0xff
+        };
+        inner.vcpu_list.iter().find(|vcpu| vcpu.id() == cpuid).cloned()
     }
 }
 
@@ -1082,4 +1091,17 @@ pub fn ipa2pa(pa_region: &Vec<VmPa>, ipa: usize) -> usize {
 
     // println!("ipa2pa: access invalid ipa {:x}", ipa);
     return 0;
+}
+
+pub fn cpuid2mpidr(cpuid: usize) -> usize {
+    if cfg!(feature = "rk3588") {
+        0x81000000 | (cpuid << 8)
+    } else {
+        // qemu
+        if cpuid < 4 {
+            cpuid | (1 << 31)
+        } else {
+            0x100 | (cpuid - 4) | (1 << 31)
+        }
+    }
 }

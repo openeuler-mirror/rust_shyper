@@ -15,7 +15,7 @@ use crate::board::{Platform, PlatOperation};
 pub fn putc(byte: u8) {
     const UART_BASE: usize = Platform::HYPERVISOR_UART_BASE + 0x8_0000_0000;
     // ns16550
-    #[cfg(feature = "tx2")]
+    #[cfg(any(feature = "tx2", feature = "rk3588"))]
     unsafe {
         if byte == '\n' as u8 {
             putc('\r' as u8);

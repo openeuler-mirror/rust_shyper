@@ -123,7 +123,6 @@ pub fn pt_map_banked_cpu(cpu: &mut Cpu) -> usize {
     use core::mem::size_of;
     let page_num = round_up(size_of::<Cpu>(), PAGE_SIZE) / PAGE_SIZE;
 
-    // println!("cpu page num is {}", page_num);
     for i in 0..page_num {
         cpu.cpu_pt.lvl3[pt_lvl3_idx(CPU_BANKED_ADDRESS) + i] = (cpu_addr + i * PAGE_SIZE) | PTE_S1_NORMAL | PTE_PAGE;
     }
@@ -131,8 +130,9 @@ pub fn pt_map_banked_cpu(cpu: &mut Cpu) -> usize {
     // println!("cpu addr {:x}", cpu_addr);
     // println!("lvl2 addr {:x}", lvl2_addr);
     // println!("lvl3 addr {:x}", lvl3_addr);
-
-    &(cpu.cpu_pt.lvl1) as *const _ as usize
+    let ret: usize = &(cpu.cpu_pt.lvl1) as *const _ as usize;
+    //print!("1");
+    ret
 }
 
 #[repr(transparent)]

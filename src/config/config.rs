@@ -31,6 +31,7 @@ pub enum DtbDevType {
     DevSerial = 0,
     DevGicd = 1,
     DevGicc = 2,
+    DevGicr = 3,
 }
 
 impl DtbDevType {
@@ -39,6 +40,7 @@ impl DtbDevType {
             0 => DtbDevType::DevSerial,
             1 => DtbDevType::DevGicd,
             2 => DtbDevType::DevGicc,
+            3 => DtbDevType::DevGicr,
             _ => panic!("Unknown DtbDevType value: {}", value),
         }
     }
@@ -452,6 +454,19 @@ impl VmConfigEntry {
         }
         0
     }
+
+    pub fn gicr_addr(&self) -> usize {
+        let dtb_devs = self.vm_dtb_devs.lock();
+        for dev in &dtb_devs.dtb_device_list {
+            match dev.dev_type {
+                DtbDevType::DevGicr => {
+                    return dev.addr_region.ipa;
+                }
+                _ => {}
+            }
+        }
+        0
+    }
 }
 
 #[derive(Clone)]
@@ -838,7 +853,7 @@ pub fn vm_cfg_add_passthrough_device_irqs(vmid: usize, irqs_base_ipa: usize, irq
         println!("illegal irqs_base_ipa {:x}", irqs_base_ipa);
         return Err(());
     }
-    let mut irqs = vec![0 as usize, irqs_length];
+    let mut irqs = vec![0 as usize; irqs_length];
     if irqs_length > 0 {
         memcpy_safe(
             &irqs[0] as *const _ as *const u8,

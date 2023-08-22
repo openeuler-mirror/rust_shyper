@@ -106,6 +106,9 @@ pub enum EmuDeviceType {
     EmuDeviceTShyper = 6,
     EmuDeviceTVirtioBlkMediated = 7,
     EmuDeviceTIOMMU = 8,
+    EmuDeviceTICCSRE = 9,
+    EmuDeviceTSGIR = 10,
+    EmuDeviceTGICR = 11,
 }
 
 impl Display for EmuDeviceType {
@@ -120,6 +123,9 @@ impl Display for EmuDeviceType {
             EmuDeviceType::EmuDeviceTShyper => write!(f, "device shyper"),
             EmuDeviceType::EmuDeviceTVirtioBlkMediated => write!(f, "medaited virtio block"),
             EmuDeviceType::EmuDeviceTIOMMU => write!(f, "IOMMU"),
+            EmuDeviceType::EmuDeviceTICCSRE => write!(f, "interrupt ICC SRE"),
+            EmuDeviceType::EmuDeviceTSGIR => write!(f, "interrupt ICC SGIR"),
+            EmuDeviceType::EmuDeviceTGICR => write!(f, "interrupt controller gicr"),
         }
     }
 }
@@ -128,9 +134,12 @@ impl EmuDeviceType {
     pub fn removable(&self) -> bool {
         match *self {
             EmuDeviceType::EmuDeviceTGicd
+            | EmuDeviceType::EmuDeviceTSGIR
+            | EmuDeviceType::EmuDeviceTICCSRE
             | EmuDeviceType::EmuDeviceTGPPT
             | EmuDeviceType::EmuDeviceTVirtioBlk
             | EmuDeviceType::EmuDeviceTVirtioNet
+            | EmuDeviceType::EmuDeviceTGICR
             | EmuDeviceType::EmuDeviceTVirtioConsole => true,
             _ => false,
         }
@@ -149,6 +158,9 @@ impl EmuDeviceType {
             6 => EmuDeviceType::EmuDeviceTShyper,
             7 => EmuDeviceType::EmuDeviceTVirtioBlkMediated,
             8 => EmuDeviceType::EmuDeviceTIOMMU,
+            9 => EmuDeviceType::EmuDeviceTICCSRE,
+            10 => EmuDeviceType::EmuDeviceTSGIR,
+            11 => EmuDeviceType::EmuDeviceTGICR,
             _ => panic!("Unknown  EmuDeviceType value: {}", value),
         }
     }
@@ -164,7 +176,7 @@ pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
     for emu_dev in &*emu_devs_list {
         let active_vcpu = current_cpu().active_vcpu.clone().unwrap();
         if active_vcpu.vm_id() == emu_dev.vm_id && in_range(ipa, emu_dev.ipa, emu_dev.size - 1) {
-            // if current_cpu().id == 2 {
+            // if current_cpu().id == 1 {
             //     println!("emu dev {:#?} handler", emu_dev.emu_type);
             // }
             let handler = emu_dev.handler;

@@ -143,13 +143,45 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         assert_eq!(fdt_remove_node(dtb, "/pl031@9010000\0".as_ptr()), 0);
         // pass through the only one uart on qemu-system-aarch64
         // assert_eq!(fdt_remove_node(dtb, "/pl011@9000000\0".as_ptr()), 0);
-
+        #[cfg(feature = "gicv3")]
+        assert_eq!(fdt_remove_node(dtb, "/intc@8000000/its@8080000\0".as_ptr()), 0);
+        #[cfg(not(feature = "gicv3"))]
         assert_eq!(fdt_remove_node(dtb, "/intc@8000000/v2m@8020000\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/flash@0\0".as_ptr()), 0);
+        //assert_eq!(fdt_remove_node(dtb, "/flash@0\0".as_ptr()), 0);
 
         let len = fdt_size(dtb) as usize;
         println!("fdt patched size {}", len);
         let slice = core::slice::from_raw_parts(dtb as *const u8, len);
+        SYSTEM_FDT.call_once(|| slice.to_vec());
+    }
+    #[cfg(feature = "rk3588")]
+    unsafe {
+        use fdt::*;
+        println!("fdt orignal size {}", fdt_size(dtb));
+
+        // assert_eq!(fdt_remove_node(dtb, "/sram@10f000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core1\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@0\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@100\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/reserved-memory\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/serial@feb70000\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/serial@feb80000\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/serial@feb60000\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/serial@feba0000\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/serial@feb50000\0".as_ptr()), 0);
+
+        // assert_eq!(fdt_remove_node(dtb, "/chosen\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/tsadc@fec00000\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/tsadc@fec00000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/memory\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/pinctrl/uart2/uart2m0-xfer\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/pinctrl/uart2/uart2m1-xfer\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/fiq-debugger\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/debug@fd104000\0".as_ptr()), 0);
+        let len = fdt_size(dtb);
+        println!("fdt after patched size {}", len);
+        let slice = core::slice::from_raw_parts(dtb as *const u8, len as usize);
+
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
 }
@@ -171,7 +203,12 @@ pub fn create_fdt(config: VmConfigEntry) -> Result<Vec<u8>, Error> {
     fdt.end_node(psci)?;
 
     create_memory_node(&mut fdt, config.clone())?;
-    create_timer_node(&mut fdt, 0x8)?;
+    if cfg!(feature = "rk3588") {
+        create_timer_node(&mut fdt, 0xf04)?;
+        // create_pinctrl_node(&mut fdt)?;
+    } else {
+        create_timer_node(&mut fdt, 0x8)?;
+    }
     // todo: fix create_chosen_node size
     create_chosen_node(&mut fdt, &config.cmdline, config.ramdisk_load_ipa(), CPIO_RAMDISK.len())?;
     create_cpu_node(&mut fdt, config.clone())?;
@@ -184,6 +221,9 @@ pub fn create_fdt(config: VmConfigEntry) -> Result<Vec<u8>, Error> {
     //     }
     //     None => {}
     // }
+    #[cfg(feature = "gicv3")]
+    create_gicv3_node(&mut fdt, config.gicr_addr(), config.gicd_addr())?;
+    #[cfg(not(feature = "gicv3"))]
     create_gic_node(&mut fdt, config.gicc_addr(), config.gicd_addr())?;
 
     for emu_cfg in config.emulated_device_list() {
@@ -214,6 +254,26 @@ pub fn create_fdt(config: VmConfigEntry) -> Result<Vec<u8>, Error> {
 
     fdt.end_node(root_node)?;
     fdt.finish()
+}
+
+// rk3588 has pinctrl for using uart
+fn create_pinctrl_node(fdt: &mut FdtWriter) -> FdtWriterResult<()> {
+    let pinctrl = fdt.begin_node("pinctrl")?;
+    fdt.property_string("compatible", "rockchip-pinctrl")?;
+    fdt.property_u32("#address-cells", 0x2)?;
+    fdt.property_u32("#size-cells", 0x2)?;
+
+    let uart0 = fdt.begin_node("uart0")?;
+
+    let uart0m1 = fdt.begin_node("uart0m0-xfer")?;
+    fdt.property_array_u32("rockchip,pins", &[0x04, 0x19, 0x0a, 0x179, 0x04, 0x18, 0x0a, 0x179])?;
+    fdt.property_u32("phandle", 0x14d)?;
+    fdt.end_node(uart0m1)?;
+
+    fdt.end_node(uart0)?;
+
+    fdt.end_node(pinctrl)?;
+    Ok(())
 }
 
 // hard code for tx2 vm1
@@ -265,13 +325,23 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
 
     let cpu_num = config.cpu_allocated_bitmap().count_ones();
     for cpu_id in 0..cpu_num {
-        let cpu_name = format!("cpu@{:x}", cpu_id);
-        let cpu_node = fdt.begin_node(&cpu_name)?;
-        fdt.property_string("compatible", "arm,cortex-a57")?;
-        fdt.property_string("device_type", "cpu")?;
-        fdt.property_string("enable-method", "psci")?;
-        fdt.property_array_u32("reg", &[0, cpu_id as u32])?;
-        fdt.end_node(cpu_node)?;
+        if cfg!(feature = "rk3588") {
+            let cpu_name = format!("cpu@{:x}", cpu_id << 8);
+            let cpu_node = fdt.begin_node(&cpu_name)?;
+            fdt.property_string("compatible", "arm,cortex-a55")?;
+            fdt.property_string("device_type", "cpu")?;
+            fdt.property_string("enable-method", "psci")?;
+            fdt.property_array_u32("reg", &[(cpu_id as u32) << 8])?;
+            fdt.end_node(cpu_node)?;
+        } else {
+            let cpu_name = format!("cpu@{:x}", cpu_id);
+            let cpu_node = fdt.begin_node(&cpu_name)?;
+            fdt.property_string("compatible", "arm,cortex-a57")?;
+            fdt.property_string("device_type", "cpu")?;
+            fdt.property_string("enable-method", "psci")?;
+            fdt.property_array_u32("reg", &[0, cpu_id as u32])?;
+            fdt.end_node(cpu_node)?;
+        }
     }
 
     fdt.end_node(cpus)?;
@@ -285,12 +355,20 @@ fn create_serial_node(fdt: &mut FdtWriter, devs_config: &Vec<VmDtbDevConfig>) ->
             DtbDevType::DevSerial => {
                 let serial_name = format!("serial@{:x}", dev.addr_region.ipa);
                 let serial = fdt.begin_node(&serial_name)?;
-                fdt.property_string("compatible", "ns16550")?;
+                if cfg!(feature = "rk3588") {
+                    fdt.property_string("compatible", "snps,dw-apb-uart")?;
+                } else {
+                    fdt.property_string("compatible", "ns16550")?;
+                }
+                fdt.property_u32("clock-frequency", 408000000)?;
                 fdt.property_array_u64("reg", &[dev.addr_region.ipa as u64, 0x1000])?;
                 fdt.property_u32("reg-shift", 0x2)?;
                 fdt.property_array_u32("interrupts", &[0x0, (dev.irqs[0] - 32) as u32, 0x4])?;
-                fdt.property_u32("clock-frequency", 408000000)?;
-                // fdt.property_string("status", "disabled")?;
+                fdt.property_string("status", "okay")?;
+                // if cfg!(feature = "rk3588") {
+                //     fdt.property_string("pinctrl-names", "default")?;
+                //     fdt.property_u32("pinctrl-0", 0x14d)?;
+                // }
                 fdt.end_node(serial)?;
             }
             _ => {}
@@ -318,6 +396,22 @@ fn create_gic_node(fdt: &mut FdtWriter, gicc_addr: usize, gicd_addr: usize) -> F
     fdt.property_string("compatible", "arm,gic-400")?;
     fdt.property_u32("#interrupt-cells", 0x03)?;
     fdt.property_null("interrupt-controller")?;
+    fdt.end_node(gic)?;
+
+    Ok(())
+}
+
+fn create_gicv3_node(fdt: &mut FdtWriter, gicr_addr: usize, gicd_addr: usize) -> FdtWriterResult<()> {
+    println!("create_gicv3_node");
+    let gic_name = format!("interrupt-controller@{:x}", gicd_addr);
+    let gic = fdt.begin_node(&gic_name)?;
+
+    fdt.property_u32("phandle", 0x8001)?;
+    fdt.property_array_u64("reg", &[gicd_addr as u64, 0x10000, gicr_addr as u64, 0x100000])?;
+    fdt.property_string("compatible", "arm,gic-v3")?;
+    fdt.property_u32("#interrupt-cells", 0x03)?;
+    fdt.property_null("interrupt-controller")?;
+    fdt.property_null("ranges")?;
     fdt.end_node(gic)?;
 
     Ok(())
