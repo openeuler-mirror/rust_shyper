@@ -485,10 +485,11 @@ impl SmmuV2 {
         ) as u16
     }
 
-    pub fn alloc_smr(&self) -> Option<usize> {
+    pub fn alloc_smr(&mut self) -> Option<usize> {
         let alloc_bitmap = self.smr_alloc_bitmap.as_ref().unwrap();
         for i in 0..alloc_bitmap.vec_len() {
             if alloc_bitmap.get(i) == 0 {
+                self.smr_alloc_bitmap.as_mut().unwrap().set(i, true);
                 return Some(i);
             }
         }
@@ -520,11 +521,12 @@ impl SmmuV2 {
                 }
             }
         }
+        println!("now, no compatible!");
         false
     }
 
     pub fn write_smr(&mut self, smr: usize, mask: u16, id: u16, group: bool) {
-        if self.smr_alloc_bitmap.as_ref().unwrap().get(smr) != 0 {
+        if self.smr_alloc_bitmap.as_ref().unwrap().get(smr) == 0 {
             panic!("smmu: trying to write unallocated smr {}", smr);
         } else {
             let mut val: usize = (mask as usize) << SMMU_SMR_MASK_OFF;
@@ -539,7 +541,7 @@ impl SmmuV2 {
 
     // Stream-to-Context
     pub fn write_s2c(&mut self, smr: usize, context_id: usize) {
-        if self.smr_alloc_bitmap.as_ref().unwrap().get(smr) != 0 {
+        if self.smr_alloc_bitmap.as_ref().unwrap().get(smr) == 0 {
             panic!("smmu: trying to write unallocated s2c {}", smr);
         } else {
             let mut s2cr: usize = self.glb_rs0.as_ref().unwrap().S2CR[smr].get() as usize;
