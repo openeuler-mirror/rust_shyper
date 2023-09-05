@@ -105,10 +105,7 @@ pub fn pt_lvl3_idx(va: usize) -> usize {
 }
 
 pub fn pt_map_banked_cpu(cpu: &mut Cpu) -> usize {
-    extern "C" {
-        fn lvl1_page_table();
-    }
-    let addr: usize = lvl1_page_table as usize;
+    let addr = unsafe { &super::LVL1_PAGE_TABLE as *const _ } as usize;
 
     memcpy_safe(&(cpu.cpu_pt.lvl1) as *const _ as *mut u8, addr as *mut u8, PAGE_SIZE);
     memset_safe(&(cpu.cpu_pt.lvl2) as *const _ as *mut u8, 0, PAGE_SIZE);

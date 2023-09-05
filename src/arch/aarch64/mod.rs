@@ -59,3 +59,4 @@ mod vcpu;
 mod vgic;
 #[cfg(feature = "gicv3")]
 mod vgicv3;
+mod start;

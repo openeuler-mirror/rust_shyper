@@ -16,6 +16,9 @@
 #![feature(const_btree_new)]
 #![feature(drain_filter)]
 #![feature(inline_const)]
+#![feature(naked_functions)]
+#![feature(asm_sym)]
+#![feature(asm_const)]
 #![allow(unused_doc_comments)]
 #![allow(special_module_name)]
 
@@ -25,6 +28,8 @@ extern crate fdt;
 #[macro_use]
 // extern crate lazy_static;
 extern crate log;
+#[macro_use]
+extern crate memoffset;
 
 // extern crate rlibc;
 

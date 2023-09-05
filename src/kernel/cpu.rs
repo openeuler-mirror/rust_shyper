@@ -25,6 +25,7 @@ use crate::utils::trace;
 pub const CPU_MASTER: usize = 0;
 pub const CPU_STACK_SIZE: usize = PAGE_SIZE * 128;
 pub const CONTEXT_GPR_NUM: usize = 31;
+pub const CPU_STACK_OFFSET: usize = offset_of!(Cpu, stack);
 
 #[repr(C)]
 #[repr(align(4096))]

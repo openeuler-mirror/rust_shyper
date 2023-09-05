@@ -14,31 +14,27 @@ use tock_registers::interfaces::*;
 
 use crate::board::PLAT_DESC;
 use crate::utils::memset_safe;
+use crate::arch::{LVL1_SHIFT, LVL2_SHIFT};
 
 use super::interface::*;
 
-#[cfg(feature = "tx2")]
-#[cfg(not(feature = "update"))]
-global_asm!(include_str!("start.S"));
+// #[cfg(feature = "tx2")]
+// #[cfg(not(feature = "update"))]
+// global_asm!(include_str!("start.S"));
 
-#[cfg(feature = "update")]
-#[cfg(feature = "tx2")]
-global_asm!(include_str!("start_update.S"));
+// #[cfg(feature = "update")]
+// #[cfg(feature = "tx2")]
+// global_asm!(include_str!("start_update.S"));
 
-#[cfg(feature = "pi4")]
-#[cfg(not(feature = "update"))]
-global_asm!(include_str!("start_pi4.S"));
+// #[cfg(feature = "pi4")]
+// #[cfg(not(feature = "update"))]
+// global_asm!(include_str!("start_pi4.S"));
 
-#[cfg(feature = "qemu")]
-global_asm!(include_str!("start_qemu.S"));
+// #[cfg(feature = "qemu")]
+// global_asm!(include_str!("start_qemu.S"));
 
-#[cfg(feature = "rk3588")]
-global_asm!(include_str!("start_rk3588.S"));
-
-// const PHYSICAL_ADDRESS_LIMIT_GB: usize = BOARD_PHYSICAL_ADDRESS_LIMIT >> 30;
-// const PAGE_SIZE: usize = 4096;
-// const PAGE_SHIFT: usize = 12;
-// const ENTRY_PER_PAGE: usize = PAGE_SIZE / 8;
+// #[cfg(feature = "rk3588")]
+// global_asm!(include_str!("start_rk3588.S"));
 
 register_bitfields! {u64,
     pub TableDescriptor [
@@ -135,7 +131,14 @@ pub struct PageTables {
     entry: [BlockDescriptor; ENTRY_PER_PAGE],
 }
 
-const LVL1_SHIFT: usize = 30;
+pub static mut LVL1_PAGE_TABLE: PageTables = PageTables {
+    entry: [BlockDescriptor(0); ENTRY_PER_PAGE],
+};
+
+pub static mut LVL2_PAGE_TABLE: PageTables = PageTables {
+    entry: [BlockDescriptor(0); ENTRY_PER_PAGE],
+};
+
 const PLATFORM_PHYSICAL_LIMIT_GB: usize = 16;
 
 #[no_mangle]
@@ -181,7 +184,6 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     }
     #[cfg(feature = "pi4")]
     {
-        use crate::arch::LVL2_SHIFT;
         // crate::driver::putc('o' as u8);
         // crate::driver::putc('r' as u8);
         // crate::driver::putc('e' as u8);
@@ -212,7 +214,6 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     }
     #[cfg(feature = "qemu")]
     {
-        use crate::arch::LVL2_SHIFT;
         use crate::board::PLAT_DESC;
         for index in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             let pa = index << LVL1_SHIFT;
@@ -228,7 +229,6 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     }
     #[cfg(feature = "rk3588")]
     {
-        use crate::arch::LVL2_SHIFT;
         // 0x0020_0000 ~ 0xc000_0000 --> normal memory (3GB)
         lvl1_pt.entry[0] = BlockDescriptor::new(0, false);
         lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, false);
