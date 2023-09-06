@@ -8,7 +8,6 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use std::process::Command;
 use std::fs;
 use std::env::var;
 
@@ -48,7 +47,9 @@ fn main() {
     println!("cargo:rustc-link-arg=--defsym=TEXT_START={text_start}");
 
     // note: add error checking yourself.
-    let output = Command::new("date").arg("+\"%Y-%m-%d %H:%M:%S %Z\"").output().unwrap();
-    let build_time = String::from_utf8(output.stdout).unwrap();
+    let build_time = chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
     println!("cargo:rustc-env=BUILD_TIME={}", build_time);
+    let hostname = gethostname::gethostname();
+    println!("cargo:rustc-env=HOSTNAME={}", hostname.into_string().unwrap());
+    built::write_built_file().expect("Failed to acquire build-time information");
 }

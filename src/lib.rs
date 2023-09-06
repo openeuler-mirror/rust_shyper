@@ -76,21 +76,33 @@ mod vmm;
 
 pub static SYSTEM_FDT: spin::Once<alloc::vec::Vec<u8>> = spin::Once::new();
 
+mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+fn print_built_info() {
+    println!(
+        "Welcome to {} {} {}!",
+        env!("BOARD"),
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION")
+    );
+    println!(
+        "Built at {build_time} by {hostname}\nCompiler: {rustc_version}\nFeatures: {features:?}",
+        build_time = env!("BUILD_TIME"),
+        hostname = env!("HOSTNAME"),
+        rustc_version = built_info::RUSTC_VERSION,
+        features = built_info::FEATURES_LOWERCASE_STR
+    );
+}
+
 #[no_mangle]
 pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     // #[cfg(feature="qemu")]
     // board::Platform::parse_dtb(dtb);
 
     if cpu_id == 0 {
-        #[cfg(feature = "tx2")]
-        println!("Welcome to TX2 Rust-Shyper Hypervisor!");
-        #[cfg(feature = "qemu")]
-        println!("Welcome to Qemu Rust-Shyper Hypervisor!");
-        #[cfg(feature = "pi4")]
-        println!("Welcome to PI4 Rust-Shyper Hypervisor!");
-        #[cfg(feature = "rk3588")]
-        println!("Welcome to rk3588 Rust-Shyper Hypervisor!");
-        println!("Built At {}", env!("BUILD_TIME"));
+        print_built_info();
 
         #[cfg(feature = "pi4")]
         {

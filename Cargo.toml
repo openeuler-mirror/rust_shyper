@@ -28,6 +28,9 @@ debug = true
 
 [build-dependencies]
 cc = "1.0"
+chrono = "0.4.23"
+built = { version = "0.6.1", features = [] }
+gethostname = "0.4.3"
 
 [dependencies]
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
