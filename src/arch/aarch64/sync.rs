@@ -168,7 +168,7 @@ fn exception_sysreg_gpr(iss: u32) -> u32 {
 Op0, bits [21:20]
 Op2, bits [19:17]
 Op1, bits [16:14]
-CRn, bits [13:10] 
+CRn, bits [13:10]
 CRm, bits [4:1]   This five parameters are for SYSREG
 
 Rt, bits [9:5]  general-purpose register used for the transfer.

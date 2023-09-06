@@ -980,7 +980,7 @@ impl Vgic {
         if lr_state != IrqState::IrqSInactive.to_num() {
             println!("spilled need maintean");
             interrupt.set_state(IrqState::num_to_state(lr_state as usize));
-            
+
             self.update_int_list(vcpu.clone(), interrupt.clone());
 
             if (interrupt.state().to_num() & IrqState::IrqSPend.to_num() != 0) && interrupt.enabled() {
@@ -2270,7 +2270,7 @@ pub fn gic_maintenance_handler(_arg: usize) {
         vgic.handle_trapped_eoir(current_cpu().active_vcpu.clone().unwrap());
     }
 
-    // NP:List Register Entry Not Present. 
+    // NP:List Register Entry Not Present.
     // U: underflow Zero or one of the List register entries are marked as a valid interrupt, that is, if the corresponding ICH_LR<n>_EL2.State bits do not equal 0x0.
     if misr & (GICH_MISR_NP as u32 | GICH_MISR_U as u32) != 0 {
         vgic.refill_lrs(current_cpu().active_vcpu.clone().unwrap());

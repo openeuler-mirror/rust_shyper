@@ -24,7 +24,6 @@ use super::{
     VMDtbDevConfigList,
 };
 
-
 #[rustfmt::skip]
 pub fn mvm_config_init() {
     vm_cfg_set_config_name("qemu-default");

@@ -161,22 +161,22 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
 
         // assert_eq!(fdt_remove_node(dtb, "/sram@10f000\0".as_ptr()), 0);
         //use for boot one core
-        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core1\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@0\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@100\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core1\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@0\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@100\0".as_ptr()), 0);
 
         //use for boot 4 cores in cluster-1. and if want to boot all,don`t remove any code about cpu
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster1\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster2\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@400\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@500\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@600\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@700\0".as_ptr()), 0);
-        //use for boot 2 cores in cluster-1
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core2\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core3\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@200\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@300\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster1\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster2\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@400\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@500\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@600\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@700\0".as_ptr()), 0);
+        // //use for boot 2 cores in cluster-1
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core2\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core3\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@200\0".as_ptr()), 0);
+        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@300\0".as_ptr()), 0);
 
         // assert_eq!(fdt_remove_node(dtb, "/timer@feae0000\0".as_ptr()), 0);
         // assert_eq!(fdt_remove_node(dtb, "/timer\0".as_ptr()), 0);

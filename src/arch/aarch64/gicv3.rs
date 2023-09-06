@@ -343,7 +343,7 @@ impl GicDistributor {
         let prev = self.CTLR.get();
 
         self.CTLR
-            .set(prev | GICD_CTLR_ARE_NS_BIT as u32 | GICD_CTLR_ENNS_BIT as u32 );
+            .set(prev | GICD_CTLR_ARE_NS_BIT as u32 | GICD_CTLR_ENNS_BIT as u32);
     }
 
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
