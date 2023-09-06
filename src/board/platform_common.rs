@@ -151,7 +151,8 @@ pub trait PlatOperation {
     }
 
     fn cpuid2mpidr(cpuid: usize) -> usize {
-        todo!()
+        use crate::board::PLAT_DESC;
+        return PLAT_DESC.cpu_desc.core_list[cpuid].mpidr;
     }
 
     fn blk_init();

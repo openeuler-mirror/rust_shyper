@@ -9,11 +9,13 @@
 // See the Mulan PSL v2 for more details.
 
 use crate::arch::{gic_cpu_init, gicc_clear_current_irq, vcpu_arch_init};
+use crate::board::{Platform, PlatOperation};
 use crate::kernel::{cpu_idle, current_cpu, ipi_intra_broadcast_msg, Scheduler, timer_enable, Vcpu, VcpuState, Vm};
 use crate::kernel::{active_vm, ipi_send_msg, IpiInnerMsg, IpiPowerMessage, IpiType, PowerEvent};
 use crate::kernel::CpuState;
 use crate::kernel::IpiMessage;
 use crate::vmm::vmm_reboot;
+use crate::kernel::vm;
 
 use super::smc::smc_call;
 
@@ -45,6 +47,7 @@ pub fn power_arch_init() {
 pub fn power_arch_vm_shutdown_secondary_cores(vm: Vm) {
     let m = IpiPowerMessage {
         src: vm.id(),
+        vcpuid: 0,
         event: PowerEvent::PsciIpiCpuReset,
         entry: 0,
         context: 0,
@@ -161,12 +164,30 @@ fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
     // let the scheduler enable or disable timer
     current_cpu().scheduler().wakeup(vcpu);
     current_cpu().scheduler().do_schedule();
+
+    if cfg!(feature = "secondary_start") {
+        extern "C" {
+            fn context_vm_entry(ctx: usize) -> !;
+        }
+        unsafe {
+            context_vm_entry(current_cpu().ctx.unwrap());
+        }
+    }
 }
 
 // Todo: need to support more vcpu in one Core
 pub fn psci_ipi_handler(msg: &IpiMessage) {
     match msg.ipi_message {
         IpiInnerMsg::Power(power_msg) => {
+            match power_msg.event {
+                PowerEvent::PsciIpiVcpuAssignAndCpuOn => {
+                    println!("receive PsciIpiVcpuAssignAndCpuOn msg");
+                    let vm = vm(power_msg.src).unwrap();
+                    let vcpu = vm.vcpuid_to_vcpu(power_msg.vcpuid).unwrap();
+                    current_cpu().vcpu_array.append_vcpu(vcpu);
+                }
+                _ => {}
+            }
             let trgt_vcpu = match current_cpu().vcpu_array.pop_vcpu_through_vmid(power_msg.src) {
                 None => {
                     warn!(
@@ -205,6 +226,7 @@ pub fn psci_ipi_handler(msg: &IpiMessage) {
                 PowerEvent::PsciIpiCpuReset => {
                     vcpu_arch_init(active_vm().unwrap(), current_cpu().active_vcpu.clone().unwrap());
                 }
+                _ => {}
             }
         }
         _ => {
@@ -216,8 +238,67 @@ pub fn psci_ipi_handler(msg: &IpiMessage) {
     }
 }
 
-pub fn psci_guest_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
-    let vcpu_id = mpidr & 0xff;
+#[cfg(feature = "secondary_start")]
+pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
+    let vcpu_id = vmpidr & 0xff;
+    let vm = active_vm().unwrap();
+    let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
+
+    if vcpu_id >= vm.cpu_num() || physical_linear_id.is_err() {
+        warn!("psci_guest_cpu_on: target vcpu {} not exist", vcpu_id);
+        return usize::MAX - 1;
+    }
+
+    let cpu_idx = physical_linear_id.unwrap();
+
+    println!("[psci_guest_cpu_on] {vmpidr}, {cpu_idx}");
+
+    use crate::kernel::CPU_IF_LIST;
+    use crate::kernel::StartReason;
+    let state = CPU_IF_LIST.lock().get(cpu_idx).unwrap().state_for_start;
+    let mut r = 0;
+    if state == CpuState::CpuInv {
+        let mut cpu_if_list = CPU_IF_LIST.lock();
+        if let Some(cpu_if) = cpu_if_list.get_mut(cpu_idx as usize) {
+            cpu_if.ctx = ctx as u64;
+            cpu_if.entry = entry as u64;
+            cpu_if.vm_id = vm.id();
+            cpu_if.state_for_start = CpuState::CpuIdle;
+            cpu_if.vcpuid = vcpu_id;
+            cpu_if.start_reason = StartReason::SecondaryCore;
+        }
+        drop(cpu_if_list);
+        let mpidr = Platform::cpuid2mpidr(cpu_idx);
+
+        use crate::arch::BOOT_STACK;
+        let entry_point = crate::arch::_secondary_start as usize;
+        let stack = unsafe { &BOOT_STACK as *const u8 as usize + 4096 * 2 * cpu_idx as usize };
+        r = power_arch_cpu_on(mpidr, entry_point, stack);
+        println!(
+            "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
+            mpidr, entry_point
+        );
+    } else {
+        let m = IpiPowerMessage {
+            src: vm.id(),
+            vcpuid: vcpu_id,
+            event: PowerEvent::PsciIpiVcpuAssignAndCpuOn,
+            entry,
+            context: ctx,
+        };
+
+        if !ipi_send_msg(physical_linear_id.unwrap(), IpiType::IpiTPower, IpiInnerMsg::Power(m)) {
+            warn!("psci_guest_cpu_on: fail to send msg");
+            return usize::MAX - 1;
+        }
+    }
+
+    return r;
+}
+
+#[cfg(not(feature = "secondary_start"))]
+pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
+    let vcpu_id = vmpidr & 0xff;
     let vm = active_vm().unwrap();
     let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
 
@@ -227,7 +308,7 @@ pub fn psci_guest_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
     }
     #[cfg(feature = "tx2")]
     {
-        let cluster = (mpidr >> 8) & 0xff;
+        let cluster = (vmpidr >> 8) & 0xff;
         if vm.id() == 0 && cluster != 1 {
             warn!("psci_guest_cpu_on: L4T only support cluster #1");
             return usize::MAX - 1;
@@ -236,6 +317,7 @@ pub fn psci_guest_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
 
     let m = IpiPowerMessage {
         src: vm.id(),
+        vcpuid: 0,
         event: PowerEvent::PsciIpiCpuOn,
         entry,
         context: ctx,
@@ -248,3 +330,103 @@ pub fn psci_guest_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
 
     0
 }
+
+pub fn psci_vm_maincpu_on(vmpidr: usize, entry: usize, ctx: usize, vm_id: usize) -> usize {
+    let vcpu_id = vmpidr & 0xff;
+    let vm = vm(vm_id).unwrap();
+    let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
+
+    if vcpu_id >= vm.cpu_num() || physical_linear_id.is_err() {
+        warn!("psci_vm_maincpu_on: target vcpu {} not exist", vcpu_id);
+        return usize::MAX - 1;
+    }
+
+    let cpu_idx = physical_linear_id.unwrap();
+
+    use crate::kernel::{CPU_IF_LIST, StartReason};
+    let state = CPU_IF_LIST.lock().get(cpu_idx).unwrap().state_for_start;
+    let mut r = 0;
+    if state == CpuState::CpuInv {
+        let mut cpu_if_list = CPU_IF_LIST.lock();
+        if let Some(cpu_if) = cpu_if_list.get_mut(cpu_idx as usize) {
+            cpu_if.ctx = ctx as u64;
+            cpu_if.entry = entry as u64;
+            cpu_if.vm_id = vm.id();
+            cpu_if.state_for_start = CpuState::CpuIdle;
+            cpu_if.vcpuid = vcpu_id;
+            cpu_if.start_reason = StartReason::MainCore;
+        }
+        drop(cpu_if_list);
+
+        let mpidr = Platform::cpuid2mpidr(cpu_idx);
+
+        use crate::arch::BOOT_STACK;
+        let entry_point = crate::arch::_secondary_start as usize;
+        let stack = unsafe { &BOOT_STACK as *const u8 as usize + 4096 * 2 * cpu_idx as usize };
+        r = power_arch_cpu_on(mpidr, entry_point, stack);
+        println!(
+            "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
+            mpidr, entry_point
+        );
+    } else {
+        let m = IpiPowerMessage {
+            src: vm.id(),
+            vcpuid: vcpu_id,
+            event: PowerEvent::PsciIpiVcpuAssignAndCpuOn,
+            entry,
+            context: ctx,
+        };
+
+        if !ipi_send_msg(physical_linear_id.unwrap(), IpiType::IpiTPower, IpiInnerMsg::Power(m)) {
+            warn!("psci_guest_cpu_on: fail to send msg");
+            return usize::MAX - 1;
+        }
+    }
+
+    return r;
+}
+
+#[cfg(feature = "secondary_start")]
+pub fn guest_cpu_on(mpidr: usize) {
+    let cpu_id = Platform::mpidr2cpuid(mpidr);
+
+    use crate::kernel::{CPU_IF_LIST, StartReason};
+    let cpu_if_list = CPU_IF_LIST.lock();
+    let cpu_if = &cpu_if_list[cpu_id as usize];
+
+    let vm_id = cpu_if.vm_id;
+    let entry = cpu_if.entry;
+    let ctx = cpu_if.ctx;
+    let vcpuid = cpu_if.vcpuid;
+    let start_reason = cpu_if.start_reason;
+
+    drop(cpu_if_list);
+
+    let vm = vm(vm_id).unwrap();
+    let vcpu = vm.vcpuid_to_vcpu(vcpuid).unwrap();
+
+    println!("now add vcpu={} to mpidr={:X}", vcpu.id(), mpidr);
+
+    current_cpu().vcpu_array.append_vcpu(vcpu);
+
+    match start_reason {
+        StartReason::MainCore => {
+            use crate::vmm::vmm_boot_vm;
+            vmm_boot_vm(vm_id);
+        }
+        StartReason::SecondaryCore => {
+            if let Some(trgt_vcpu) = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {
+                psci_vcpu_on(trgt_vcpu, entry as usize, ctx as usize);
+            } else {
+                println!("pop_vcpu_through_vmid error!");
+                return;
+            }
+        }
+        _ => {
+            todo!()
+        }
+    }
+}
+
+#[cfg(not(feature = "secondary_start"))]
+pub fn guest_cpu_on(_mpidr: usize) {}

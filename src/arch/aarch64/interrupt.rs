@@ -23,6 +23,7 @@ pub fn interrupt_arch_init() {
     use crate::arch::{gic_cpu_init, gic_glb_init, gic_maintenance_handler};
     use crate::kernel::{interrupt_reserve_int, InterruptHandler};
 
+    #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();
 
     if current_cpu().id == 0 {

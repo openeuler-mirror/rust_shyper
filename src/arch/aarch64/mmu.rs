@@ -8,33 +8,25 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use core::arch::global_asm;
 use tock_registers::*;
 use tock_registers::interfaces::*;
 
-use crate::board::PLAT_DESC;
 use crate::utils::memset_safe;
-use crate::arch::{LVL1_SHIFT, LVL2_SHIFT};
+use crate::arch::LVL1_SHIFT;
+use crate::board::PLAT_DESC;
 
 use super::interface::*;
 
-// #[cfg(feature = "tx2")]
-// #[cfg(not(feature = "update"))]
-// global_asm!(include_str!("start.S"));
+#[cfg(feature = "update")]
+#[cfg(feature = "tx2")]
+global_asm!(include_str!("start_update.S"));
 
-// #[cfg(feature = "update")]
-// #[cfg(feature = "tx2")]
-// global_asm!(include_str!("start_update.S"));
+#[cfg(feature = "pi4")]
+#[cfg(not(feature = "update"))]
+global_asm!(include_str!("start_pi4.S"));
 
-// #[cfg(feature = "pi4")]
-// #[cfg(not(feature = "update"))]
-// global_asm!(include_str!("start_pi4.S"));
-
-// #[cfg(feature = "qemu")]
-// global_asm!(include_str!("start_qemu.S"));
-
-// #[cfg(feature = "rk3588")]
-// global_asm!(include_str!("start_rk3588.S"));
+#[cfg(feature = "rk3588")]
+global_asm!(include_str!("start_rk3588.S"));
 
 register_bitfields! {u64,
     pub TableDescriptor [
@@ -151,7 +143,6 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
 
     #[cfg(feature = "tx2")]
     {
-        use crate::board::PLAT_DESC;
         use crate::arch::pt_lvl2_idx;
         for i in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             let output_addr = i << LVL1_SHIFT;

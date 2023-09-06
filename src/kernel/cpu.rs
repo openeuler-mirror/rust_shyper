@@ -17,7 +17,7 @@ use crate::arch::ContextFrame;
 use crate::arch::ContextFrameTrait;
 // use core::ops::{Deref, DerefMut};
 use crate::arch::cpu_interrupt_unmask;
-use crate::board::PLATFORM_CPU_NUM_MAX;
+use crate::board::{PLATFORM_CPU_NUM_MAX, Platform, PlatOperation};
 use crate::kernel::{SchedType, Vcpu, VcpuArray, VcpuState, Vm, Scheduler};
 use crate::kernel::IpiMessage;
 use crate::utils::trace;
@@ -55,13 +55,34 @@ impl PartialEq for CpuState {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum StartReason {
+    MainCore,
+    SecondaryCore,
+    None,
+}
+
 pub struct CpuIf {
     pub msg_queue: Vec<IpiMessage>,
+    pub entry: u64,
+    pub ctx: u64,
+    pub vm_id: usize,
+    pub state_for_start: CpuState,
+    pub vcpuid: usize,
+    pub start_reason: StartReason,
 }
 
 impl CpuIf {
     pub fn default() -> CpuIf {
-        CpuIf { msg_queue: Vec::new() }
+        CpuIf {
+            msg_queue: Vec::new(),
+            entry: 0,
+            ctx: 0,
+            vm_id: 0,
+            state_for_start: CpuState::CpuInv,
+            vcpuid: 0,
+            start_reason: StartReason::None,
+        }
     }
 
     pub fn push(&mut self, ipi_msg: IpiMessage) {
@@ -287,10 +308,11 @@ pub fn active_vm_ncpu() -> usize {
 pub fn cpu_init() {
     let cpu_id = current_cpu().id;
     if cpu_id == 0 {
-        use crate::arch::power_arch_init;
-        use crate::board::{Platform, PlatOperation};
-        Platform::power_on_secondary_cores();
-        power_arch_init();
+        if cfg!(not(feature = "secondary_start")) {
+            use crate::arch::power_arch_init;
+            Platform::power_on_secondary_cores();
+            power_arch_init();
+        }
         cpu_if_init();
     }
 
@@ -301,12 +323,14 @@ pub fn cpu_init() {
     current_cpu().set_ctx((sp - size) as *mut _);
     println!("Core {} init ok", cpu_id);
 
-    crate::utils::barrier();
-    // println!("after barrier cpu init");
-    use crate::board::PLAT_DESC;
-    if cpu_id == 0 {
-        println!("Bring up {} cores", PLAT_DESC.cpu_desc.num);
-        println!("Cpu init ok");
+    if cfg!(not(feature = "secondary_start")) {
+        crate::utils::barrier();
+        // println!("after barrier cpu init");
+        use crate::board::PLAT_DESC;
+        if cpu_id == 0 {
+            println!("Bring up {} cores", PLAT_DESC.cpu_desc.num);
+            println!("Cpu init ok");
+        }
     }
 }
 
@@ -324,7 +348,8 @@ pub static mut CPU_LIST: [Cpu; PLATFORM_CPU_NUM_MAX] = [const { Cpu::default() }
 
 #[no_mangle]
 // #[link_section = ".text.boot"]
-pub extern "C" fn cpu_map_self(cpu_id: usize) -> usize {
+pub extern "C" fn cpu_map_self(mpidr: usize) -> usize {
+    let cpu_id = Platform::mpidr2cpuid(mpidr);
     let mut cpu = unsafe { &mut CPU_LIST[cpu_id] };
     (*cpu).id = cpu_id;
 

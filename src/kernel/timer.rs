@@ -32,7 +32,9 @@ pub fn timer_init() {
     crate::arch::timer_arch_init();
     timer_enable(false);
 
+    #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();
+
     if current_cpu().id == 0 {
         crate::kernel::interrupt_reserve_int(
             INTERRUPT_IRQ_HYPERVISOR_TIMER,

@@ -29,7 +29,6 @@ use crate::kernel::HVC_CONFIG;
 use crate::kernel::HVC_CONFIG_UPLOAD_KERNEL_IMAGE;
 use crate::kernel::HVC_VMM;
 use crate::kernel::HVC_VMM_REBOOT_VM;
-use crate::utils::sleep;
 use crate::utils::{bit_extract, memcpy_safe, memset_safe};
 use crate::vmm::{vmm_cpu_assign_vcpu, vmm_boot, vmm_init_image, vmm_setup_config, vmm_cpu_remove_vcpu};
 
@@ -39,6 +38,7 @@ pub enum VmmEvent {
     VmmReboot,
     VmmShutdown,
     VmmAssignCpu,
+    VmmAssignVcpu,
     VmmRemoveCpu,
 }
 
@@ -128,16 +128,40 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
             println!("vmm_set_up_cpu: vm {} physical cpu id {}", vm_id, target_cpu_id);
             cpu_num += 1;
 
-            if target_cpu_id != current_cpu().id {
-                let m = IpiVmmMsg {
-                    vmid: vm_id,
-                    event: VmmEvent::VmmAssignCpu,
+            if cfg!(feature = "secondary_start") {
+                // Judge if current cpu is allocated.
+                let vcpu = match vm.select_vcpu2assign(target_cpu_id) {
+                    None => panic!("core {} vm {} cannot find proper vcpu to assign", target_cpu_id, vm_id),
+                    Some(vcpu) => vcpu,
                 };
-                if !ipi_send_msg(target_cpu_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
-                    println!("vmm_set_up_cpu: failed to send ipi to Core {}", target_cpu_id);
+                if vcpu.id() == 0 {
+                    println!(
+                        "* Core {} is assigned => vm {}, vcpu {}",
+                        target_cpu_id,
+                        vm_id,
+                        vcpu.id()
+                    );
+                } else {
+                    println!("Core {} is assigned => vm {}, vcpu {}", target_cpu_id, vm_id, vcpu.id());
+                }
+                vcpu.set_phys_id(target_cpu_id);
+
+                let cfg_master = vm.config().cpu_master();
+                if target_cpu_id == cfg_master && target_cpu_id == current_cpu().id {
+                    current_cpu().vcpu_array.append_vcpu(vcpu);
                 }
             } else {
-                vmm_cpu_assign_vcpu(vm_id);
+                if target_cpu_id != current_cpu().id {
+                    let m = IpiVmmMsg {
+                        vmid: vm_id,
+                        event: VmmEvent::VmmAssignCpu,
+                    };
+                    if !ipi_send_msg(target_cpu_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
+                        println!("vmm_set_up_cpu: failed to send ipi to Core {}", target_cpu_id);
+                    }
+                } else {
+                    vmm_cpu_assign_vcpu(vm_id);
+                }
             }
         }
         cpu_allocate_bitmap >>= 1;
@@ -156,6 +180,7 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
         current_cpu().id,
         vm_id
     );
+    #[cfg(not(feature = "secondary_start"))]
     while !vm.ready() {
         sleep(10);
     }
@@ -191,36 +216,38 @@ pub fn vmm_init_gvm(vm_id: usize) {
  */
 pub fn vmm_boot_vm(vm_id: usize) {
     let phys_id = vm_if_get_cpu_id(vm_id);
-    // println!(
-    //     "vmm_boot_vm: current_cpu {} target vm {} get phys_id {}",
-    //     current_cpu().id,
-    //     vm_id,
-    //     phys_id
-    // );
     if phys_id != current_cpu().id {
-        let m = IpiVmmMsg {
-            vmid: vm_id,
-            event: VmmEvent::VmmBoot,
-        };
-        if !ipi_send_msg(phys_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
-            println!("vmm_boot_vm: failed to send ipi to Core {}", phys_id);
+        use crate::kernel::{CPU_IF_LIST, CpuState};
+        use crate::arch::psci_vm_maincpu_on;
+        let state = CPU_IF_LIST.lock().get(phys_id).unwrap().state_for_start;
+        if state == CpuState::CpuInv {
+            let vmpidr = vm(vm_id).unwrap().pcpuid_to_vcpuid(phys_id).unwrap();
+            println!("now start cpu on! vmpidr={vmpidr}");
+            psci_vm_maincpu_on(vmpidr, vmm_boot_vm as usize, 0, vm_id);
+        } else {
+            let m = IpiVmmMsg {
+                vmid: vm_id,
+                event: VmmEvent::VmmBoot,
+            };
+            if !ipi_send_msg(phys_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
+                println!("vmm_boot_vm: failed to send ipi to Core {}", phys_id);
+            }
         }
     } else {
         match current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {
             None => {
-                panic!(
-                    "vmm_boot_vm: VM[{}] does not have vcpu on Core {}",
-                    vm_id,
-                    current_cpu().id
-                );
+                let vm = vm(vm_id).unwrap();
+                let vcpuid = vm.pcpuid_to_vcpuid(phys_id).unwrap();
+                let vcpu = vm.vcpuid_to_vcpu(vcpuid);
+                current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
             }
-            Some(vcpu) => {
-                gicc_clear_current_irq(true);
-                // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
-                current_cpu().scheduler().yield_to(vcpu);
-                vmm_boot();
-            }
+            _ => {}
         };
+        let vcpu = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).unwrap();
+        gicc_clear_current_irq(true);
+        // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
+        current_cpu().scheduler().yield_to(vcpu);
+        vmm_boot();
     }
 }
 

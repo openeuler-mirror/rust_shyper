@@ -414,7 +414,7 @@ impl VcpuInner {
         vmpidr |= if cfg!(feature = "rk3588") {
             0x100_0000 | (self.id << 8)
         } else {
-            self.phys_id
+            self.id
         };
         self.vm_ctx.vmpidr_el2 = vmpidr as u64;
     }
@@ -503,6 +503,7 @@ impl VcpuInner {
             self.vm_ctx.vtcr_el2,
             self.vcpu_ctx.gpr(0)
         );
+        println!("id {} vm_ctx {:x?}", self.id, self.vm_ctx);
     }
 }
 

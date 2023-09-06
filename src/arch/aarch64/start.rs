@@ -6,7 +6,7 @@ use crate::kernel::{cpu_map_self, CPU_STACK_OFFSET, CPU_STACK_SIZE};
 use crate::board::{PlatOperation, Platform};
 
 #[link_section = ".bss.stack"]
-static mut BOOT_STACK: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
+pub static mut BOOT_STACK: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
 
 extern "C" {
     fn _bss_begin();
@@ -41,7 +41,7 @@ macro_rules! test_cpuid {
 #[naked]
 #[no_mangle]
 #[link_section = ".text.boot"]
-unsafe extern "C" fn _start() -> ! {
+pub unsafe extern "C" fn _start() -> ! {
     asm!(
         r#"
         // save fdt pointer to x20
@@ -97,7 +97,7 @@ unsafe extern "C" fn _start() -> ! {
         bl  {mmu_init}
 
         // map cpu page table 
-        mov x0, x19
+        mrs x0, mpidr_el1
         bl  {cpu_map_self}
         msr ttbr0_el2, x0
         
@@ -137,6 +137,71 @@ unsafe extern "C" fn _start() -> ! {
     );
 }
 
+#[naked]
+#[no_mangle]
+pub unsafe extern "C" fn _secondary_start() -> ! {
+    asm!(
+        r#"
+        // save sp to x20
+        mov x20, x0 
+
+        // disable cache and MMU
+        mrs x1, sctlr_el2
+        bic x1, x1, #0xf
+        msr sctlr_el2, x1
+
+        // cache_invalidate(0): clear dl1$
+        mov x0, #0
+        bl  {cache_invalidate}
+
+        mrs x0, mpidr_el1
+        ic  iallu    
+        
+        mov sp, x20
+
+        // Trap nothing from EL1 to El2
+        mov x3, xzr
+        msr cptr_el2, x3
+
+        // init mmu
+        adrp x0, {lvl1_page_table}
+        bl  {mmu_init}
+
+        // map cpu page table 
+        mrs x0, mpidr_el1
+        bl  {cpu_map_self}
+        msr ttbr0_el2, x0
+        
+        // set real sp pointer
+        mov x1, 1
+        msr spsel, x1
+        ldr x1, ={CPU}
+        add x1, x1, #({CPU_STACK_OFFSET} + {CPU_STACK_SIZE})
+        sub	sp, x1, #{CONTEXT_SIZE}
+
+        bl {init_sysregs}
+
+        tlbi	alle2
+        dsb	nsh
+        isb
+
+        mrs x0, mpidr_el1
+        bl  {secondary_init}
+        "#,
+        cache_invalidate = sym cache_invalidate,
+        lvl1_page_table = sym super::mmu::LVL1_PAGE_TABLE,
+        mmu_init = sym super::mmu::mmu_init,
+        cpu_map_self = sym cpu_map_self,
+        CPU = sym crate::kernel::CPU,
+        CPU_STACK_OFFSET = const CPU_STACK_OFFSET,
+        CPU_STACK_SIZE = const CPU_STACK_SIZE,
+        CONTEXT_SIZE = const core::mem::size_of::<crate::arch::ContextFrame>(),
+        init_sysregs = sym init_sysregs,
+        secondary_init = sym crate::secondary_init,
+        options(noreturn)
+    );
+}
+
 fn init_sysregs() {
     use cortex_a::registers::{HCR_EL2, VBAR_EL2, SCTLR_EL2};
     HCR_EL2.set(
@@ -148,18 +213,13 @@ fn init_sysregs() {
             | 1 << 19, /* TSC */
     );
     VBAR_EL2.set(vectors as usize as u64);
-    SCTLR_EL2.modify(
-        SCTLR_EL2::M::Enable 
-            + SCTLR_EL2::C::Cacheable 
-            + SCTLR_EL2::I::Cacheable
-    );
+    SCTLR_EL2.modify(SCTLR_EL2::M::Enable + SCTLR_EL2::C::Cacheable + SCTLR_EL2::I::Cacheable);
 }
 
 unsafe extern "C" fn clear_bss() {
     core::slice::from_raw_parts_mut(_bss_begin as usize as *mut u8, _bss_end as usize - _bss_begin as usize).fill(0)
 }
 
-#[link_section = ".text.boot"]
 unsafe extern "C" fn cache_invalidate(cache_level: usize) {
     asm!(
         r#"
@@ -196,7 +256,6 @@ unsafe extern "C" fn cache_invalidate(cache_level: usize) {
 }
 
 #[no_mangle]
-#[link_section = ".text.boot"]
 unsafe extern "C" fn update_request() {
     asm!(
         r#"
@@ -221,7 +280,6 @@ unsafe extern "C" fn update_request() {
     )
 }
 
-#[link_section = ".text.boot"]
 unsafe extern "C" fn live_update() {
     asm!(
         r#"

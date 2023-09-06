@@ -43,6 +43,14 @@ impl VcpuArray {
     pub fn append_vcpu(&mut self, vcpu: Vcpu) {
         // There is only 1 VCPU from a VM in a PCPU
         let vm_id = vcpu.vm_id();
+
+        info!(
+            "append_vcpu: append VM[{}] vcpu {} on core {}",
+            vm_id,
+            vcpu.id(),
+            current_cpu().id
+        );
+
         if vm_id >= self.array.len() {
             panic!("vm_id > self.array.len()");
         }
@@ -50,12 +58,7 @@ impl VcpuArray {
             panic!("self.array[vm_id].is_some()");
         }
         vcpu.set_phys_id(current_cpu().id);
-        info!(
-            "append_vcpu: append VM[{}] vcpu {} on core {}",
-            vm_id,
-            vcpu.id(),
-            current_cpu().id
-        );
+
         self.array[vm_id] = Some(vcpu);
         self.len += 1;
     }

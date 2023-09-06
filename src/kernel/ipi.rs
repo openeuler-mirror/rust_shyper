@@ -39,6 +39,7 @@ pub enum PowerEvent {
     PsciIpiCpuOn,
     PsciIpiCpuOff,
     PsciIpiCpuReset,
+    PsciIpiVcpuAssignAndCpuOn,
 }
 
 #[derive(Copy, Clone)]
@@ -55,6 +56,7 @@ pub struct IpiInitcMessage {
 #[derive(Copy, Clone)]
 pub struct IpiPowerMessage {
     pub src: usize,
+    pub vcpuid: usize,
     pub event: PowerEvent,
     pub entry: usize,
     pub context: usize,
@@ -75,6 +77,13 @@ pub struct IpiEthernetMsg {
 #[derive(Copy, Clone)]
 pub struct IpiVmmMsg {
     pub vmid: usize,
+    pub event: VmmEvent,
+}
+
+#[derive(Copy, Clone)]
+pub struct IpiVcpuMsg {
+    pub vmid: usize,
+    pub vcpuid: usize,
     pub event: VmmEvent,
 }
 
@@ -124,6 +133,7 @@ pub enum IpiInnerMsg {
     Power(IpiPowerMessage),
     EnternetMsg(IpiEthernetMsg),
     VmmMsg(IpiVmmMsg),
+    VcpuMsg(IpiVcpuMsg),
     MediatedMsg(IpiMediatedMsg),
     MediatedNotifyMsg(IpiMediatedNotifyMsg),
     HvcMsg(IpiHvcMsg),
