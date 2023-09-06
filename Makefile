@@ -31,13 +31,12 @@ ifeq (${PROFILE}, release)
 CARGO_FLAGS := ${CARGO_FLAGS} --release
 endif
 
+CARGO_ACTION ?= build
+
 .PHONY: build qemu qemu_gicv3 tx2 pi4 tx2_update tx2_ramdisk rk3588_release gdb clean
 
-clippy:
-	cargo clippy ${CARGO_FLAGS}
-
 build:
-	cargo build ${CARGO_FLAGS}
+	cargo ${CARGO_ACTION} ${CARGO_FLAGS}
 	bash linkimg.sh -i ${TARGET_DIR}/${RELOCATE_IMAGE} -m ${VM0_IMAGE_PATH} \
 		-t ${LD} -f linkers/${ARCH}.ld -s ${TEXT_START} -o ${TARGET_DIR}/${IMAGE}
 	${OBJDUMP} --demangle -d ${TARGET_DIR}/${IMAGE} > ${TARGET_DIR}/t.txt
