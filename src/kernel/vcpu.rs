@@ -172,7 +172,6 @@ impl Vcpu {
     }
 
     pub fn context_vm_restore(&self) {
-        // println!("context_vm_restore");
         self.restore_cpu_ctx();
 
         let inner = self.inner.lock();
@@ -343,6 +342,11 @@ impl Vcpu {
             }
         }
     }
+
+    pub fn get_vmpidr(&self) -> usize {
+        let inner = self.inner.lock();
+        inner.vm_ctx.vmpidr_el2 as usize
+    }
 }
 
 pub struct VcpuInner {
@@ -401,27 +405,16 @@ impl VcpuInner {
         } else {
             self.vm_ctx.vtcr_el2 = 0x8001355c;
         }
-        // }
-        let mut vmpidr = 0;
-        vmpidr |= 1 << 31;
-
-        #[cfg(feature = "tx2")]
-        if self.vm_id() == 0 {
-            // A57 is cluster #1 for L4T
-            vmpidr |= 0x100;
-        }
-
-        vmpidr |= if cfg!(feature = "rk3588") {
-            0x100_0000 | (self.id << 8)
-        } else {
-            self.id
-        };
-        self.vm_ctx.vmpidr_el2 = vmpidr as u64;
+        self.reset_vmpidr()
     }
 
     fn reset_vmpidr(&mut self) {
         let mut vmpidr = 0;
-        vmpidr |= 1 << 31;
+        vmpidr |= 1 << 31; //bit[31]:res1
+
+        if self.vm.as_ref().unwrap().config().cpu_num() == 1 {
+            vmpidr |= 1 << 30; //bit[30]: Indicates a Uniprocessor system
+        }
 
         #[cfg(feature = "tx2")]
         if self.vm_id() == 0 {
@@ -474,6 +467,8 @@ impl VcpuInner {
             for i in 0..GIC_PRIVINT_NUM / 4 {
                 self.vm_ctx.gic_state.priv_ipriorityr[i] = u32::MAX; //init priority
             }
+            // msr!(ICC_CTLR_EL1, GICC_CTLR_EOIMODE_BIT);
+            // msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
         }
     }
 

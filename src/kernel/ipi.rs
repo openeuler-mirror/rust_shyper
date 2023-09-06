@@ -183,7 +183,6 @@ pub fn ipi_irq_handler() {
         if len <= ipi_type {
             println!("illegal ipi type {}", ipi_type)
         } else {
-            // println!("ipi type is {:#?}", ipi_msg.ipi_type);
             handler(&ipi_msg);
         }
         let mut cpu_if_list = CPU_IF_LIST.lock();
@@ -217,6 +216,10 @@ fn ipi_send(target_id: usize, msg: IpiMessage) -> bool {
 
     let mut cpu_if_list = CPU_IF_LIST.lock();
     cpu_if_list[target_id].msg_queue.push(msg);
+    drop(cpu_if_list);
+    unsafe {
+        core::arch::asm!("dsb ishst");
+    }
     interrupt_cpu_ipi_send(target_id, INTERRUPT_IRQ_IPI);
 
     true

@@ -887,8 +887,12 @@ impl Vm {
 
     pub fn get_vcpu_by_mpidr(&self, mpdir: usize) -> Option<Vcpu> {
         let inner = self.inner.lock();
-        let cpuid = if (mpdir >> 8) & 0b1 != 0 {
-            4 + (mpdir & 0xff)
+        let cpuid = if (mpdir >> 8) & 0xff != 0 {
+            if cfg!(feature = "rk3588") {
+                mpdir >> 8
+            } else {
+                4 + (mpdir & 0xff)
+            }
         } else {
             mpdir & 0xff
         };

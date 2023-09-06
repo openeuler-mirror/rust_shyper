@@ -42,6 +42,7 @@ buddy_system_allocator = "0.8.0"
 memoffset = { version = "0.8", default-features = false, features = [
     "unstable_const",
 ] }
+smccc = "0.1.1"
 
 [dependencies.tock-registers]
 version = "0.7.0"
@@ -53,7 +54,7 @@ version = "x"
 default-features = false
 
 [features]
-# default = ["rk3588"]
+default = ["rk3588"]
 tx2 = []
 qemu = []
 pi4 = []

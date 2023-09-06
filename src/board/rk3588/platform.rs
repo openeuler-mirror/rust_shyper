@@ -10,6 +10,7 @@
 
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
+use crate::arch::sysreg_enc_addr;
 use crate::board::{
     PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
     PlatMemRegion,
@@ -50,6 +51,10 @@ impl PlatOperation for Rk3588Platform {
 
     const SHARE_MEM_BASE: usize = 0xd_0000_0000;
 
+    //sysreg
+    const ICC_SRE_ADDR: usize = sysreg_enc_addr(3, 0, 12, 12, 5);
+    const ICC_SGIR_ADDR: usize = sysreg_enc_addr(3, 0, 12, 11, 5);
+
     fn cpuid_to_cpuif(cpuid: usize) -> usize {
         PLAT_DESC.cpu_desc.core_list[cpuid].mpidr
     }
@@ -73,7 +78,7 @@ impl PlatOperation for Rk3588Platform {
 
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
-        num: 4,
+        num: 8,
         core_list: &[
             PlatCpuCoreConfig {
                 //cluster0

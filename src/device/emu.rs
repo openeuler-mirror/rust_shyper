@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
 
 use spin::Mutex;
+use spin::RwLock;
 
 use crate::arch::Vgic;
 use crate::device::{
@@ -237,4 +238,60 @@ pub fn emu_remove_dev(vm_id: usize, dev_id: usize, address: usize, size: usize) 
         "emu_remove_dev: emu dev not exist address 0x{:x} size 0x{:x}",
         address, size
     );
+}
+
+static EMU_REGS_LIST: RwLock<Vec<EmuRegEntry>> = RwLock::new(Vec::new());
+
+pub fn emu_reg_handler(emu_ctx: &EmuContext) -> bool {
+    let address = emu_ctx.address;
+    let active_vcpu = current_cpu().active_vcpu.as_ref().unwrap();
+    let vm_id = active_vcpu.vm_id();
+
+    let emu_regs_list = EMU_REGS_LIST.read();
+    for emu_reg in emu_regs_list.iter() {
+        if emu_reg.addr == address {
+            let handler = emu_reg.handler;
+            drop(emu_regs_list);
+            return handler(vm_id, emu_ctx);
+        }
+    }
+    error!(
+        "emu_reg_handler: no handler for Core{} {} reg ({:#x})",
+        current_cpu().id,
+        if emu_ctx.write { "write" } else { "read" },
+        address
+    );
+    false
+}
+
+pub fn emu_register_reg(emu_type: EmuRegType, address: usize, handler: EmuRegHandler) {
+    let mut emu_regs_list = EMU_REGS_LIST.write();
+
+    for emu_reg in emu_regs_list.iter() {
+        if address == emu_reg.addr {
+            warn!(
+                "emu_register_reg: duplicated emul reg addr: prev address {:#x}",
+                address
+            );
+            return;
+        }
+    }
+
+    emu_regs_list.push(EmuRegEntry {
+        emu_type,
+        addr: address,
+        handler,
+    });
+}
+
+type EmuRegHandler = EmuDevHandler;
+
+pub struct EmuRegEntry {
+    pub emu_type: EmuRegType,
+    pub addr: usize,
+    pub handler: EmuRegHandler,
+}
+
+pub enum EmuRegType {
+    SysReg,
 }

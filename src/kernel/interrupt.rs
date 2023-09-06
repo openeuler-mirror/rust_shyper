@@ -186,14 +186,6 @@ pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
             if let Some(active_vm) = vcpu.vm() {
                 if active_vm.has_interrupt(int_id) {
                     interrupt_vm_inject(active_vm, vcpu.clone(), int_id, src);
-                    // if current_cpu().id == 1 {
-                    //     println!("GICH_MISR {:x}", GICH.misr());
-                    //     println!("GICH_HCR {:x}", GICH.hcr());
-                    //     for i in 0..4 {
-                    //         println!("GICH_LR[{}] {:x}", i, GICH.lr(i));
-                    //     }
-                    //     println!("interrupt_handler, inject {} to core1", int_id);
-                    // }
                     return false;
                 } else {
                     return true;

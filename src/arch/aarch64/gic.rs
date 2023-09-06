@@ -680,15 +680,6 @@ pub fn gicc_clear_current_irq(for_hypervisor: bool) {
     current_cpu().current_irq = irq;
 }
 
-pub fn gicc_get_current_irq() -> (usize, usize) {
-    let iar = GICC.IAR.get();
-    let irq = iar as usize;
-    current_cpu().current_irq = irq;
-    let id = bit_extract(iar as usize, 0, 10);
-    let src = bit_extract(iar as usize, 10, 3);
-    (id, src)
-}
-
 pub fn gic_lrs() -> usize {
     *GIC_LRS_NUM.lock()
 }

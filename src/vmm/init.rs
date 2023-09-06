@@ -19,7 +19,7 @@ use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
 use crate::arch::PAGE_SIZE;
 use crate::board::*;
 use crate::config::vm_cfg_entry;
-use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init};
+use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init, emu_register_reg, EmuRegType};
 use crate::device::create_fdt;
 use crate::device::EmuDeviceType::*;
 use crate::kernel::{
@@ -334,25 +334,11 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
             }
             #[cfg(feature = "gicv3")]
             EmuDeviceTICCSRE => {
-                emu_register_dev(
-                    EmuDeviceTICCSRE,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    vgic_icc_sre_handler,
-                );
+                emu_register_reg(EmuRegType::SysReg, emu_dev.base_ipa, vgic_icc_sre_handler);
             }
             #[cfg(feature = "gicv3")]
             EmuDeviceTSGIR => {
-                emu_register_dev(
-                    EmuDeviceTSGIR,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    vgic_icc_sgir_handler,
-                );
+                emu_register_reg(EmuRegType::SysReg, emu_dev.base_ipa, vgic_icc_sgir_handler);
             }
             #[cfg(feature = "gicv3")]
             EmuDeviceTGICR => {

@@ -57,3 +57,8 @@ macro_rules! msr {
         }
     };
 }
+
+#[inline(always)]
+pub const fn sysreg_enc_addr(op0: usize, op1: usize, crn: usize, crm: usize, op2: usize) -> usize {
+    (((op0) & 0x3) << 20) | (((op2) & 0x7) << 17) | (((op1) & 0x7) << 14) | (((crn) & 0xf) << 10) | (((crm) & 0xf) << 1)
+}

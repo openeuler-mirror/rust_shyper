@@ -12,7 +12,7 @@ use core::arch::global_asm;
 
 use tock_registers::interfaces::*;
 
-use crate::arch::{ContextFrameTrait, data_abort_handler, hvc_handler, smc_handler};
+use crate::arch::{ContextFrameTrait, data_abort_handler, hvc_handler, smc_handler, sysreg_handler};
 use crate::arch::{gicc_clear_current_irq, gicc_get_current_irq};
 use crate::arch::ContextFrame;
 use crate::kernel::{active_vm_id, current_cpu, FRESH_IRQ_LOGIC_LOCK, FRESH_LOGIC_LOCK, fresh_status, FreshStatus};
@@ -224,6 +224,9 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
             //println!("Core[{}] data_abort_handler", current_cpu().id);
             data_abort_handler();
         }
+        0x18 => {
+            sysreg_handler(exception_iss() as u32);
+        }
         0x17 => {
             smc_handler();
         }
@@ -238,7 +241,7 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
                 (*ctx).gpr(29)
             );
             panic!(
-                "core {} vm {}: handler not presents for EC_{} @ipa 0x{:x}, @pc 0x{:x}",
+                "core {} vm {}: handler not presents for EC_{:b} @ipa 0x{:x}, @pc 0x{:x}",
                 current_cpu().id,
                 active_vm_id(),
                 exception_class(),
@@ -254,8 +257,8 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
 extern "C" fn lower_aarch64_irq(ctx: *mut ContextFrame) {
     current_cpu().set_ctx(ctx);
     let (id, src) = gicc_get_current_irq();
-    // if current_cpu().id == 1 && id != 27 {
-    //     println!("lower_aarch64_irq:{id}");
+    // if id != 27 {
+    //     println!("cpu:{}lower_aarch64_irq:{id}", current_cpu().id);
     // }
     match fresh_status() {
         FreshStatus::FreshVM | FreshStatus::Start => {

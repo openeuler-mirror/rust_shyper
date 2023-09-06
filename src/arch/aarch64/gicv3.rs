@@ -8,7 +8,10 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+use core::fmt;
+use core::fmt::Display;
 use core::mem::size_of;
+use core::ops::Deref;
 
 use alloc::collections::BTreeSet;
 
@@ -27,7 +30,7 @@ pub const MPIDR_AFF_MSK: usize = 0xffff; //we are only supporting 2 affinity lev
 // GICD BITS
 const GICD_CTLR_ENS_BIT: usize = 0x1;
 const GICD_CTLR_ENNS_BIT: usize = 0b10;
-const GICD_CTLR_ARE_NS_BIT: usize = 0x1 << 4;
+pub const GICD_CTLR_ARE_NS_BIT: usize = 0x1 << 4;
 pub const GICD_IROUTER_INV: usize = !MPIDR_AFF_MSK;
 pub const GICD_IROUTER_RES0_MSK: usize = (1 << 40) - 1;
 pub const GICD_IROUTER_IRM_BIT: usize = 1 << 31;
@@ -244,6 +247,17 @@ register_structs! {
     }
 }
 
+impl core::fmt::Debug for GicDistributorBlock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GicDistributorBlock")
+            .field("CTLR", &format_args!("{:x}", self.CTLR.get()))
+            .field("TYPER", &format_args!("{:x}", self.TYPER.get()))
+            .field("IIDR", &format_args!("{:x}", self.IIDR.get()))
+            .field("TYPER2", &format_args!("{:x}", self.TYPER2.get()))
+            .field("STATUSR", &format_args!("{:x}", self.STATUSR.get()))
+            .finish()
+    }
+}
 pub struct GicDistributor {
     base_addr: usize,
 }
@@ -329,16 +343,16 @@ impl GicDistributor {
         let prev = self.CTLR.get();
 
         self.CTLR
-            .set(prev | GICD_CTLR_ARE_NS_BIT as u32 | GICD_CTLR_ENNS_BIT as u32);
+            .set(prev | GICD_CTLR_ARE_NS_BIT as u32 | GICD_CTLR_ENNS_BIT as u32 );
     }
 
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
         if sgi_num < GIC_SGIS_NUM {
             let mpidr = Platform::cpuid_to_cpuif(cpu_target) & MPIDR_AFF_MSK;
             /* We only support two affinity levels */
-            let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET)
-                | (1 << (mpidr & 0xff))
-                | ((sgi_num) << GICC_SGIR_SGIINTID_OFF);
+            let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET) //aff1
+                | (1 << (mpidr & 0xff))  //aff0
+                | ((sgi_num) << GICC_SGIR_SGIINTID_OFF); //sgi_num
             msr!(ICC_SGI1R_EL1, sgi as u64);
         }
     }
@@ -540,6 +554,35 @@ register_structs! {
   }
 }
 
+impl core::fmt::Debug for GicRedistributorBlock {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("GicRedistributorBlock")
+            .field("Current_cpu", &current_cpu().id)
+            .field("CTLR", &format_args!("{:#x}", self.CTLR.get()))
+            .field("IIDR", &format_args!("{:#x}", self.IIDR.get()))
+            .field("TYPER", &format_args!("{:#x}", self.TYPER.get()))
+            .field("STATUSR", &format_args!("{:#x}", self.STATUSR.get()))
+            .field("WAKER", &format_args!("{:#x}", self.WAKER.get()))
+            .field("MPAMIDR", &format_args!("{:#x}", self.MPAMIDR.get()))
+            .field("PARTIDR", &format_args!("{:#x}", self.PARTIDR.get()))
+            .field("PROPBASER", &format_args!("{:#x}", self.PROPBASER.get()))
+            .field("PEDNBASER", &format_args!("{:#x}", self.PEDNBASER.get()))
+            .field("SYNCR", &format_args!("{:#x}", self.SYNCR.get()))
+            .field("IGROUPR0", &format_args!("{:#x}", self.IGROUPR0.get()))
+            .field("ISENABLER0", &format_args!("{:#x}", self.ISENABLER0.get()))
+            .field("ICENABLER0", &format_args!("{:#x}", self.ICENABLER0.get()))
+            .field("ISPENDR0", &format_args!("{:#x}", self.ISPENDR0.get()))
+            .field("ICPENDR0", &format_args!("{:#x}", self.ICPENDR0.get()))
+            .field("ISACTIVER0", &format_args!("{:#x}", self.ISACTIVER0.get()))
+            .field("ICACTIVER0", &format_args!("{:#x}", self.ICACTIVER0.get()))
+            .field("ICFGR0", &format_args!("{:#x}", self.ICFGR0.get()))
+            .field("ICFGR1", &format_args!("{:#x}", self.ICFGR1.get()))
+            .field("IGRPMODR0", &self.IGRPMODR0.get())
+            .field("NSACR", &format_args!("{:#x}", self.NSACR.get()))
+            .finish()
+    }
+}
+
 pub struct GicRedistributor {
     base_addr: usize,
 }
@@ -695,8 +738,8 @@ impl GicRedistributor {
         self[gicr_id as usize].ISENABLER0.get()
     }
 
-    pub fn get_iidr(&self, gicr_id: u32) -> u32 {
-        self[gicr_id as usize].IIDR.get()
+    pub fn get_iidr(&self, gicr_id: usize) -> u32 {
+        self[gicr_id].IIDR.get()
     }
 
     pub fn get_id(&self, gicr_id: u32, index: usize) -> u32 {
@@ -750,6 +793,18 @@ impl core::ops::Deref for GicCpuInterface {
     }
 }
 
+impl core::fmt::Display for GicCpuInterface {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "ICC_SRE_EL2:{:016x}", mrsr!(ICC_SRE_EL2, "x"))?;
+        writeln!(f, "ICC_PMR_EL1:{:016x}", mrsr!(ICC_PMR_EL1, "x"))?;
+        writeln!(f, "ICC_BPR1_EL1:{:016x}", mrsr!(ICC_BPR1_EL1, "x"))?;
+        writeln!(f, "ICC_CTLR_EL1:{:016x}", mrsr!(ICC_CTLR_EL1, "x"))?;
+        writeln!(f, "ICH_HCR_EL2:{:016x}", mrsr!(ICH_HCR_EL2, "x"))?;
+        writeln!(f, "ICC_IGRPEN1_EL1:{:016x}", mrsr!(ICC_IGRPEN1_EL1, "x"))?;
+        Ok(())
+    }
+}
+
 impl GicCpuInterface {
     pub const fn new(base_addr: usize) -> GicCpuInterface {
         GicCpuInterface { base_addr }
@@ -760,6 +815,8 @@ impl GicCpuInterface {
     }
 
     fn init(&self) {
+        println!("real mpidr:{:#x}", mrsr!(MPIDR_EL1));
+
         msr!(ICC_SRE_EL2, 0b1, "x");
 
         unsafe {
@@ -774,6 +831,7 @@ impl GicCpuInterface {
         msr!(ICC_PMR_EL1, 0xff, "x");
         msr!(ICC_BPR1_EL1, 0x0, "x");
         let ctrl = mrsr!(ICC_CTLR_EL1, "x");
+        println!("ctrl:{:x}", ctrl);
         msr!(ICC_CTLR_EL1, ICC_CTLR_EOIMODE_BIT, "x");
         let hcr = mrsr!(ICH_HCR_EL2);
         msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
@@ -915,6 +973,7 @@ impl GicHypervisorInterface {
         lrc
     }
 
+    // Indicates which maintenance interrupts are asserted.
     pub fn misr(&self) -> u32 {
         let misrc: u32;
         mrs!(misrc, ICH_MISR_EL2, "x");
@@ -975,7 +1034,7 @@ impl GicState {
             rpr: 0,
             hppir: 0,
             priv_isenabler: 0,
-            priv_ipriorityr: [0; GIC_PRIVINT_NUM / 4],
+            priv_ipriorityr: [u32::MAX; GIC_PRIVINT_NUM / 4],
             hcr: 0,
             lr: [0; GIC_LIST_REGS_NUM],
         }
@@ -988,9 +1047,9 @@ impl GicState {
         mrs!(self.ctlr, ICC_CTLR_EL1, "x");
         self.priv_isenabler = GICR[current_cpu().id].ISENABLER0.get();
 
-        for i in 0..GIC_PRIVINT_NUM / 4 {
-            self.priv_ipriorityr[i] = GICR.get_prio(i, current_cpu().id as u32) as u32;
-        }
+        // for i in 0..GIC_PRIVINT_NUM / 4 {
+        //     self.priv_ipriorityr[i] = GICR.get_prio(i, current_cpu().id as u32) as u32;
+        // }
         for i in 0..gich_lrs_num() {
             self.lr[i] = GICH.lr(i) as u32;
         }
@@ -1005,14 +1064,14 @@ impl GicState {
 
         msr!(ICC_CTLR_EL1, GICC_CTLR_EOIMODE_BIT);
         msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
-        msr!(ICC_PMR_EL1, 0xff, "x");
-        msr!(ICC_BPR1_EL1, 0x0, "x");
+        msr!(ICC_PMR_EL1, self.pmr, "x");
+        msr!(ICC_BPR1_EL1, self.bpr, "x");
         let hcr = mrsr!(ICH_HCR_EL2);
         msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
         GICR[current_cpu().id].ISENABLER0.set(self.priv_isenabler);
 
         //todo: have bug to fix, it maybe the problem of PRIORITYR promote
-        // for i in 0..GIC_PRIVINT_NUM / 4 {
+        // for i in 0..(GIC_PRIVINT_NUM / 4) {
         //     GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
         //     // GICR[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
         // }
@@ -1071,13 +1130,11 @@ pub fn gicc_clear_current_irq(for_hypervisor: bool) {
     if irq == 0 {
         return;
     }
-    let gicc = &GICC;
-    gicc.set_eoir(irq);
+    GICC.set_eoir(irq);
     if for_hypervisor {
-        gicc.set_dir(irq);
+        GICC.set_dir(irq);
     }
-    let irq = 0;
-    current_cpu().current_irq = irq;
+    current_cpu().current_irq = 0;
 }
 
 pub fn gicc_get_current_irq() -> (usize, usize) {

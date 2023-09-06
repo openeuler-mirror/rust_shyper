@@ -884,6 +884,19 @@ impl Vgic {
             if (interrupt.state().to_num() & 1 != 0) && interrupt.enabled() {
                 // println!("remove_lr: interrupt_state {}", interrupt.state().to_num());
                 let hcr = GICH.hcr();
+                /*
+                NPIE, bit [3]
+                No Pending Interrupt Enable. Enables the signaling of a maintenance interrupt while no pending interrupts are present in the List registers:
+
+                NPIE	Meaning
+                0
+                Maintenance interrupt disabled.
+
+                1
+                Maintenance interrupt signaled while the List registers contain no interrupts in the pending state.
+
+                When this register has an architecturally-defined reset value, this field resets to 0.
+                                 */
                 GICH.set_hcr(hcr | (1 << 3));
             }
             return true;
@@ -1309,6 +1322,7 @@ impl Vgic {
             } else {
                 pendstate & !(1 << source) as u8
             };
+            // state changed ,the two state isn`t equal
             if (pendstate ^ new_pendstate) != 0 {
                 // cpu_priv[vcpu_id].sgis[vgic_int_id].pend = new_pendstate;
                 self.set_cpu_priv_sgis_pend(vcpu_id, vgic_int_id, new_pendstate);

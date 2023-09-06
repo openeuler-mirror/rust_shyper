@@ -159,9 +159,11 @@ impl VgicInt {
         }
     }
 
-    fn priv_new(id: usize, owner: Vcpu, targets: usize, enabled: bool, redist: usize) -> VgicInt {
+    fn priv_new(id: usize, owner: Vcpu, targets: usize, enabled: bool, redist: usize, cfg: usize) -> VgicInt {
         VgicInt {
-            inner: Arc::new(Mutex::new(VgicIntInner::priv_new(id, owner, targets, enabled, redist))),
+            inner: Arc::new(Mutex::new(VgicIntInner::priv_new(
+                id, owner, targets, enabled, redist, cfg,
+            ))),
             lock: Arc::new(Mutex::new(())),
         }
     }
@@ -223,7 +225,6 @@ impl VgicInt {
 
     fn clear_owner(&self) {
         let mut vgic_int = self.inner.lock();
-        // println!("clear owner get lock");
         vgic_int.owner = None;
     }
 
@@ -421,7 +422,7 @@ impl VgicIntInner {
         }
     }
 
-    fn priv_new(id: usize, owner: Vcpu, targets: usize, enabled: bool, redist: usize) -> VgicIntInner {
+    fn priv_new(id: usize, owner: Vcpu, targets: usize, enabled: bool, redist: usize, cfg: usize) -> VgicIntInner {
         VgicIntInner {
             owner: Some(owner),
             route: GICD_IROUTER_INV as u64,
@@ -434,7 +435,7 @@ impl VgicIntInner {
             state: IrqState::IrqSInactive,
             prio: 0xff,
             targets: targets as u8,
-            cfg: 0b10,
+            cfg: cfg as u8,
             in_pend: false,
             in_act: false,
         }
@@ -720,6 +721,7 @@ impl Vgic {
                                     1 << phys_id,
                                     int_id < GIC_SGIS_NUM,
                                     0,
+                                    0b0,
                                 ));
                                 // num1 += 1;
                             }
@@ -892,7 +894,7 @@ impl Vgic {
                 int_id: interrupt.id(),
                 val: val as u8,
             };
-            if ipi_send_msg(
+            if !ipi_send_msg(
                 interrupt.owner().unwrap().phys_id(),
                 IpiType::IpiTIntc,
                 IpiInnerMsg::Initc(m),
@@ -976,7 +978,10 @@ impl Vgic {
 
         let lr_state = bit_extract(lr_val, GICH_LR_STATE_OFF, GICH_LR_STATE_LEN);
         if lr_state != IrqState::IrqSInactive.to_num() {
+            println!("spilled need maintean");
             interrupt.set_state(IrqState::num_to_state(lr_state as usize));
+            
+            self.update_int_list(vcpu.clone(), interrupt.clone());
 
             if (interrupt.state().to_num() & IrqState::IrqSPend.to_num() != 0) && interrupt.enabled() {
                 let hcr = GICH.hcr();
@@ -996,6 +1001,12 @@ impl Vgic {
         let mut lr_ind = None;
 
         let elrsr = GICH.elrsr();
+        // println!(
+        //     "current_cpu:{} come here? gic_lrs:{} elrsr:{:x}",
+        //     current_cpu().id,
+        //     gic_lrs,
+        //     elrsr
+        // );
         //look for empty lr for using whit ICH_ELRSR_EL2
         for i in 0..gic_lrs {
             if bit_get(elrsr, i % 32) != 0 {
@@ -1003,6 +1014,19 @@ impl Vgic {
                 break;
             }
         }
+        // match lr_ind {
+        //     Some(idx) => {
+        //         println!(
+        //             "current_cpu:{} inter:{} come here? gic_lrs:{} elrsr:{:x} idx{}",
+        //             current_cpu().id,
+        //             interrupt.id(),
+        //             gic_lrs,
+        //             elrsr,
+        //             idx
+        //         );
+        //     }
+        //     None => {}
+        // }
 
         // if there is no empty then, replace one
         if lr_ind.is_none() {
@@ -1047,19 +1071,20 @@ impl Vgic {
             }
 
             if let Some(idx) = lr_ind {
-                let spilled_int = self
-                    .get_int(
-                        vcpu.clone(),
-                        bit_extract(GICH.lr(idx), GICH_LR_VID_OFF, GICH_LR_VID_LEN),
-                    )
-                    .unwrap();
-                let spilled_int_lock;
-                if spilled_int.id() != interrupt.id() {
-                    spilled_int_lock = spilled_int.lock.lock();
+                if let Some(spilled_int) = self.get_int(
+                    vcpu.clone(),
+                    bit_extract(GICH.lr(idx), GICH_LR_VID_OFF, GICH_LR_VID_LEN),
+                ) {
+                    if spilled_int.id() != interrupt.id() {
+                        let spilled_int_lock = spilled_int.lock.lock();
+                        self.remove_lr(vcpu.clone(), spilled_int.clone());
+                        vgic_int_yield_owner(vcpu.clone(), spilled_int.clone());
+                        drop(spilled_int_lock);
+                    } else {
+                        self.remove_lr(vcpu.clone(), spilled_int.clone());
+                        vgic_int_yield_owner(vcpu.clone(), spilled_int.clone());
+                    }
                 }
-                GICH.set_hcr(GICH.hcr() | GICH_HCR_NPIE_BIT);
-                self.remove_lr(vcpu.clone(), spilled_int.clone());
-                vgic_int_yield_owner(vcpu.clone(), spilled_int.clone());
             }
         }
 
@@ -1073,6 +1098,7 @@ impl Vgic {
                 // if vgic_get_state(interrupt) & IrqState::IrqSPend.to_num() != 0 {
                 let hcr = GICH.hcr();
                 //No Pending Interrupt Enable. Enables the signaling of a maintenance interrupt when there are no List registers with the State field set to 0b01
+                // then a maintance interrupt will come
                 GICH.set_hcr(hcr | GICH_HCR_NPIE_BIT);
                 // }
             }
@@ -1116,6 +1142,7 @@ impl Vgic {
             } else {
                 lr |= (state << GICH_LR_STATE_OFF) & GICH_LR_STATE_MSK;
             }
+            // i don`t konw why
             if GICD.state(int_id) != 2 {
                 gic_set_state(int_id, 2, current_cpu().id as u32);
             }
@@ -1139,11 +1166,19 @@ impl Vgic {
         self.set_cpu_priv_curr_lrs(vcpu_id, lr_ind, int_id as u16);
 
         GICH.set_lr(lr_ind, lr);
-
         self.update_int_list(vcpu, interrupt);
     }
 
     fn route(&self, vcpu: Vcpu, interrupt: VgicInt) {
+        // if interrupt.id() != 27 && interrupt.id() != 0 {
+        //     println!(
+        //         "cpu:{} id:{} state:{:?},enable:{}",
+        //         current_cpu().id,
+        //         interrupt.id(),
+        //         interrupt.state(),
+        //         interrupt.enabled()
+        //     );
+        // }
         if let IrqState::IrqSInactive = interrupt.state() {
             return;
         }
@@ -1165,7 +1200,7 @@ impl Vgic {
                 val: 0,
             };
             vgic_int_yield_owner(vcpu.clone(), interrupt.clone());
-            let trglist = vgic_int_ptarget_mask(interrupt) & !(1 << vcpu.id());
+            let trglist = vgic_int_ptarget_mask(interrupt) & !(1 << vcpu.phys_id());
             for i in 0..PLAT_DESC.cpu_desc.num as usize {
                 if trglist & (1 << i) != 0 {
                     ipi_send_msg(0, IpiType::IpiTIntc, IpiInnerMsg::Initc(ipi_msg));
@@ -1252,7 +1287,6 @@ impl Vgic {
                 }
                 self.route(vcpu.clone(), interrupt.clone());
                 vgic_int_yield_owner(vcpu, interrupt.clone());
-                drop(interrupt_lock);
             } else {
                 let vm_id = vcpu.vm_id();
 
@@ -1266,7 +1300,6 @@ impl Vgic {
                     Some(owner) => {
                         let phys_id = owner.phys_id();
 
-                        drop(interrupt_lock);
                         if !ipi_send_msg(phys_id, IpiType::IpiTIntc, IpiInnerMsg::Initc(m)) {
                             println!(
                                 "vgicd_set_pend: Failed to send ipi message, target {} type {}",
@@ -1283,6 +1316,7 @@ impl Vgic {
                     }
                 }
             }
+            drop(interrupt_lock);
         }
     }
 
@@ -1572,7 +1606,7 @@ impl Vgic {
         if emu_ctx.write {
             let prev_ctlr = self.vgicd_ctlr();
             let idx = emu_ctx.reg;
-            self.set_vgicd_ctlr(current_cpu().get_gpr(idx) as u32 & 0x2);
+            self.set_vgicd_ctlr(current_cpu().get_gpr(idx) as u32 & 0x2 | GICD_CTLR_ARE_NS_BIT as u32);
             if prev_ctlr ^ self.vgicd_ctlr() != 0 {
                 let enable = self.vgicd_ctlr() != 0;
                 let hcr = GICH.hcr();
@@ -1887,30 +1921,30 @@ impl Vgic {
         let idx = emu_ctx.reg;
         let mut val = if emu_ctx.write { current_cpu().get_gpr(idx) } else { 0 };
 
-        // let vm_id = active_vm_id();
-        // let vm = match active_vm() {
-        //     Some(vm) => vm,
-        //     None => {
-        //         panic!("emu_ipriorityr_access: current vcpu.vm is none");
-        //     }
-        // };
-        // let mut vm_has_interrupt_flag = false;
+        let vm_id = active_vm_id();
+        let vm = match active_vm() {
+            Some(vm) => vm,
+            None => {
+                panic!("emu_ipriorityr_access: current vcpu.vm is none");
+            }
+        };
+        let mut vm_has_interrupt_flag = false;
 
-        // if emu_ctx.write {
-        //     for i in 0..emu_ctx.width {
-        //         if vm.has_interrupt(first_int + i) || vm.emu_has_interrupt(first_int + i) {
-        //             vm_has_interrupt_flag = true;
-        //             break;
-        //         }
-        //     }
-        //     if first_int >= 16 && !vm_has_interrupt_flag {
-        //         // warn!(
-        //         //     "emu_ipriorityr_access: vm[{}] does not have interrupt {}",
-        //         //     vm_id, first_int
-        //         // );
-        //         return;
-        //     }
-        // }
+        if emu_ctx.write {
+            for i in 0..emu_ctx.width {
+                if vm.has_interrupt(first_int + i) || vm.emu_has_interrupt(first_int + i) {
+                    vm_has_interrupt_flag = true;
+                    break;
+                }
+            }
+            if first_int >= 16 && !vm_has_interrupt_flag {
+                warn!(
+                    "emu_ipriorityr_access: vm[{}] does not have interrupt {}",
+                    vm_id, first_int
+                );
+                return;
+            }
+        }
 
         if emu_ctx.write {
             for i in 0..emu_ctx.width {
@@ -1932,13 +1966,8 @@ impl Vgic {
 
     fn handle_trapped_eoir(&self, vcpu: Vcpu) {
         let gic_lrs = gic_lrs();
-        let mut lr_idx_opt = bitmap_find_nth(
-            GICH.eisr() as usize | ((GICH.eisr() as usize) << 32),
-            0,
-            gic_lrs,
-            1,
-            true,
-        );
+        // eisr():Interrupt Controller End of Interrupt Status Register
+        let mut lr_idx_opt = bitmap_find_nth(GICH.eisr() as usize, 0, gic_lrs, 1, true);
 
         while lr_idx_opt.is_some() {
             let lr_idx = lr_idx_opt.unwrap();
@@ -1960,13 +1989,7 @@ impl Vgic {
                     unimplemented!();
                 }
             }
-            lr_idx_opt = bitmap_find_nth(
-                GICH.eisr() as usize | ((GICH.eisr() as usize) << 32),
-                0,
-                gic_lrs,
-                1,
-                true,
-            );
+            lr_idx_opt = bitmap_find_nth(GICH.eisr() as usize, 0, gic_lrs, 1, true);
         }
     }
 
@@ -1982,7 +2005,7 @@ impl Vgic {
             }
         }
 
-        let mut lr_idx_opt = bitmap_find_nth(GICH.elrsr() | (GICH.elrsr() << 32), 0, gic_lrs, 1, true);
+        let mut lr_idx_opt = bitmap_find_nth(GICH.elrsr(), 0, gic_lrs, 1, true);
 
         while lr_idx_opt.is_some() {
             let mut interrupt_opt: Option<VgicInt> = None;
@@ -2021,7 +2044,7 @@ impl Vgic {
                 }
             }
 
-            lr_idx_opt = bitmap_find_nth(GICH.elrsr() | (GICH.elrsr() << 32), 0, gic_lrs, 1, true);
+            lr_idx_opt = bitmap_find_nth(GICH.elrsr(), 0, gic_lrs, 1, true);
         }
     }
 
@@ -2111,17 +2134,13 @@ fn vgic_int_has_other_target(interrupt: VgicInt) -> bool {
 
 fn vgic_int_ptarget_mask(interrupt: VgicInt) -> usize {
     if vgic_broadcast(interrupt.clone()) {
-        current_cpu()
-            .active_vcpu
-            .clone()
-            .unwrap()
-            .vm()
-            .clone()
-            .unwrap()
-            .cpu_num()
-            & !(1 << current_cpu().id)
+        current_cpu().active_vcpu.clone().unwrap().vm().clone().unwrap().ncpu() & !(1 << current_cpu().id)
     } else {
-        (1 << interrupt.phys_route()) as usize
+        if cfg!(feature = "rk3588") {
+            (1 << (interrupt.phys_route() >> 8)) as usize
+        } else {
+            (1 << interrupt.phys_route()) as usize
+        }
     }
 }
 
@@ -2251,6 +2270,8 @@ pub fn gic_maintenance_handler(_arg: usize) {
         vgic.handle_trapped_eoir(current_cpu().active_vcpu.clone().unwrap());
     }
 
+    // NP:List Register Entry Not Present. 
+    // U: underflow Zero or one of the List register entries are marked as a valid interrupt, that is, if the corresponding ICH_LR<n>_EL2.State bits do not equal 0x0.
     if misr & (GICH_MISR_NP as u32 | GICH_MISR_U as u32) != 0 {
         vgic.refill_lrs(current_cpu().active_vcpu.clone().unwrap());
     }
@@ -2290,7 +2311,8 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     let vgic = vm.vgic();
     let vgicd_offset_prefix = offset >> 7;
     // println!(
-    //     "emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
+    //     "current_cpu:{} emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
+    //     current_cpu().id,
     //     emu_ctx.address,
     //     emu_ctx.write,
     //     current_cpu().get_gpr(emu_ctx.reg)
@@ -2341,6 +2363,15 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
                     } else if offset >= 0x800 && offset < 0xc00 {
                         vgic.emu_razwi(emu_ctx);
                     } else if offset >= 0x6000 && offset < 0x8000 {
+                        // println!(
+                        //     "Currrent_cpu:{} emu_irouter_access: val:{}",
+                        //     current_cpu().id,
+                        //     if emu_ctx.write {
+                        //         current_cpu().get_gpr(emu_ctx.reg)
+                        //     } else {
+                        //         0
+                        //     }
+                        // );
                         vgic.emu_irouter_access(emu_ctx);
                     } else if offset >= 0xffd0 && offset < 0x10000 {
                         //ffe8 is GICD_PIDR2, Peripheral ID2 Register
@@ -2504,7 +2535,7 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
         | ((((vm.cpu_num() - 1) << GICD_TYPER_CPUNUM_OFF) & GICD_TYPER_CPUNUM_MSK) as u32)
         | (((9 << GICD_TYPER_IDBITS_OFF) & GICD_TYPER_IDBITS_MSK) as u32);
     vgicd.iidr = GICD.iidr();
-    // vgicd.ctlr = GICD.ctlr();
+    vgicd.ctlr = 0b10;
 
     for i in 0..GIC_SPI_MAX {
         vgicd.interrupts.push(VgicInt::new(i));
@@ -2513,24 +2544,11 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
 
     for i in 0..vgic_cpu_num {
         let mut typer = i << GICR_TYPER_PRCNUM_OFF;
-        let vmpidr = i | 1 << 31;
+        let vmpidr = vm.vcpu(i).unwrap().get_vmpidr();
         typer |= (vmpidr & MPIDR_AFF_MSK) << GICR_TYPER_AFFVAL_OFF;
-        typer |= ((((i == (vm.cpu_num() - 1)) as usize) != 0) as usize) << GICR_TYPER_LAST_OFF;
+        typer |= !!((i == (vm.cpu_num() - 1)) as usize) << GICR_TYPER_LAST_OFF;
 
-        let mut cpu_priv = VgicCpuPriv::new(typer, 0, GICR.get_iidr(current_cpu().id as u32) as usize);
-
-        for int_idx in 0..GIC_PRIVINT_NUM {
-            let vcpu = vm.vcpu(i).unwrap();
-            let phys_id = vcpu.phys_id();
-
-            cpu_priv.interrupts.push(VgicInt::priv_new(
-                int_idx,
-                vcpu.clone(),
-                1 << phys_id,
-                false,
-                vm.vcpu(i).unwrap().phys_id(),
-            ));
-        }
+        let mut cpu_priv = VgicCpuPriv::new(typer, 0, GICR.get_iidr(vm.vcpu(i).unwrap().phys_id()) as usize);
 
         for int_idx in 0..GIC_SGIS_NUM {
             let vcpu = vm.vcpu(i).unwrap();
@@ -2541,12 +2559,28 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
                 vcpu.clone(),
                 1 << phys_id,
                 true,
-                vm.vcpu(i).unwrap().phys_id(),
+                phys_id,
+                0b10,
+            ));
+        }
+
+        for int_idx in GIC_SGIS_NUM..GIC_PRIVINT_NUM {
+            let vcpu = vm.vcpu(i).unwrap();
+            let phys_id = vcpu.phys_id();
+
+            cpu_priv.interrupts.push(VgicInt::priv_new(
+                int_idx,
+                vcpu.clone(),
+                1 << phys_id,
+                false,
+                phys_id,
+                0b0,
             ));
         }
 
         let mut vgic_cpu_priv = vgic.cpu_priv.lock();
         vgic_cpu_priv.push(cpu_priv);
+        drop(vgic_cpu_priv);
     }
 
     vm.set_emu_devs(emu_dev_id, EmuDevs::Vgic(vgic.clone()));
@@ -2607,7 +2641,8 @@ pub fn emul_vgicr_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     let offset = emu_ctx.address & 0x1ffff;
 
     // println!(
-    //     "emul_vgicr_handler addr:{:#x} reg {:?} offset {:#x} is write:{}, val:{:#x}",
+    //     "current_cpu:{}emul_vgicr_handler addr:{:#x} reg {:?} offset {:#x} is write:{}, val:{:#x}",
+    //     current_cpu().id,
     //     emu_ctx.address,
     //     GicrRegs::from(offset),
     //     offset,
@@ -2720,7 +2755,7 @@ pub fn vgic_icc_sgir_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
         let int_id = bit_extract(sgir, GICC_SGIR_SGIINTID_OFF, GICC_SGIR_SGIINTID_LEN);
         let targtlist;
         if (sgir & GICC_SGIR_IRM_BIT) != 0 {
-            targtlist = current_cpu().active_vcpu.clone().unwrap().vm().unwrap().cpu_num() & !(1 << current_cpu().id);
+            targtlist = current_cpu().active_vcpu.clone().unwrap().vm().unwrap().ncpu() & !(1 << current_cpu().id);
         } else {
             let vm = match current_cpu().active_vcpu.clone().unwrap().vm() {
                 Some(tvm) => tvm,
@@ -2729,8 +2764,12 @@ pub fn vgic_icc_sgir_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
                 }
             };
             let mut vtarget = sgir & 0xffff;
-            if sgir & 0x10000 != 0 {
-                vtarget = vtarget << PLAT_DESC.arch_desc.cluster_desc.core_num[0];
+            // maybe surrort more cluseter (aff1 != 0)
+            if sgir & 0xff0000 != 0 {
+                if cfg!(feature = "rk3588") {
+                    //for rk3588 the aff1
+                    vtarget = vtarget << ((sgir & 0xf0000) >> 16);
+                }
             }
             targtlist = vgic_target_translate(vm, vtarget as u32, true) as usize;
         }

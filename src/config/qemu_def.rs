@@ -24,11 +24,6 @@ use super::{
     VMDtbDevConfigList,
 };
 
-#[cfg(feature = "gicv3")]
-pub const ICC_SRE_ADDR: usize =
-    ((3 & 0x3) << 20) | ((5 & 0x7) << 17) | ((0 & 0x7) << 14) | ((12 & 0xf) << 10) | ((12 & 0xf) << 1);
-pub const ICC_SGIR_ADDR: usize =
-    ((3 & 0x3) << 20) | ((5 & 0x7) << 17) | ((0 & 0x7) << 14) | ((12 & 0xf) << 10) | ((11 & 0xf) << 1);
 
 #[rustfmt::skip]
 pub fn mvm_config_init() {
@@ -61,7 +56,7 @@ pub fn mvm_config_init() {
         #[cfg(feature="gicv3")]
         VmEmulatedDeviceConfig {
             name: Some(String::from("icc_sre")),
-            base_ipa: ICC_SRE_ADDR,
+            base_ipa: Platform::ICC_SRE_ADDR,
             length: 2,
             irq_id: 0,
             cfg_list: Vec::new(),
@@ -71,7 +66,7 @@ pub fn mvm_config_init() {
         #[cfg(feature="gicv3")]
         VmEmulatedDeviceConfig {
             name: Some(String::from("icc_sgir")),
-            base_ipa: ICC_SGIR_ADDR,
+            base_ipa: Platform::ICC_SGIR_ADDR,
             length: 2,
             irq_id: 0,
             cfg_list: Vec::new(),
@@ -173,8 +168,6 @@ pub fn mvm_config_init() {
         cpu: Arc::new(Mutex::new(VmCpuConfig {
             num: 1,
             allocate_bitmap: 0b0001,
-            // num: 1,
-            // allocate_bitmap: 0b1,
             master: 0,
         })),
         memory: Arc::new(Mutex::new(VmMemoryConfig {

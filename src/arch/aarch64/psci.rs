@@ -16,18 +16,44 @@ use crate::kernel::CpuState;
 use crate::kernel::IpiMessage;
 use crate::vmm::vmm_reboot;
 use crate::kernel::vm;
+use smccc::psci::{LowestAffinityLevel, SuspendMode};
+use smccc::{self, Smc};
 
 use super::smc::smc_call;
 
 pub const PSCI_VERSION: usize = 0x84000000;
-pub const PSCI_MIG_INFO_TYPE: usize = 0x84000006;
-pub const PSCI_FEATURES: usize = 0x8400000A;
-// pub const PSCI_CPU_SUSPEND_AARCH64: usize = 0xc4000001;
-// pub const PSCI_CPU_OFF: usize = 0xc4000002;
-pub const PSCI_CPU_ON_AARCH64: usize = 0xc4000003;
-pub const PSCI_AFFINITY_INFO_AARCH64: usize = 0xc4000004;
+pub const PSCI_CPU_SUSPEND_32: usize = 0x84000001;
+pub const PSCI_CPU_SUSPEND_64: usize = 0xC4000001;
+pub const PSCI_CPU_OFF: usize = 0x84000002;
+pub const PSCI_CPU_ON_32: usize = 0x84000003;
+pub const PSCI_CPU_ON_64: usize = 0xC4000003;
+pub const PSCI_AFFINITY_INFO_32: usize = 0x84000004;
+pub const PSCI_AFFINITY_INFO_64: usize = 0xC4000004;
+pub const PSCI_MIGRATE_32: usize = 0x84000005;
+pub const PSCI_MIGRATE_64: usize = 0xC4000005;
+pub const PSCI_MIGRATE_INFO_TYPE: usize = 0x84000006;
+pub const PSCI_MIGRATE_INFO_UP_CPU_32: usize = 0x84000007;
+pub const PSCI_MIGRATE_INFO_UP_CPU_64: usize = 0xC4000007;
 pub const PSCI_SYSTEM_OFF: usize = 0x84000008;
 pub const PSCI_SYSTEM_RESET: usize = 0x84000009;
+pub const PSCI_SYSTEM_RESET2_32: usize = 0x84000012;
+pub const PSCI_SYSTEM_RESET2_64: usize = 0xC4000012;
+pub const PSCI_MEM_PROTECT: usize = 0x84000013;
+pub const PSCI_MEM_PROTECT_CHECK_RANGE_32: usize = 0x84000014;
+pub const PSCI_MEM_PROTECT_CHECK_RANGE_64: usize = 0xC4000014;
+pub const PSCI_FEATURES: usize = 0x8400000A;
+pub const PSCI_CPU_FREEZE: usize = 0x8400000B;
+pub const PSCI_CPU_DEFAULT_SUSPEND_32: usize = 0x8400000C;
+pub const PSCI_CPU_DEFAULT_SUSPEND_64: usize = 0xC400000C;
+pub const PSCI_NODE_HW_STATE_32: usize = 0x8400000D;
+pub const PSCI_NODE_HW_STATE_64: usize = 0xC400000D;
+pub const PSCI_SYSTEM_SUSPEND_32: usize = 0x8400000E;
+pub const PSCI_SYSTEM_SUSPEND_64: usize = 0xC400000E;
+pub const PSCI_SET_SUSPEND_MODE: usize = 0x8400000F;
+pub const PSCI_STAT_RESIDENCY_32: usize = 0x84000010;
+pub const PSCI_STAT_RESIDENCY_64: usize = 0xC4000010;
+pub const PSCI_STAT_COUNT_32: usize = 0x84000011;
+pub const PSCI_STAT_COUNT_64: usize = 0xC4000011;
 
 pub const PSCI_E_SUCCESS: usize = 0;
 pub const PSCI_E_NOT_SUPPORTED: usize = usize::MAX;
@@ -59,9 +85,7 @@ pub fn power_arch_vm_shutdown_secondary_cores(vm: Vm) {
 }
 
 pub fn power_arch_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
-    // println!("power_arch_cpu_on, {:x}, {:x}, {:x}", PSCI_CPU_ON_AARCH64, mpidr, entry);
-    let r = smc_call(PSCI_CPU_ON_AARCH64, mpidr, entry, ctx).0;
-    // println!("smc return val is {}", r);
+    let r = smc_call(PSCI_CPU_ON_64, mpidr, entry, ctx).0;
     r
 }
 
@@ -93,24 +117,80 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
     let r;
     match fid {
         PSCI_VERSION => {
-            r = smc_call(PSCI_VERSION, 0, 0, 0).0;
+            r = smccc::psci::version::<Smc>() as usize;
         }
-        PSCI_MIG_INFO_TYPE => {
-            r = PSCI_TOS_NOT_PRESENT_MP;
+        PSCI_CPU_SUSPEND_64 => {
+            r = match smccc::psci::cpu_suspend::<Smc>(x1 as u32, x2 as u64, x3 as u64) {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            };
         }
-        PSCI_CPU_ON_AARCH64 => {
+        PSCI_CPU_OFF => {
+            r = match smccc::psci::cpu_off::<Smc>() {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            };
+        }
+        PSCI_CPU_ON_64 => {
             r = psci_guest_cpu_on(x1, x2, x3);
         }
-        PSCI_AFFINITY_INFO_AARCH64 => {
-            r = 0;
+        PSCI_AFFINITY_INFO_64 => {
+            let lowest = match x2 {
+                0 => LowestAffinityLevel::All,
+                1 => LowestAffinityLevel::Aff0Ignored,
+                2 => LowestAffinityLevel::Aff0Aff1Ignored,
+                _ => LowestAffinityLevel::Aff0Aff1Aff2Ignored,
+            };
+            r = match smccc::psci::affinity_info::<Smc>(x1 as u64, lowest) {
+                Ok(affinity_state) => affinity_state as usize,
+                _ => PSCI_E_NOT_SUPPORTED,
+            };
+        }
+        PSCI_MIGRATE_64 => {
+            r = match smccc::psci::migrate::<Smc>(x1 as u64) {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_MIGRATE_INFO_TYPE => {
+            r = match smccc::psci::migrate_info_type::<Smc>() {
+                Ok(migrate_type) => migrate_type as usize,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_MIGRATE_INFO_UP_CPU_64 => {
+            r = smccc::psci::migrate_info_up_cpu::<Smc>() as usize;
+        }
+        PSCI_SYSTEM_OFF => {
+            r = match smccc::psci::system_off::<Smc>() {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
         }
         PSCI_SYSTEM_RESET => {
             psci_guest_sys_reset();
-            r = 0;
+            r = match smccc::psci::system_reset::<Smc>() {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
         }
-        //SMC32: Trusted OS Calls UID
-        0xbf00ff01 => {
-            r = smc_call(0xbf00ff01, x1, x2, x3).0;
+        PSCI_SYSTEM_RESET2_64 => {
+            r = match smccc::psci::system_reset2::<Smc>(x1 as u32, x2 as u64) {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_MEM_PROTECT => {
+            r = match smccc::psci::mem_protect::<Smc>(x1 != 0) {
+                Ok(res) => res as usize,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_MEM_PROTECT_CHECK_RANGE_64 => {
+            r = match smccc::psci::mem_protect_check_range::<Smc>(x1 as u64, x2 as u64) {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
         }
         #[cfg(feature = "tx2")]
         TEGRA_SIP_GET_ACTMON_CLK_COUNTERS => {
@@ -124,14 +204,52 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             current_cpu().set_gpr(1, result.1);
             current_cpu().set_gpr(2, result.2);
         }
-        PSCI_FEATURES => match x1 {
-            PSCI_VERSION | PSCI_CPU_ON_AARCH64 | PSCI_FEATURES => {
-                r = PSCI_E_SUCCESS;
+        PSCI_FEATURES => {
+            r = match smccc::psci::psci_features::<Smc>(x1 as u32) {
+                Ok(res) => res as usize,
+                _ => PSCI_E_NOT_SUPPORTED,
             }
-            _ => {
-                r = PSCI_E_NOT_SUPPORTED;
+        }
+        PSCI_CPU_FREEZE => {
+            r = match smccc::psci::cpu_freeze::<Smc>() {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
             }
-        },
+        }
+        PSCI_CPU_DEFAULT_SUSPEND_64 => {
+            r = match smccc::psci::cpu_default_suspend::<Smc>(x1 as u64, x2 as u64) {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_NODE_HW_STATE_64 => {
+            r = match smccc::psci::node_hw_state::<Smc>(x1 as u64, x2 as u32) {
+                Ok(res) => res as usize,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_SYSTEM_SUSPEND_64 => {
+            r = match smccc::psci::system_suspend::<Smc>(x1 as u64, x2 as u64) {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_SET_SUSPEND_MODE => {
+            let mode = match x1 {
+                0 => SuspendMode::PlatformCoordinated,
+                _ => SuspendMode::OsInitiated,
+            };
+            r = match smccc::psci::set_suspend_mode::<Smc>(mode) {
+                Ok(()) => PSCI_E_SUCCESS,
+                _ => PSCI_E_NOT_SUPPORTED,
+            }
+        }
+        PSCI_STAT_RESIDENCY_64 => {
+            r = smccc::psci::stat_residency::<Smc>(x1 as u64, x2 as u32) as usize;
+        }
+        PSCI_STAT_COUNT_64 => {
+            r = smccc::psci::stat_count::<Smc>(x1 as u64, x2 as u32) as usize;
+        }
         _ => {
             // unimplemented!();
             return false;
@@ -240,7 +358,11 @@ pub fn psci_ipi_handler(msg: &IpiMessage) {
 
 #[cfg(feature = "secondary_start")]
 pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
-    let vcpu_id = vmpidr & 0xff;
+    let vcpu_id = if cfg!(feature = "rk3588") {
+        vmpidr >> 8
+    } else {
+        vmpidr & 0xff
+    };
     let vm = active_vm().unwrap();
     let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
 
@@ -298,7 +420,11 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
 
 #[cfg(not(feature = "secondary_start"))]
 pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
-    let vcpu_id = vmpidr & 0xff;
+    let vcpu_id = if cfg!(feature = "rk3588") {
+        vmpidr >> 8
+    } else {
+        vmpidr & 0xff
+    };
     let vm = active_vm().unwrap();
     let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
 

@@ -36,7 +36,7 @@ pub fn mvm_config_init() {
             name: Some(String::from("interrupt-controller@fe600000")),
             base_ipa: Platform::GICD_BASE,
             length: 0x10000,
-            irq_id: 0,
+            irq_id: 25,
             cfg_list: Vec::new(),
             emu_type: EmuDeviceType::EmuDeviceTGicd,
             mediated: false,
@@ -44,10 +44,28 @@ pub fn mvm_config_init() {
         VmEmulatedDeviceConfig {
             name: Some(String::from("GICR@0xfe680000")),
             base_ipa: Platform::GICR_BASE,
-            length: 0x20000 * PLAT_DESC.cpu_desc.num,
-            irq_id: 0,
+            length: 0x100000,
+            irq_id: 25,
             cfg_list: Vec::new(),
             emu_type: EmuDeviceType::EmuDeviceTGICR,
+            mediated: false,
+        },
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("ICC_SRE_ADDR")),
+            base_ipa: Platform::ICC_SRE_ADDR,
+            length: 0,
+            irq_id: 25,
+            cfg_list: Vec::new(),
+            emu_type: EmuDeviceType::EmuDeviceTICCSRE,
+            mediated: false,
+        },
+        VmEmulatedDeviceConfig {
+            name: Some(String::from("ICC_SGIR_ADDR")),
+            base_ipa: Platform::ICC_SGIR_ADDR,
+            length: 0 ,
+            irq_id: 25,
+            cfg_list: Vec::new(),
+            emu_type: EmuDeviceType::EmuDeviceTSGIR,
             mediated: false,
         },
         // VmEmulatedDeviceConfig {
@@ -63,25 +81,25 @@ pub fn mvm_config_init() {
             name: Some(String::from("virtio_net@f0000000")),
             base_ipa: 0xf000_0000,
             length: 0x1000,
-            irq_id: 499,
+            irq_id: 45,
             cfg_list: vec![0x74, 0x56, 0xaa, 0x0f, 0x47, 0xd0],
             emu_type: EmuDeviceType::EmuDeviceTVirtioNet,
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@f0010000")),
+            name: Some(String::from("virtio_console@f0001000")),
             base_ipa: 0xf000_1000,
             length: 0x1000,
-            irq_id: 500,
+            irq_id: 46,
             cfg_list: vec![1, 0xf0140000],
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@f0100000")),
+            name: Some(String::from("virtio_console@f0002000")),
             base_ipa: 0xf000_2000,
             length: 0x1000,
-            irq_id: 500,
+            irq_id: 47,
             cfg_list: vec![2, 0xf001_1000],
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
@@ -202,6 +220,7 @@ pub fn mvm_config_init() {
         360, //feb20000.spi
         365, //debug
         370, //ttyS7
+        384,
         423, //rockchip_usb2phy
         424, //rockchip_usb2phy
         425, //rockchip_usb2phy
@@ -244,8 +263,8 @@ pub fn mvm_config_init() {
             region: vm_region,
         })),
         cpu: Arc::new(Mutex::new(VmCpuConfig {
-            num: 1,
-            allocate_bitmap: 0b1,
+            num: 2,
+            allocate_bitmap: 0b11,
             master: 0,
         })),
         vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config })),

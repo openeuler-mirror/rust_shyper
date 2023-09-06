@@ -108,7 +108,6 @@ pub fn cpu_sched_init() {
 }
 
 pub fn restore_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
-    // println!("restore_vcpu_gic");
     match cur_vcpu {
         None => {
             // println!("None cur vmid trgt {}", trgt_vcpu.vm_id());

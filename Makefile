@@ -33,6 +33,9 @@ endif
 
 .PHONY: build qemu qemu_gicv3 tx2 pi4 tx2_update tx2_ramdisk rk3588_release gdb clean
 
+clippy:
+	cargo clippy ${CARGO_FLAGS}
+
 build:
 	cargo build ${CARGO_FLAGS}
 	bash linkimg.sh -i ${TARGET_DIR}/${RELOCATE_IMAGE} -m ${VM0_IMAGE_PATH} \
@@ -72,7 +75,7 @@ QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
 	-kernel ${TARGET_DIR}/${IMAGE}.bin
 
 QEMU_COMMON_OPTIONS_GICV3 = -machine virt,virtualization=on,gic-version=3\
-	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
+	-m 8g -cpu cortex-a55 -smp 4 -display none -global virtio-mmio.force-legacy=false\
 	-kernel ${TARGET_DIR}/${IMAGE}.bin
 
 QEMU_SERIAL_OPTIONS = -serial mon:stdio #\
@@ -93,6 +96,10 @@ run_gicv3: qemu_gicv3
 
 debug: qemu
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
+		-s -S
+
+debug_gicv3: qemu_gicv3
+	${QEMU} ${QEMU_COMMON_OPTIONS_GICV3} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
 		-s -S
 
 gdb:
