@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 
 use spin::Mutex;
 
-use crate::board::{Platform, PlatOperation, PLAT_DESC};
+use crate::board::{Platform, PlatOperation};
 use crate::config::vm_cfg_add_vm_entry;
 use crate::device::EmuDeviceType;
 use crate::kernel::{HVC_IRQ, INTERRUPT_IRQ_GUEST_TIMER, VmType};

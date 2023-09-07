@@ -67,7 +67,7 @@ pi4:
 	# bash pi4_upload_release
 
 rk3588:
-	$(MAKE) build BOARD=rk3588 TEXT_START=0x00400000 VM0_IMAGE_PATH="./image/Image-5.10.110-no-drm"
+	$(MAKE) build BOARD=rk3588 TEXT_START=0x00400000 VM0_IMAGE_PATH="./image/Image-5.10.110-rk3588-trimmed"
 	bash rk3588_upload_release
 
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\

@@ -978,7 +978,6 @@ impl Vgic {
 
         let lr_state = bit_extract(lr_val, GICH_LR_STATE_OFF, GICH_LR_STATE_LEN);
         if lr_state != IrqState::IrqSInactive.to_num() {
-            println!("spilled need maintean");
             interrupt.set_state(IrqState::num_to_state(lr_state as usize));
 
             self.update_int_list(vcpu.clone(), interrupt.clone());
@@ -1095,12 +1094,12 @@ impl Vgic {
             }
             None => {
                 // turn on maintenance interrupts
-                // if vgic_get_state(interrupt) & IrqState::IrqSPend.to_num() != 0 {
-                let hcr = GICH.hcr();
-                //No Pending Interrupt Enable. Enables the signaling of a maintenance interrupt when there are no List registers with the State field set to 0b01
-                // then a maintance interrupt will come
-                GICH.set_hcr(hcr | GICH_HCR_NPIE_BIT);
-                // }
+                if vgic_get_state(interrupt) & IrqState::IrqSPend.to_num() != 0 {
+                    let hcr = GICH.hcr();
+                    //No Pending Interrupt Enable. Enables the signaling of a maintenance interrupt when there are no List registers with the State field set to 0b01
+                    // then a maintance interrupt will come
+                    GICH.set_hcr(hcr | GICH_HCR_NPIE_BIT);
+                }
             }
         }
 
@@ -2310,7 +2309,7 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
 
     let vgic = vm.vgic();
     let vgicd_offset_prefix = offset >> 7;
-    // println!(
+    // trace!(
     //     "current_cpu:{} emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
     //     current_cpu().id,
     //     emu_ctx.address,
@@ -2440,6 +2439,7 @@ pub fn partial_passthrough_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext
 }
 
 pub fn vgic_ipi_handler(msg: &IpiMessage) {
+    println!("cpu:{} hehre?", current_cpu().id);
     let vm_id;
     let int_id;
     let val;
