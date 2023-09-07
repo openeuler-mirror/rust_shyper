@@ -9,9 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use core::fmt;
-use core::fmt::Display;
 use core::mem::size_of;
-use core::ops::Deref;
 
 use alloc::collections::BTreeSet;
 
@@ -1021,60 +1019,64 @@ pub struct GicState {
     pub priv_ipriorityr: [u32; GIC_PRIVINT_NUM / 4],
     pub hcr: usize,
     pub lr: [u32; GIC_LIST_REGS_NUM],
+    igrpen1: usize,
 }
 
 impl GicState {
     pub fn default() -> GicState {
         GicState {
-            ctlr: 0,
+            ctlr: GICC_CTLR_EOIMODE_BIT as u32,
+            igrpen1: GICC_IGRPEN_EL1_ENB_BIT,
             pmr: 0xff,
             bpr: 0,
             iar: 0,
             eoir: 0,
             rpr: 0,
             hppir: 0,
-            priv_isenabler: 0,
+            priv_isenabler: GICR[current_cpu().id].ISENABLER0.get(),
             priv_ipriorityr: [u32::MAX; GIC_PRIVINT_NUM / 4],
-            hcr: 0,
+            hcr: 0b100,
             lr: [0; GIC_LIST_REGS_NUM],
         }
     }
 
     pub fn save_state(&mut self) {
+        info!("cpu:{} save_state", current_cpu().id);
         mrs!(self.pmr, ICC_PMR_EL1, "x");
         mrs!(self.bpr, ICC_BPR1_EL1, "x");
         mrs!(self.hcr, ICH_HCR_EL2);
         mrs!(self.ctlr, ICC_CTLR_EL1, "x");
+        mrs!(self.igrpen1, ICC_IGRPEN1_EL1, "x");
         self.priv_isenabler = GICR[current_cpu().id].ISENABLER0.get();
 
-        // for i in 0..GIC_PRIVINT_NUM / 4 {
-        //     self.priv_ipriorityr[i] = GICR.get_prio(i, current_cpu().id as u32) as u32;
-        // }
+        for i in 0..GIC_PRIVINT_NUM / 4 {
+            self.priv_ipriorityr[i] = GICR.get_prio(i, current_cpu().id as u32) as u32;
+        }
         for i in 0..gich_lrs_num() {
             self.lr[i] = GICH.lr(i) as u32;
         }
     }
 
     pub fn restore_state(&self) {
+        println!("cpu:{} restore_state", current_cpu().id);
         msr!(ICC_SRE_EL2, 0b1, "x");
 
         unsafe {
             core::arch::asm!("isb");
         }
 
-        msr!(ICC_CTLR_EL1, GICC_CTLR_EOIMODE_BIT);
-        msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
+        msr!(ICC_CTLR_EL1, self.ctlr, "x");
+        msr!(ICC_IGRPEN1_EL1, self.igrpen1, "x");
         msr!(ICC_PMR_EL1, self.pmr, "x");
         msr!(ICC_BPR1_EL1, self.bpr, "x");
-        let hcr = mrsr!(ICH_HCR_EL2);
-        msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
+        msr!(ICH_HCR_EL2, self.hcr);
         GICR[current_cpu().id].ISENABLER0.set(self.priv_isenabler);
 
         //todo: have bug to fix, it maybe the problem of PRIORITYR promote
-        // for i in 0..(GIC_PRIVINT_NUM / 4) {
-        //     GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
-        //     // GICR[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
-        // }
+        for i in 0..(GIC_PRIVINT_NUM / 4) {
+            GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
+            // GICR[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
+        }
 
         for i in 0..gich_lrs_num() {
             GICH.set_lr(i, self.lr[i] as usize);
