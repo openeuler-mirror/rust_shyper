@@ -18,7 +18,6 @@ use crate::arch::{
     GICH, VmContext, timer_arch_get_counter,
 };
 #[cfg(feature = "gicv3")]
-use crate::arch::{GIC_PRIVINT_NUM};
 use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
@@ -458,18 +457,6 @@ impl VcpuInner {
             self.vm_ctx.gic_state.lr[i] = 0;
         }
         self.vm_ctx.gic_state.hcr |= 1 << 2; // init hcr
-
-        #[cfg(feature = "gicv3")]
-        {
-            self.vm_ctx.gic_state.pmr = 0xff; //init PMR
-            self.vm_ctx.gic_state.bpr = 0x0; //init BPR1
-            self.vm_ctx.gic_state.priv_isenabler = 0; // init ISENABLE
-            for i in 0..GIC_PRIVINT_NUM / 4 {
-                self.vm_ctx.gic_state.priv_ipriorityr[i] = u32::MAX; //init priority
-            }
-            // msr!(ICC_CTLR_EL1, GICC_CTLR_EOIMODE_BIT);
-            // msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
-        }
     }
 
     fn context_ext_regs_store(&mut self) {

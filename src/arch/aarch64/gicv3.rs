@@ -755,6 +755,10 @@ impl GicRedistributor {
     pub fn get_igroup(&self, gicr_id: u32) -> u32 {
         self[gicr_id as usize].IGROUPR0.get()
     }
+
+    pub fn priority(&self, gicr_id: usize, index: usize) -> u32 {
+        self[gicr_id].IPRIORITYR[index].get()
+    }
 }
 
 register_structs! {
@@ -1024,7 +1028,7 @@ pub struct GicState {
 
 impl GicState {
     pub fn default() -> GicState {
-        GicState {
+        let mut r = GicState {
             ctlr: GICC_CTLR_EOIMODE_BIT as u32,
             igrpen1: GICC_IGRPEN_EL1_ENB_BIT,
             pmr: 0xff,
@@ -1037,11 +1041,12 @@ impl GicState {
             priv_ipriorityr: [u32::MAX; GIC_PRIVINT_NUM / 4],
             hcr: 0b100,
             lr: [0; GIC_LIST_REGS_NUM],
-        }
+        };
+        r.save_state();
+        r
     }
 
     pub fn save_state(&mut self) {
-        info!("cpu:{} save_state", current_cpu().id);
         mrs!(self.pmr, ICC_PMR_EL1, "x");
         mrs!(self.bpr, ICC_BPR1_EL1, "x");
         mrs!(self.hcr, ICH_HCR_EL2);
@@ -1050,7 +1055,7 @@ impl GicState {
         self.priv_isenabler = GICR[current_cpu().id].ISENABLER0.get();
 
         for i in 0..GIC_PRIVINT_NUM / 4 {
-            self.priv_ipriorityr[i] = GICR.get_prio(i, current_cpu().id as u32) as u32;
+            self.priv_ipriorityr[i] = GICR.priority(current_cpu().id, i);
         }
         for i in 0..gich_lrs_num() {
             self.lr[i] = GICH.lr(i) as u32;
@@ -1058,7 +1063,6 @@ impl GicState {
     }
 
     pub fn restore_state(&self) {
-        println!("cpu:{} restore_state", current_cpu().id);
         msr!(ICC_SRE_EL2, 0b1, "x");
 
         unsafe {
