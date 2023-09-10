@@ -736,6 +736,10 @@ impl GicRedistributor {
         self[gicr_id as usize].ISENABLER0.get()
     }
 
+    pub fn get_typer(&self, gicr_id: usize) -> u64 {
+        self[gicr_id].TYPER.get()
+    }
+
     pub fn get_iidr(&self, gicr_id: usize) -> u32 {
         self[gicr_id].IIDR.get()
     }
@@ -1053,12 +1057,17 @@ impl GicState {
         mrs!(self.ctlr, ICC_CTLR_EL1, "x");
         mrs!(self.igrpen1, ICC_IGRPEN1_EL1, "x");
         self.priv_isenabler = GICR[current_cpu().id].ISENABLER0.get();
+        let elrsr = GICH.elrsr();
 
         for i in 0..GIC_PRIVINT_NUM / 4 {
             self.priv_ipriorityr[i] = GICR.priority(current_cpu().id, i);
         }
         for i in 0..gich_lrs_num() {
-            self.lr[i] = GICH.lr(i) as u32;
+            if elrsr & 1 << i == 0 {
+                self.lr[i] = GICH.lr(i) as u32;
+            } else {
+                self.lr[i] = 0;
+            }
         }
     }
 
@@ -1069,17 +1078,15 @@ impl GicState {
             core::arch::asm!("isb");
         }
 
-        msr!(ICC_CTLR_EL1, self.ctlr, "x");
-        msr!(ICC_IGRPEN1_EL1, self.igrpen1, "x");
+        msr!(ICC_CTLR_EL1, self.ctlr | GICC_CTLR_EOIMODE_BIT as u32, "x");
+        msr!(ICC_IGRPEN1_EL1, self.igrpen1 | GICC_IGRPEN_EL1_ENB_BIT, "x");
         msr!(ICC_PMR_EL1, self.pmr, "x");
         msr!(ICC_BPR1_EL1, self.bpr, "x");
         msr!(ICH_HCR_EL2, self.hcr);
         GICR[current_cpu().id].ISENABLER0.set(self.priv_isenabler);
 
-        //todo: have bug to fix, it maybe the problem of PRIORITYR promote
         for i in 0..(GIC_PRIVINT_NUM / 4) {
             GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
-            // GICR[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
         }
 
         for i in 0..gich_lrs_num() {

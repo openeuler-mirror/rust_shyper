@@ -16,7 +16,7 @@ use core::mem::size_of;
 use spin::Mutex;
 
 use crate::arch::{PAGE_SIZE, PTE_S2_FIELD_AP_RO, PTE_S2_NORMAL, PTE_S2_RO};
-use crate::arch::{GICC_CTLR_EN_BIT, GICC_CTLR_EOIMODE_BIT};
+use crate::arch::GICC_CTLR_EN_BIT;
 use crate::arch::PageTable;
 use crate::arch::Vgic;
 use crate::board::{Platform, PlatOperation};
@@ -301,7 +301,8 @@ impl Vm {
                 vcpu.set_gich_ctlr((GICC_CTLR_EN_BIT) as u32);
                 vcpu.set_hcr(0x80080001); // HCR_EL2_GIC_PASSTHROUGH_VAL
             } else {
-                vcpu.set_gich_ctlr((GICC_CTLR_EN_BIT | GICC_CTLR_EOIMODE_BIT) as u32);
+                #[cfg(not(feature = "gicv3"))]
+                vcpu.set_gich_ctlr((GICC_CTLR_EN_BIT | crate::arch::GICC_CTLR_EOIMODENS_BIT) as u32);
                 vcpu.set_hcr(0x80080019);
             }
         }

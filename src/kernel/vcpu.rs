@@ -17,7 +17,6 @@ use crate::arch::{
     ContextFrame, ContextFrameTrait, cpu_interrupt_unmask, GIC_INTS_MAX, GIC_SGI_REGS_NUM, GICC, GicContext, GICD,
     GICH, VmContext, timer_arch_get_counter,
 };
-#[cfg(feature = "gicv3")]
 use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
