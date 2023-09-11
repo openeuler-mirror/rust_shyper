@@ -13,7 +13,6 @@
 #![feature(core_intrinsics)]
 #![feature(default_alloc_error_handler)]
 #![feature(alloc_error_handler)]
-#![feature(const_btree_new)]
 #![feature(drain_filter)]
 #![feature(inline_const)]
 #![feature(naked_functions)]
