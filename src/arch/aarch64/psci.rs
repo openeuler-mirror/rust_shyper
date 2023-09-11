@@ -120,10 +120,14 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             r = smccc::psci::version::<Smc>() as usize;
         }
         PSCI_CPU_SUSPEND_64 => {
-            r = match smccc::psci::cpu_suspend::<Smc>(x1 as u32, x2 as u64, x3 as u64) {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            };
+            // ideally we would emmit a standby request to PSCI (currently, ATF)
+            // but when we do, we do not wake up on interrupts
+            // on the current development target rk3588, should understand why
+            // so, in this way we directly emmit a wfi
+            unsafe {
+                core::arch::asm!("wfi");
+            }
+            r = PSCI_E_SUCCESS;
         }
         PSCI_CPU_OFF => {
             r = match smccc::psci::cpu_off::<Smc>() {
@@ -264,7 +268,6 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
 }
 
 fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
-    // println!("psci vcpu on， entry {:x}, ctx {:x}", entry, ctx);
     if vcpu.phys_id() != current_cpu().id {
         panic!(
             "cannot psci on vcpu on cpu {} by cpu {}",
@@ -273,7 +276,6 @@ fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
         );
     }
     current_cpu().cpu_state = CpuState::CpuRun;
-    // let vcpu = current_cpu().active_vcpu.clone().unwrap();
     vcpu.reset_context();
     vcpu.set_gpr(0, ctx);
     vcpu.set_elr(entry);

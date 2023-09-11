@@ -868,6 +868,7 @@ impl Vgic {
 
     fn vgicd_set_irouter(&self, vcpu: Vcpu, int_id: usize, val: usize) {
         let interrupt = self.get_int(vcpu.clone(), int_id).unwrap();
+        interrupt.lock.lock();
 
         if vgic_int_get_owner(vcpu.clone(), interrupt.clone()) {
             self.remove_lr(vcpu.clone(), interrupt.clone());
@@ -1560,7 +1561,7 @@ impl Vgic {
         if emu_ctx.write {
             self.vgicd_set_irouter(current_cpu().active_vcpu.clone().unwrap(), first_int, val);
         } else {
-            if gic_is_priv(first_int) {
+            if !gic_is_priv(first_int) {
                 val = self
                     .get_int(current_cpu().active_vcpu.clone().unwrap(), first_int)
                     .unwrap()
@@ -2001,6 +2002,7 @@ impl Vgic {
 
             match interrupt_opt {
                 Some(interrupt) => {
+                    interrupt.lock.lock();
                     vgic_int_get_owner(vcpu.clone(), interrupt.clone());
                     self.write_lr(vcpu.clone(), interrupt.clone(), lr_idx_opt.unwrap());
                     has_pending = has_pending || prev_pend;
