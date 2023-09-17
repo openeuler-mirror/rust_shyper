@@ -1,0 +1,19 @@
+#!/bin/bash
+set -ex
+
+export VM0_IMAGE_PATH="${1:-image/Image-5.10.110-rk3588-trimmed}"
+TFTP_IMAGE_NAME="${2:-ImageCWM_rk3588}"
+
+# Use 0x480000 to avoid relocation in u-boot.
+# If load to 0x400000, u-boot will need to be modified around 'DO RELOCATE:'.
+export TEXT_START="${3:-0x00480000}"
+
+make BOARD=rk3588
+
+bin="./target/aarch64/release"
+tftp="tx2@192.168.106.153:/tftp"
+
+aarch64-none-elf-objcopy ${bin}/rust_shyper -O binary ${bin}/shyper.bin
+mkimage -n shyper -A arm64 -O linux -T kernel -C none -a $TEXT_START -e $TEXT_START \
+-d ${bin}/shyper.bin ${bin}/shyperImage
+scp ${bin}/shyperImage ${tftp}/$TFTP_IMAGE_NAME

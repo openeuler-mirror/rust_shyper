@@ -18,7 +18,7 @@ OBJCOPY = ${TOOLCHAIN}-objcopy
 LD = ${TOOLCHAIN}-ld
 
 TEXT_START ?= 0x83000000
-VM0_IMAGE_PATH="./image/L4T"
+VM0_IMAGE_PATH ?= "./image/L4T"
 
 RELOCATE_IMAGE=librust_shyper.a
 IMAGE=rust_shyper
@@ -64,10 +64,6 @@ tx2_update:
 pi4:
 	$(MAKE) build BOARD=pi4 TEXT_START=0xf0080000 VM0_IMAGE_PATH="./image/Image_pi4_5.4.83_tlb"
 	# bash pi4_upload_release
-
-rk3588:
-	$(MAKE) build BOARD=rk3588 TEXT_START=0x00400000 VM0_IMAGE_PATH="./image/Image-5.10.110-rk3588-trimmed"
-	bash rk3588_upload_release
 
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
 	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\

@@ -11,12 +11,11 @@ Cargo.lock
 
 run*
 /.vscode
-upload_release
+/*upload_release
 upload
 upload_update
 .idea
 build/
-pi4_upload_release
 *.img
 *.dts
 *.dtb
