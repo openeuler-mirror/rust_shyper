@@ -11,7 +11,7 @@
 use crate::arch::{
     exception_data_abort_access_is_sign_ext, exception_data_abort_access_is_write, exception_data_abort_access_reg,
     exception_data_abort_access_reg_width, exception_data_abort_access_width, exception_data_abort_handleable,
-    exception_data_abort_is_permission_fault, exception_data_abort_is_translate_fault, exception_iss,
+    exception_data_abort_is_permission_fault, exception_data_abort_is_translate_fault, exception_iss, smc_call,
 };
 use crate::arch::{exception_esr, exception_fault_addr};
 use crate::arch::exception_next_instruction_step;
@@ -102,7 +102,7 @@ pub fn smc_handler() {
 
     if !smc_guest_handler(fid, x1, x2, x3) {
         warn!("smc_handler: unknown fid 0x{:x}", fid);
-        current_cpu().set_gpr(0, 0);
+        current_cpu().set_gpr(0, usize::MAX);
     }
 
     let elr = current_cpu().get_elr();
