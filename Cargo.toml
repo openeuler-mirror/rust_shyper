@@ -39,6 +39,9 @@ log = { version = "0.4", features = [
 spin = { version = "0.9.4", features = ["use_ticket_mutex"] }
 cortex-a = "7.4.0"
 buddy_system_allocator = "0.8.0"
+memoffset = { version = "0.8", default-features = false, features = [
+    "unstable_const",
+] }
 
 [dependencies.tock-registers]
 version = "0.7.0"
@@ -60,3 +63,4 @@ update = []
 ramdisk = []
 static-config = []
 lvl4 = []
+secondary_start = []

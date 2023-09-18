@@ -491,7 +491,7 @@ pub fn init_gicv3_config_for_vm1() {
         // cfg_list: vec![DISK_PARTITION_2_START, DISK_PARTITION_2_SIZE],
         // cfg_list: vec![0, 8388608],
         // cfg_list: vec![0, 67108864i], // 32G
-        cfg_list: vec![0, 209715200/25], // 100G
+        cfg_list: vec![0, 209715200 / 25], // 100G
         emu_type: EmuDeviceType::EmuDeviceTVirtioBlk,
         mediated: true,
     });

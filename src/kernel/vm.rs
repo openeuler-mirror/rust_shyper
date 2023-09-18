@@ -683,6 +683,11 @@ impl Vm {
         false
     }
 
+    pub fn vcpuid_to_vcpu(&self, vcpuid: usize) -> Option<Vcpu> {
+        let inner = self.inner.lock();
+        inner.vcpu_list.iter().find(|vcpu| vcpu.id() == vcpuid).cloned()
+    }
+
     pub fn vcpuid_to_pcpuid(&self, vcpuid: usize) -> Result<usize, ()> {
         let vm_inner = self.inner.lock();
         if vcpuid < vm_inner.cpu_num {

@@ -138,6 +138,23 @@ pub trait PlatOperation {
 
     fn cpuif_to_cpuid(cpuif: usize) -> usize;
 
+    // should not add any println!()
+    fn mpidr2cpuid(mpidr: usize) -> usize {
+        use crate::board::PLAT_DESC;
+        let mpidr = mpidr | 0x8000_0000;
+        for i in 0..PLAT_DESC.cpu_desc.num {
+            if mpidr == PLAT_DESC.cpu_desc.core_list[i].mpidr {
+                return i;
+            }
+        }
+        return usize::MAX;
+    }
+
+    fn cpuid2mpidr(cpuid: usize) -> usize {
+        use crate::board::PLAT_DESC;
+        return PLAT_DESC.cpu_desc.core_list[cpuid].mpidr;
+    }
+
     fn blk_init();
 
     fn blk_read(sector: usize, count: usize, buf: usize);

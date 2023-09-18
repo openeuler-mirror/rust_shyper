@@ -32,6 +32,7 @@ pub use self::vcpu::*;
 pub use self::vgic::*;
 #[cfg(feature = "gicv3")]
 pub use self::vgicv3::*;
+pub use self::start::*;
 
 #[macro_use]
 mod regs;
@@ -51,6 +52,7 @@ mod page_table;
 mod psci;
 mod smc;
 mod smmu;
+mod start;
 mod sync;
 mod timer;
 mod tlb;

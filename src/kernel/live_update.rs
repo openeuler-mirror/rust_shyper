@@ -540,6 +540,7 @@ pub fn cpu_if_update(src_cpu_if: &Mutex<Vec<CpuIf>>) {
                 IpiInnerMsg::Power(power) => IpiInnerMsg::Power(power),
                 IpiInnerMsg::EnternetMsg(eth_msg) => IpiInnerMsg::EnternetMsg(eth_msg),
                 IpiInnerMsg::VmmMsg(vmm_msg) => IpiInnerMsg::VmmMsg(vmm_msg),
+                IpiInnerMsg::VcpuMsg(vmm_msg) => IpiInnerMsg::VcpuMsg(vmm_msg),
                 IpiInnerMsg::MediatedMsg(mediated_msg) => {
                     let mmio_id = mediated_msg.blk.id();
                     let vm_id = mediated_msg.src_id;

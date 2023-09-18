@@ -78,8 +78,11 @@ QEMU_COMMON_OPTIONS_GICV3 = -machine virt,virtualization=on,gic-version=3\
 QEMU_SERIAL_OPTIONS = -serial mon:stdio #\
 	-serial telnet:localhost:12345,server
 
-QEMU_NETWORK_OPTIONS = -netdev tap,id=tap0,ifname=tap0,script=no,downscript=no -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=tap0
+# QEMU_NETWORK_OPTIONS = -netdev tap,id=tap0,ifname=tap0,script=no,downscript=no -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=tap0
 #/home/cwm/c-hyper/syberx-hypervisor/build/shyper_qemuv3.bin
+
+QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=n0
+
 QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.25
 
 run: qemu

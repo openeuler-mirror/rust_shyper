@@ -32,7 +32,13 @@ impl log::Log for SimpleLogger {
                 Level::Debug => "[D]",
                 Level::Trace => "[T]",
             };
-            println!("{}[{}] {}", level, record.target(), record.args());
+            println!(
+                "{}>{}[{}] {}",
+                level,
+                crate::kernel::current_cpu().id,
+                record.target(),
+                record.args()
+            );
         }
     }
 

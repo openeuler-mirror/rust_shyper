@@ -16,6 +16,9 @@
 #![feature(const_btree_new)]
 #![feature(drain_filter)]
 #![feature(inline_const)]
+#![feature(naked_functions)]
+#![feature(asm_sym)]
+#![feature(asm_const)]
 #![allow(unused_doc_comments)]
 #![allow(special_module_name)]
 
@@ -25,6 +28,8 @@ extern crate fdt;
 #[macro_use]
 // extern crate lazy_static;
 extern crate log;
+#[macro_use]
+extern crate memoffset;
 
 // extern crate rlibc;
 
@@ -33,7 +38,7 @@ use kernel::{cpu_init, interrupt_init, mem_init, timer_init};
 use mm::heap_init;
 use vmm::{vm_init, vmm_boot_vm};
 
-use crate::kernel::{cpu_sched_init, hvc_init, iommu_init, current_cpu};
+use crate::kernel::{cpu_sched_init, hvc_init, iommu_init};
 
 #[macro_export]
 macro_rules! print {
@@ -107,7 +112,10 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     if cpu_id == 0 {
         mediated_dev_init();
     }
+
+    #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();
+
     if cpu_id != 0 {
         crate::kernel::cpu_idle();
     }
@@ -118,4 +126,15 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     loop {
         core::hint::spin_loop();
     }
+}
+
+#[no_mangle]
+pub fn secondary_init(mpidr: usize) {
+    cpu_init();
+    interrupt_init();
+    timer_init();
+    cpu_sched_init();
+    use crate::arch::guest_cpu_on;
+    guest_cpu_on(mpidr);
+    loop {}
 }

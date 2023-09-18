@@ -171,11 +171,11 @@ pub fn mvm_config_init() {
             mediated_block_index: None,
         })),
         cpu: Arc::new(Mutex::new(VmCpuConfig {
-            // num: 4,
-            // allocate_bitmap: 0b1111,
             num: 1,
-            allocate_bitmap: 0b1,
-            master: -1,
+            allocate_bitmap: 0b0001,
+            // num: 1,
+            // allocate_bitmap: 0b1,
+            master: 0,
         })),
         memory: Arc::new(Mutex::new(VmMemoryConfig {
             region: vm_region,

@@ -454,7 +454,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             if config.emulated_device_list().len() > 0 {
                 for emu_cfg in config.emulated_device_list() {
                     match emu_cfg.emu_type {
-                        EmuDeviceTGicd => {
+                        EmuDeviceTGicd | EmuDeviceTGPPT => {
                             print!("trace fdt_setup_gic\n");
                             #[cfg(not(feature = "gicv3"))]
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
@@ -611,6 +611,7 @@ pub fn vmm_cpu_assign_vcpu(vm_id: usize) {
         current_cpu().vcpu_array.append_vcpu(vcpu);
     }
 
+    #[cfg(not(feature = "secondary_start"))]
     if cfg_cpu_num == vm.cpu_num() {
         vm.set_ready(true);
     }

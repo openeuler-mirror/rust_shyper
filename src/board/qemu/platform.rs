@@ -62,6 +62,17 @@ impl PlatOperation for QemuPlatform {
         cpuif
     }
 
+    // should not add any println!()
+    fn mpidr2cpuid(mpidr: usize) -> usize {
+        let mpidr = mpidr & !0x8000_0000;
+        for i in 0..PLAT_DESC.cpu_desc.num {
+            if mpidr == PLAT_DESC.cpu_desc.core_list[i].mpidr {
+                return i;
+            }
+        }
+        return usize::MAX;
+    }
+
     fn blk_init() {
         println!("Platform block driver init ok");
         crate::driver::virtio_blk_init();

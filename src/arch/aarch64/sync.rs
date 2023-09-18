@@ -70,7 +70,7 @@ pub fn data_abort_handler() {
         }
     }
     // if current_cpu().id == 1 {
-        // println!("emu_handler address:{:#x}", emu_ctx.address);
+    // println!("emu_handler address:{:#x}", emu_ctx.address);
     // }
     if !emu_handler(&emu_ctx) {
         active_vm().unwrap().show_pagetable(emu_ctx.address);
