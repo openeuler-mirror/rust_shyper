@@ -13,6 +13,7 @@ extern crate fdt_rs;
 // TODO: move these core name to device
 use crate::arch::GicDesc;
 use crate::arch::SmmuDesc;
+#[cfg(feature = "gicv3")]
 use crate::arch::sysreg_enc_addr;
 use crate::board::{
     PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
@@ -21,8 +22,6 @@ use crate::board::{
 use crate::board::SchedRule::RoundRobin;
 use crate::device::ARM_CORTEX_A57;
 use crate::driver::{read, write};
-
-use fdt_rs::base::DevTree;
 
 pub struct QemuPlatform;
 
