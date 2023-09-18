@@ -7,7 +7,7 @@ ARCH ?= aarch64
 PROFILE ?= release
 BOARD ?= tx2
 # features, seperate with comma `,`
-FEATURES =
+FEATURES ?=
 
 # Toolchain
 TOOLCHAIN=aarch64-none-elf

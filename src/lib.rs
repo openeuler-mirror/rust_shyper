@@ -16,7 +16,6 @@
 #![feature(drain_filter)]
 #![feature(inline_const)]
 #![feature(naked_functions)]
-#![feature(asm_sym)]
 #![feature(asm_const)]
 #![allow(unused_doc_comments)]
 #![allow(special_module_name)]

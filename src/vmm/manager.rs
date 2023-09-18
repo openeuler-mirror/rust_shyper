@@ -182,6 +182,7 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
     );
     #[cfg(not(feature = "secondary_start"))]
     while !vm.ready() {
+        use crate::utils::sleep;
         sleep(10);
     }
     println!("vmm_set_up_cpu: VM [{}] is ready", vm_id);

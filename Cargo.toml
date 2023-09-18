@@ -57,7 +57,6 @@ version = "x"
 default-features = false
 
 [features]
-default = ["rk3588"]
 tx2 = []
 qemu = []
 pi4 = []
