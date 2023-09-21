@@ -11,13 +11,13 @@
 use crate::arch::{
     exception_data_abort_access_is_sign_ext, exception_data_abort_access_is_write, exception_data_abort_access_reg,
     exception_data_abort_access_reg_width, exception_data_abort_access_width, exception_data_abort_handleable,
-    exception_data_abort_is_permission_fault, exception_data_abort_is_translate_fault, exception_iss,
+    exception_data_abort_is_permission_fault, exception_data_abort_is_translate_fault, exception_iss, smc_call,
 };
 use crate::arch::{exception_esr, exception_fault_addr};
 use crate::arch::exception_next_instruction_step;
 use crate::arch::smc_guest_handler;
 use crate::device::{emu_handler, EmuContext, emu_reg_handler};
-use crate::kernel::{active_vm, current_cpu, hvc_guest_handler, migrate_data_abort_handler};
+use crate::kernel::{active_vm, current_cpu, hvc_guest_handler, migrate_data_abort_handler, active_vm_id};
 
 pub const HVC_RETURN_REG: usize = 0;
 
@@ -101,8 +101,16 @@ pub fn smc_handler() {
     let x3 = current_cpu().get_gpr(3);
 
     if !smc_guest_handler(fid, x1, x2, x3) {
-        warn!("smc_handler: unknown fid 0x{:x}", fid);
-        current_cpu().set_gpr(0, usize::MAX);
+        if active_vm_id() == 0 {
+            let res = smc_call(fid, x1, x2, x3);
+            current_cpu().set_gpr(0, res.0);
+            current_cpu().set_gpr(1, res.1);
+            current_cpu().set_gpr(2, res.2);
+            current_cpu().set_gpr(3, res.3);
+        } else {
+            warn!("smc_handler: unknown fid 0x{:x}", fid);
+            current_cpu().set_gpr(0, usize::MAX);
+        }
     }
 
     let elr = current_cpu().get_elr();
