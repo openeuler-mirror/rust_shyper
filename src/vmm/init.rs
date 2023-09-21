@@ -15,7 +15,7 @@ use crate::arch::{
 };
 #[cfg(feature = "gicv3")]
 use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
-use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
+use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL, PTE_S2_NORMALNOCACHE};
 use crate::arch::PAGE_SIZE;
 #[cfg(not(feature = "gicv3"))]
 use crate::board::*;
@@ -374,10 +374,12 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
 
 fn vmm_init_passthrough_device(vm: Vm) -> bool {
     for region in vm.config().passthrough_device_regions() {
+        // TODO: specify the region property more accurately.
+        // 'dev_property' in a device region means cacheable here.
         if region.dev_property {
             vm.pt_map_range(region.ipa, region.length, region.pa, PTE_S2_DEVICE, true);
         } else {
-            vm.pt_map_range(region.ipa, region.length, region.pa, PTE_S2_NORMAL, true);
+            vm.pt_map_range(region.ipa, region.length, region.pa, PTE_S2_NORMALNOCACHE, true);
         }
 
         debug!(

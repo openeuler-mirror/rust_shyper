@@ -129,6 +129,7 @@ pub fn mvm_config_init() {
     pt_dev_config.regions = vec![
         // PassthroughRegion { ipa: 0xf0000000, pa: 0xf0000000, length: 0x10000000, dev_property: true },
         //all, exclude gic
+        PassthroughRegion { ipa: 0xfb000000, pa: 0xfb000000, length: 0x100_0000, dev_property: true },
         PassthroughRegion { ipa: 0xfc000000, pa: 0xfc000000, length: 0xfe600000 - 0xfc000000, dev_property: true },
         PassthroughRegion { ipa: 0xfe680000 + 0x100000, pa: 0xfe680000 + 0x100000, length: 0xfeb40000 - (0xfe680000 + 0x100000), dev_property: true },
         PassthroughRegion { ipa: 0xfebc0000, pa: 0xfebc0000, length: 0x10000_0000 - 0xfebc0000, dev_property: true },
@@ -136,7 +137,9 @@ pub fn mvm_config_init() {
         PassthroughRegion { ipa: 0xfeb50000, pa: 0xfeb50000, length: 0x100, dev_property: true },
         // serial@feba000——ttyS7
         PassthroughRegion { ipa: 0xfeba0000, pa: 0xfeba0000, length: 0x100, dev_property: true },
-        PassthroughRegion { ipa: 0x0, pa: 0x0, length: 0x200000, dev_property: true },
+        // dev_property: false means non-cachable here.
+        // See 'vmm_init_passthrough_device'.
+        PassthroughRegion { ipa: 0x0, pa: 0x0, length: 0x9400000, dev_property: false },
     ];
     pt_dev_config.irqs = vec![
         20,  //fsc_interrupt_int_n
