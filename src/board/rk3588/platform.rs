@@ -63,6 +63,10 @@ impl PlatOperation for Rk3588Platform {
         cpuif
     }
 
+    fn vmpidr2vcpuid(vmpidr: usize) -> usize {
+        (vmpidr >> 8) & 0xff
+    }
+
     fn blk_init() {
         todo!()
     }

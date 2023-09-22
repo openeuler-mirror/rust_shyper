@@ -360,11 +360,7 @@ pub fn psci_ipi_handler(msg: &IpiMessage) {
 
 #[cfg(feature = "secondary_start")]
 pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
-    let vcpu_id = if cfg!(feature = "rk3588") {
-        vmpidr >> 8
-    } else {
-        vmpidr & 0xff
-    };
+    let vcpu_id = Platform::vmpidr2vcpuid(vmpidr);
     let vm = active_vm().unwrap();
     let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
 
@@ -422,11 +418,7 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
 
 #[cfg(not(feature = "secondary_start"))]
 pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
-    let vcpu_id = if cfg!(feature = "rk3588") {
-        vmpidr >> 8
-    } else {
-        vmpidr & 0xff
-    };
+    let vcpu_id = Platform::vmpidr2vcpuid(vmpidr);
     let vm = active_vm().unwrap();
     let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
 
@@ -460,7 +452,7 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
 }
 
 pub fn psci_vm_maincpu_on(vmpidr: usize, entry: usize, ctx: usize, vm_id: usize) -> usize {
-    let vcpu_id = vmpidr & 0xff;
+    let vcpu_id = Platform::vmpidr2vcpuid(vmpidr);
     let vm = vm(vm_id).unwrap();
     let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
 

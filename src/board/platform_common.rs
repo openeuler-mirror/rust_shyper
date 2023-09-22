@@ -159,6 +159,10 @@ pub trait PlatOperation {
         return PLAT_DESC.cpu_desc.core_list[cpuid].mpidr;
     }
 
+    fn vmpidr2vcpuid(vmpidr: usize) -> usize {
+        vmpidr & 0xff
+    }
+
     fn blk_init();
 
     fn blk_read(sector: usize, count: usize, buf: usize);
