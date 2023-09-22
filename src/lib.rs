@@ -86,11 +86,12 @@ fn print_built_info() {
         env!("CARGO_PKG_VERSION")
     );
     println!(
-        "Built at {build_time} by {hostname}\nCompiler: {rustc_version}\nFeatures: {features:?}",
+        "Built at {build_time} by {hostname}\nCompiler: {rustc_version}\nFeatures: {features:?}\nCommit: {commit_hash}",
         build_time = env!("BUILD_TIME"),
         hostname = env!("HOSTNAME"),
+        commit_hash = env!("GIT_COMMIT"),
         rustc_version = built_info::RUSTC_VERSION,
-        features = built_info::FEATURES_LOWERCASE_STR
+        features = built_info::FEATURES_LOWERCASE_STR,
     );
 }
 

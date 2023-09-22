@@ -10,6 +10,7 @@
 
 use std::fs;
 use std::env::var;
+use std::process::Command;
 
 fn main() {
     let files = fs::read_dir("libfdt-binding").unwrap().into_iter().filter_map(|f| {
@@ -45,6 +46,10 @@ fn main() {
     };
     println!("cargo:rustc-link-arg=-Tlinkers/{arch}.ld");
     println!("cargo:rustc-link-arg=--defsym=TEXT_START={text_start}");
+
+    let commit_hash = Command::new("git").args(&["rev-parse", "HEAD"]).output().unwrap();
+    let commit_hash = String::from_utf8(commit_hash.stdout).unwrap();
+    println!("cargo:rustc-env=GIT_COMMIT={}", commit_hash.trim());
 
     // note: add error checking yourself.
     let build_time = chrono::offset::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
