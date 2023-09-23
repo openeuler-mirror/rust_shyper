@@ -20,10 +20,6 @@ use super::interface::*;
 #[cfg(feature = "tx2")]
 global_asm!(include_str!("start_update.S"));
 
-#[cfg(feature = "pi4")]
-#[cfg(not(feature = "update"))]
-global_asm!(include_str!("start_pi4.S"));
-
 register_bitfields! {u64,
     pub TableDescriptor [
         NEXT_LEVEL_TABLE_PPN OFFSET(12) NUMBITS(36) [], // [47:12]

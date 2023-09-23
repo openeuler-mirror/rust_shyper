@@ -13,7 +13,7 @@ use core::ptr;
 use crate::board::{Platform, PlatOperation};
 
 pub fn putc(byte: u8) {
-    const UART_BASE: usize = Platform::HYPERVISOR_UART_BASE + 0x8_0000_0000;
+    const UART_BASE: usize = Platform::HYPERVISOR_UART_BASE;
     // ns16550
     #[cfg(any(feature = "tx2", feature = "rk3588"))]
     unsafe {
