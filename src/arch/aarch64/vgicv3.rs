@@ -1001,12 +1001,6 @@ impl Vgic {
         let mut lr_ind = None;
 
         let elrsr = GICH.elrsr();
-        // println!(
-        //     "current_cpu:{} come here? gic_lrs:{} elrsr:{:x}",
-        //     current_cpu().id,
-        //     gic_lrs,
-        //     elrsr
-        // );
         //look for empty lr for using whit ICH_ELRSR_EL2
         for i in 0..gic_lrs {
             if bit_get(elrsr, i % 32) != 0 {
@@ -1014,19 +1008,6 @@ impl Vgic {
                 break;
             }
         }
-        // match lr_ind {
-        //     Some(idx) => {
-        //         println!(
-        //             "current_cpu:{} inter:{} come here? gic_lrs:{} elrsr:{:x} idx{}",
-        //             current_cpu().id,
-        //             interrupt.id(),
-        //             gic_lrs,
-        //             elrsr,
-        //             idx
-        //         );
-        //     }
-        //     None => {}
-        // }
 
         // if there is no empty then, replace one
         if lr_ind.is_none() {
@@ -1174,15 +1155,6 @@ impl Vgic {
     }
 
     fn route(&self, vcpu: Vcpu, interrupt: VgicInt) {
-        // if interrupt.id() != 27 && interrupt.id() != 0 {
-        //     println!(
-        //         "cpu:{} id:{} state:{:?},enable:{}",
-        //         current_cpu().id,
-        //         interrupt.id(),
-        //         interrupt.state(),
-        //         interrupt.enabled()
-        //     );
-        // }
         if let IrqState::IrqSInactive = interrupt.state() {
             return;
         }
@@ -1207,7 +1179,7 @@ impl Vgic {
             let trglist = vgic_int_ptarget_mask(interrupt) & !(1 << vcpu.phys_id());
             for i in 0..PLAT_DESC.cpu_desc.num as usize {
                 if trglist & (1 << i) != 0 {
-                    ipi_send_msg(0, IpiType::IpiTIntc, IpiInnerMsg::Initc(ipi_msg));
+                    ipi_send_msg(i, IpiType::IpiTIntc, IpiInnerMsg::Initc(ipi_msg));
                 }
             }
         }
@@ -2273,13 +2245,13 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
 
     let vgic = vm.vgic();
     let vgicd_offset_prefix = offset >> 7;
-    // trace!(
-    //     "current_cpu:{} emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
-    //     current_cpu().id,
-    //     emu_ctx.address,
-    //     emu_ctx.write,
-    //     current_cpu().get_gpr(emu_ctx.reg)
-    // );
+    trace!(
+        "current_cpu:{} emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
+        current_cpu().id,
+        emu_ctx.address,
+        emu_ctx.write,
+        current_cpu().get_gpr(emu_ctx.reg)
+    );
 
     match vgicd_offset_prefix {
         VGICD_REG_OFFSET_PREFIX_ISENABLER => {
@@ -2326,15 +2298,6 @@ pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
                     } else if offset >= 0x800 && offset < 0xc00 {
                         vgic.emu_razwi(emu_ctx);
                     } else if offset >= 0x6000 && offset < 0x8000 {
-                        // println!(
-                        //     "Currrent_cpu:{} emu_irouter_access: val:{}",
-                        //     current_cpu().id,
-                        //     if emu_ctx.write {
-                        //         current_cpu().get_gpr(emu_ctx.reg)
-                        //     } else {
-                        //         0
-                        //     }
-                        // );
                         vgic.emu_irouter_access(emu_ctx);
                     } else if offset >= 0xffd0 && offset < 0x10000 {
                         //ffe8 is GICD_PIDR2, Peripheral ID2 Register
@@ -2603,15 +2566,15 @@ pub fn emul_vgicr_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     let vgicr_id = vgicr_get_id(emu_ctx);
     let offset = emu_ctx.address & 0x1ffff;
 
-    // println!(
-    //     "current_cpu:{}emul_vgicr_handler addr:{:#x} reg {:?} offset {:#x} is write:{}, val:{:#x}",
-    //     current_cpu().id,
-    //     emu_ctx.address,
-    //     GicrRegs::from(offset),
-    //     offset,
-    //     emu_ctx.write,
-    //     current_cpu().get_gpr(emu_ctx.reg)
-    // );
+    trace!(
+        "current_cpu:{}emul_vgicr_handler addr:{:#x} reg {:?} offset {:#x} is write:{}, val:{:#x}",
+        current_cpu().id,
+        emu_ctx.address,
+        GicrRegs::from(offset),
+        offset,
+        emu_ctx.write,
+        current_cpu().get_gpr(emu_ctx.reg)
+    );
 
     match offset {
         VGICR_REG_OFFSET_CLTR => {
