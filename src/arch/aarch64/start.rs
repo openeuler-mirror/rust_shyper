@@ -5,8 +5,13 @@ use crate::arch::PAGE_SIZE;
 use crate::kernel::{cpu_map_self, CPU_STACK_OFFSET, CPU_STACK_SIZE};
 use crate::board::{PlatOperation, Platform};
 
-#[link_section = ".bss.stack"]
-pub static mut BOOT_STACK: [u8; PAGE_SIZE * 8] = [0; PAGE_SIZE * 8];
+// XXX: Fixed boot stack size limits the maximum number of cpus, see '_start'.
+const MAX_CPU: usize = 8;
+
+#[repr(align(8), C)]
+pub struct BootStack([u8; PAGE_SIZE * 2 * MAX_CPU]);
+
+pub static mut BOOT_STACK: BootStack = BootStack([0; PAGE_SIZE * 2 * MAX_CPU]);
 
 extern "C" {
     fn _bss_begin();
