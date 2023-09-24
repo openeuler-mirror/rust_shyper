@@ -85,6 +85,15 @@ pub fn power_arch_vm_shutdown_secondary_cores(vm: Vm) {
 }
 
 pub fn power_arch_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
+    use crate::kernel::CPU_IF_LIST;
+
+    let cpu_idx = Platform::mpidr2cpuid(mpidr);
+    let mut cpu_if_list = CPU_IF_LIST.lock();
+    if let Some(cpu_if) = cpu_if_list.get_mut(cpu_idx as usize) {
+        cpu_if.state_for_start = CpuState::CpuIdle;
+    }
+    drop(cpu_if_list);
+
     let r = smc_call(PSCI_CPU_ON_64, mpidr, entry, ctx).0;
     r
 }

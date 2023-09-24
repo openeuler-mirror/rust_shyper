@@ -308,12 +308,12 @@ pub fn active_vm_ncpu() -> usize {
 pub fn cpu_init() {
     let cpu_id = current_cpu().id;
     if cpu_id == 0 {
+        cpu_if_init();
         if cfg!(not(feature = "secondary_start")) {
             use crate::arch::power_arch_init;
             Platform::power_on_secondary_cores();
             power_arch_init();
         }
-        cpu_if_init();
     }
 
     let state = CpuState::CpuIdle;
