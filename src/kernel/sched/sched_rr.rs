@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::vec::Vec;
+use crate::arch::{ContextFrame, ContextFrameTrait};
 use crate::kernel::{Vcpu, Scheduler, SchedulerUpdate, current_cpu, VcpuState, timer_enable, vm};
 
 pub struct SchedulerRR {
@@ -37,6 +38,23 @@ impl Default for SchedulerRR {
     }
 }
 
+struct IdleThread {
+    pub ctx: ContextFrame,
+}
+
+fn idle_thread() {
+    loop {
+        cortex_a::asm::wfi();
+    }
+}
+
+static IDLE_THREAD: spin::Lazy<IdleThread> = spin::Lazy::new(|| {
+    let mut ctx = ContextFrame::new(idle_thread as usize, 0, 0);
+    use cortex_a::registers::SPSR_EL2;
+    ctx.spsr = (SPSR_EL2::M::EL2h + SPSR_EL2::F::Masked + SPSR_EL2::A::Masked + SPSR_EL2::D::Masked).value;
+    IdleThread { ctx }
+});
+
 impl Scheduler for SchedulerRR {
     fn init(&mut self) {}
 
@@ -47,7 +65,7 @@ impl Scheduler for SchedulerRR {
             let idx = (self.active_idx + i) % len;
             match queue.get(idx) {
                 Some(vcpu) => match vcpu.state() {
-                    VcpuState::VcpuInv => {}
+                    VcpuState::Invalid => {}
                     _ => {
                         self.active_idx = idx;
                         return Some(vcpu.clone());
@@ -60,8 +78,26 @@ impl Scheduler for SchedulerRR {
     }
 
     fn do_schedule(&mut self) {
-        let next_vcpu = self.next().unwrap();
-        current_cpu().schedule_to(next_vcpu);
+        // let next_vcpu = self.next().unwrap();
+        // current_cpu().schedule_to(next_vcpu);
+        if let Some(next_vcpu) = self.next() {
+            current_cpu().schedule_to(next_vcpu);
+        } else {
+            match current_cpu().ctx {
+                None => {
+                    error!("run_idle_thread: cpu{} ctx is NULL", current_cpu().id);
+                }
+                Some(ctx) => {
+                    info!("Core {} idle", current_cpu().id);
+                    current_cpu().cpu_state = crate::kernel::CpuState::CpuIdle;
+                    crate::utils::memcpy_safe(
+                        ctx as *const u8,
+                        &(IDLE_THREAD.ctx) as *const _ as *const u8,
+                        core::mem::size_of::<ContextFrame>(),
+                    );
+                }
+            }
+        }
     }
 
     fn sleep(&mut self, vcpu: Vcpu) {
@@ -82,14 +118,13 @@ impl Scheduler for SchedulerRR {
                     } else if idx == self.active_idx {
                         // cpu.active_vcpu need remove
                         current_cpu().set_active_vcpu(None);
-                        if !queue.is_empty() {
-                            need_schedule = true;
-                        }
+                        need_schedule = true;
                     }
                 }
                 None => {}
             }
         }
+        vcpu.set_state(VcpuState::Sleep);
         if self.queue.len() <= 1 {
             timer_enable(false);
         }
@@ -100,7 +135,7 @@ impl Scheduler for SchedulerRR {
 
     fn wakeup(&mut self, vcpu: Vcpu) {
         let queue = &mut self.queue;
-        vcpu.set_state(VcpuState::VcpuPend);
+        vcpu.set_state(VcpuState::Ready);
         queue.push(vcpu);
         if queue.len() > 1 {
             timer_enable(true);

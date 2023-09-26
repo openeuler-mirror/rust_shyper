@@ -19,6 +19,8 @@ use crate::kernel::{ipi_register, IpiType, Vm};
 use crate::utils::{BitAlloc, BitAlloc256, BitAlloc4K, BitMap};
 use crate::vmm::vmm_ipi_handler;
 
+use super::Scheduler;
+
 pub const INTERRUPT_NUM_MAX: usize = 1024;
 pub const INTERRUPT_IRQ_HYPERVISOR_TIMER: usize = 26;
 pub const INTERRUPT_IRQ_GUEST_TIMER: usize = 27;
@@ -155,6 +157,9 @@ pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize, _source: usize) {
         );
         return;
     }
+    if let VcpuState::Sleep = vcpu.state() {
+        current_cpu().scheduler().wakeup(vcpu.clone());
+    }
     interrupt_arch_vm_inject(vm, vcpu, int_id);
 }
 
@@ -199,7 +204,7 @@ pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
             match vcpu.vm() {
                 Some(vm) => {
                     if vm.has_interrupt(int_id) {
-                        if vcpu.state() as usize == VcpuState::VcpuInv as usize {
+                        if vcpu.state() as usize == VcpuState::Invalid as usize {
                             return true;
                         }
 

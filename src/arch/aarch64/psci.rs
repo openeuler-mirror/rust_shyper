@@ -120,13 +120,15 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             r = smccc::psci::version::<Smc>() as usize;
         }
         PSCI_CPU_SUSPEND_64 => {
-            // ideally we would emmit a standby request to PSCI (currently, ATF)
-            // but when we do, we do not wake up on interrupts
-            // on the current development target rk3588, should understand why
-            // so, in this way we directly emmit a wfi
-            unsafe {
-                core::arch::asm!("wfi");
-            }
+            info!(
+                "core {} vcpu {} suspend",
+                current_cpu().id,
+                current_cpu().active_vcpu.as_ref().unwrap().id()
+            );
+            current_cpu()
+                .scheduler()
+                .sleep(current_cpu().active_vcpu.clone().unwrap());
+            // crate::kernel::cpu_idle();
             r = PSCI_E_SUCCESS;
         }
         PSCI_CPU_OFF => {
@@ -209,8 +211,8 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             current_cpu().set_gpr(2, result.2);
         }
         PSCI_FEATURES => {
-            r = match smccc::psci::psci_features::<Smc>(x1 as u32) {
-                Ok(res) => res as usize,
+            r = match x1 {
+                PSCI_VERSION | PSCI_CPU_ON_64 | PSCI_FEATURES => PSCI_E_SUCCESS,
                 _ => PSCI_E_NOT_SUPPORTED,
             }
         }
@@ -321,7 +323,7 @@ pub fn psci_ipi_handler(msg: &IpiMessage) {
             };
             match power_msg.event {
                 PowerEvent::PsciIpiCpuOn => {
-                    if trgt_vcpu.state() as usize != VcpuState::VcpuInv as usize {
+                    if trgt_vcpu.state() as usize != VcpuState::Invalid as usize {
                         warn!(
                             "psci_ipi_handler: target VCPU {} in VM {} is already running",
                             trgt_vcpu.id(),

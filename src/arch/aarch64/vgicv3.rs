@@ -2440,7 +2440,7 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
                 }
             }
             InitcEvent::Vgicdinject => {
-                vgic.inject(trgt_vcpu.clone(), int_id as usize);
+                crate::kernel::interrupt_vm_inject(trgt_vcpu.vm().unwrap(), trgt_vcpu.clone(), int_id as usize, 0);
             }
             _ => {
                 println!("vgic_ipi_handler: core {} received unknown event", current_cpu().id)
