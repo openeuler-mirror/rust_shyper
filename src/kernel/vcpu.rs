@@ -26,9 +26,10 @@ use super::{CpuState, Vm, VmType};
 
 #[derive(Clone, Copy, Debug)]
 pub enum VcpuState {
-    VcpuInv = 0,
-    VcpuPend = 1,
-    VcpuAct = 2,
+    Invalid = 0,
+    Ready = 1,
+    Running = 2,
+    Sleep = 3,
 }
 
 #[derive(Clone)]
@@ -363,7 +364,7 @@ impl VcpuInner {
         VcpuInner {
             id: 0,
             phys_id: 0,
-            state: VcpuState::VcpuInv,
+            state: VcpuState::Invalid,
             vm: None,
             int_list: vec![],
             vcpu_ctx: ContextFrame::default(),

@@ -224,7 +224,7 @@ impl Cpu {
         match active_vcpu {
             None => {}
             Some(vcpu) => {
-                vcpu.set_state(VcpuState::VcpuAct);
+                vcpu.set_state(VcpuState::Running);
             }
         }
     }
@@ -239,7 +239,7 @@ impl Cpu {
                 //     prev_vcpu.vm_id(),
                 //     prev_vcpu.id()
                 // );
-                prev_vcpu.set_state(VcpuState::VcpuPend);
+                prev_vcpu.set_state(VcpuState::Ready);
                 prev_vcpu.context_vm_store();
             }
         }
