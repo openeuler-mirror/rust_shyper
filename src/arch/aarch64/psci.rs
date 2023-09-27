@@ -401,7 +401,7 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
 
         use crate::arch::BOOT_STACK;
         let entry_point = crate::arch::_secondary_start as usize;
-        let stack = unsafe { &BOOT_STACK as *const u8 as usize + 4096 * 2 * cpu_idx as usize };
+        let stack = unsafe { &BOOT_STACK as *const _ as usize + 4096 * 2 * cpu_idx as usize };
         r = power_arch_cpu_on(mpidr, entry_point, stack);
         println!(
             "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
