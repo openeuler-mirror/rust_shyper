@@ -158,6 +158,7 @@ pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize, _source: usize) {
         return;
     }
     if let VcpuState::Sleep = vcpu.state() {
+        current_cpu().cpu_state = crate::kernel::CpuState::CpuRun;
         current_cpu().scheduler().wakeup(vcpu.clone());
     }
     interrupt_arch_vm_inject(vm, vcpu, int_id);
@@ -204,7 +205,9 @@ pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
             match vcpu.vm() {
                 Some(vm) => {
                     if vm.has_interrupt(int_id) {
-                        if vcpu.state() as usize == VcpuState::Invalid as usize {
+                        if vcpu.state() as usize == VcpuState::Invalid as usize
+                            || vcpu.state() as usize == VcpuState::Sleep as usize
+                        {
                             return true;
                         }
 

@@ -129,15 +129,13 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             r = smccc::psci::version::<Smc>() as usize;
         }
         PSCI_CPU_SUSPEND_64 => {
-            info!(
-                "core {} vcpu {} suspend",
-                current_cpu().id,
-                current_cpu().active_vcpu.as_ref().unwrap().id()
-            );
+            // save the vcpu contex for resume
+            current_cpu().active_vcpu.clone().unwrap().reset_context();
+            current_cpu().active_vcpu.clone().unwrap().set_gpr(0, x3);
+            current_cpu().active_vcpu.clone().unwrap().set_elr(x2);
             current_cpu()
                 .scheduler()
                 .sleep(current_cpu().active_vcpu.clone().unwrap());
-            // crate::kernel::cpu_idle();
             r = PSCI_E_SUCCESS;
         }
         PSCI_CPU_OFF => {
