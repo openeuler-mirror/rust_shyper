@@ -56,6 +56,7 @@ pub const GICC_SGIR_SGIINTID_LEN: usize = 4;
 pub const GICC_IAR_ID_OFF: usize = 0;
 pub const GICC_IAR_ID_LEN: usize = 24;
 pub const GICC_SGIR_IRM_BIT: usize = 1 << 40;
+pub const GICC_SRE_EL2_ENABLE: usize = 1 << 3;
 
 // GICH BITS
 pub const GICH_LR_VID_OFF: usize = 0;
@@ -102,6 +103,8 @@ pub const GICH_MISR_NP: usize = 1 << 3;
 pub const GICH_MISR_LRPEN: usize = 1 << 2;
 const GICH_NUM_ELRSR: usize = 1;
 const GICH_VTR_MSK: usize = 0b11111;
+const GICH_VTR_PRIBITS_OFF: usize = 29;
+const GICH_VTR_PRIBITS_LEN: usize = 3;
 const GICH_PMR_MASK: usize = 0xff;
 const GICH_VMCR_VPMR_SHIFT: usize = 24;
 const GICC_IGRPEN1_EN: usize = 0x1;
@@ -821,8 +824,6 @@ impl GicCpuInterface {
     }
 
     fn init(&self) {
-        println!("real mpidr:{:#x}", mrsr!(MPIDR_EL1));
-
         msr!(ICC_SRE_EL2, 0b1, "x");
 
         unsafe {
@@ -836,23 +837,15 @@ impl GicCpuInterface {
         let pmr = mrsr!(ICC_PMR_EL1, "x");
         msr!(ICC_PMR_EL1, 0xff, "x");
         msr!(ICC_BPR1_EL1, 0x0, "x");
-        let ctrl = mrsr!(ICC_CTLR_EL1, "x");
-        println!("ctrl:{:x}", ctrl);
         msr!(ICC_CTLR_EL1, ICC_CTLR_EOIMODE_BIT, "x");
         let hcr = mrsr!(ICH_HCR_EL2);
         msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
-        let igrpen1 = mrsr!(ICC_IGRPEN1_EL1, "x");
         msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
 
         //set ICH_VMCR_EL2:Interrupt Controller Virtual Machine Control Register Enables the hypervisor to save and restore the virtual machine view of the GIC state.
         let mut ich_vmcr = (pmr & GICH_PMR_MASK as u32) << GICH_VMCR_VPMR_SHIFT as u32;
-        if igrpen1 & GICC_IGRPEN1_EN as u32 != 0 {
-            ich_vmcr |= GICH_VMCR_VENG1 as u32;
-        }
-        if ctrl & GICC_CTLR_EOIMODE_BIT as u32 != 0 {
-            ich_vmcr |= GICH_VMCR_VEOIM as u32;
-        }
-        msr!(ICH_VMCR_EL2, ich_vmcr as usize);
+        ich_vmcr |= GICH_VMCR_VENG1 as u32 | GICH_VMCR_VEOIM as u32;
+        msr!(ICH_VMCR_EL2, ich_vmcr, "x");
     }
 
     pub fn iar(&self) -> u32 {
@@ -973,9 +966,6 @@ impl GicHypervisorInterface {
             15 => mrs!(lrc, ICH_LR15_EL2),
             _ => lrc = 0,
         };
-        if lrc & (1 << 59) == 1 {
-            println!("get lr:{:#b}", lrc);
-        }
         lrc
     }
 
@@ -1019,78 +1009,143 @@ pub struct GicState {
     pub ctlr: u32,
     pub pmr: u32,
     pub bpr: u32,
-    pub iar: u32,
     pub eoir: u32,
     pub rpr: u32,
     pub hppir: u32,
     pub priv_isenabler: u32,
     pub priv_ipriorityr: [u32; GIC_PRIVINT_NUM / 4],
     pub hcr: usize,
-    pub lr: [u32; GIC_LIST_REGS_NUM],
+    pub lr: [usize; GIC_LIST_REGS_NUM],
+    pub apr0: [u32; 4],
+    pub apr1: [u32; 4],
     igrpen1: usize,
+    vmcr: u32,
+    nr_prio: u32, //Priority bits. The number of virtual priority bits implemented, minus one.
+    sre_el1: u32,
 }
 
 impl GicState {
     pub fn default() -> GicState {
+        let nr_prio = (((mrsr!(ICH_VTR_EL2) >> GICH_VTR_PRIBITS_OFF) & ((1 << GICH_VTR_PRIBITS_LEN) - 1)) + 1) as u32;
         let mut r = GicState {
             ctlr: GICC_CTLR_EOIMODE_BIT as u32,
             igrpen1: GICC_IGRPEN_EL1_ENB_BIT,
             pmr: 0xff,
             bpr: 0,
-            iar: 0,
             eoir: 0,
             rpr: 0,
             hppir: 0,
             priv_isenabler: GICR[current_cpu().id].ISENABLER0.get(),
             priv_ipriorityr: [u32::MAX; GIC_PRIVINT_NUM / 4],
-            hcr: 0b100,
+            hcr: 0b101,
             lr: [0; GIC_LIST_REGS_NUM],
+            vmcr: 0,
+            nr_prio,
+            apr0: [0; 4],
+            apr1: [0; 4],
+            sre_el1: 0,
         };
         r.save_state();
         r
     }
 
     pub fn save_state(&mut self) {
-        mrs!(self.pmr, ICC_PMR_EL1, "x");
-        mrs!(self.bpr, ICC_BPR1_EL1, "x");
-        mrs!(self.hcr, ICH_HCR_EL2);
-        mrs!(self.ctlr, ICC_CTLR_EL1, "x");
-        mrs!(self.igrpen1, ICC_IGRPEN1_EL1, "x");
-        self.priv_isenabler = GICR[current_cpu().id].ISENABLER0.get();
-        let elrsr = GICH.elrsr();
-
-        for i in 0..GIC_PRIVINT_NUM / 4 {
-            self.priv_ipriorityr[i] = GICR.priority(current_cpu().id, i);
-        }
+        mrs!(self.hcr, ICH_HCR_EL2, "x");
+        // save VMCR_EL2: save and restore the virtual machine view of the GIC state.
+        mrs!(self.vmcr, ICH_VMCR_EL2, "x");
+        // save ICH_AP1Rn_EL2: Provides information about Group 1 virtual active priorities for EL2.
+        // if some bit set 1:There is a Group 1 interrupt active with this priority level which has not undergone priority drop.
+        self.save_aprn_regs();
+        // save lr
         for i in 0..gich_lrs_num() {
-            if elrsr & 1 << i == 0 {
-                self.lr[i] = GICH.lr(i) as u32;
-            } else {
-                self.lr[i] = 0;
-            }
+            self.lr[i] = GICH.lr(i);
         }
+        // save ICC_SRE_EL1: EL1`s systregister use
+        mrs!(self.sre_el1, ICC_SRE_EL1, "x");
+        let icc_sre_el2_enable = mrsr!(ICC_SRE_EL2, "x");
+        msr!(ICC_SRE_EL2, icc_sre_el2_enable & !GICC_SRE_EL2_ENABLE as u32, "x");
     }
 
     pub fn restore_state(&self) {
-        msr!(ICC_SRE_EL2, 0b1, "x");
-
+        // make EL2 can use sysrem register
+        msr!(ICC_SRE_EL2, 0b1001, "x");
+        // restore ICC_SRE_EL1 for EL1
+        msr!(ICC_SRE_EL1, 0x1, "x");
         unsafe {
             core::arch::asm!("isb");
         }
-
-        msr!(ICC_CTLR_EL1, self.ctlr | GICC_CTLR_EOIMODE_BIT as u32, "x");
-        msr!(ICC_IGRPEN1_EL1, self.igrpen1 | GICC_IGRPEN_EL1_ENB_BIT, "x");
-        msr!(ICC_PMR_EL1, self.pmr, "x");
-        msr!(ICC_BPR1_EL1, self.bpr, "x");
-        msr!(ICH_HCR_EL2, self.hcr);
-        GICR[current_cpu().id].ISENABLER0.set(self.priv_isenabler);
-
-        for i in 0..(GIC_PRIVINT_NUM / 4) {
-            GICR[current_cpu().id].IPRIORITYR[i].set(self.priv_ipriorityr[i]);
-        }
-
+        // restore HCR
+        msr!(ICH_HCR_EL2, self.hcr, "x");
+        // restore ICH_VMCR_EL2
+        msr!(ICH_VMCR_EL2, self.vmcr, "x");
+        // restore aprn
+        self.restore_aprn_regs();
+        // restore lr
         for i in 0..gich_lrs_num() {
-            GICH.set_lr(i, self.lr[i] as usize);
+            GICH.set_lr(i, self.lr[i]);
+        }
+    }
+
+    fn save_apr2(&mut self) {
+        mrs!(self.apr0[2], ICH_AP0R2_EL2, "x");
+        mrs!(self.apr1[2], ICH_AP1R2_EL2, "x");
+    }
+
+    fn save_apr1(&mut self) {
+        mrs!(self.apr0[1], ICH_AP0R1_EL2, "x");
+        mrs!(self.apr1[1], ICH_AP1R1_EL2, "x");
+    }
+
+    fn save_apr0(&mut self) {
+        mrs!(self.apr0[0], ICH_AP0R0_EL2, "x");
+        mrs!(self.apr1[0], ICH_AP1R0_EL2, "x");
+    }
+
+    fn save_aprn_regs(&mut self) {
+        match self.nr_prio {
+            7 => {
+                self.save_apr2();
+                self.save_apr1();
+                self.save_apr0();
+            }
+            6 => {
+                self.save_apr1();
+                self.save_apr0();
+            }
+            5 => {
+                self.save_apr0();
+            }
+            _ => panic!("priority not surpport"),
+        }
+    }
+
+    fn restore_aprn_regs(&self) {
+        let restore_apr2 = || {
+            msr!(ICH_AP0R2_EL2, self.apr0[2], "x");
+            msr!(ICH_AP1R2_EL2, self.apr1[2], "x");
+        };
+        let restore_apr1 = || {
+            msr!(ICH_AP0R1_EL2, self.apr0[1], "x");
+            msr!(ICH_AP1R1_EL2, self.apr1[1], "x");
+        };
+        let restore_apr0 = || {
+            msr!(ICH_AP0R0_EL2, self.apr0[0], "x");
+            msr!(ICH_AP1R0_EL2, self.apr1[0], "x");
+        };
+        match self.nr_prio {
+            7 => {
+                restore_apr2();
+                restore_apr1();
+                restore_apr0();
+            }
+            6 => {
+                restore_apr1();
+                restore_apr0();
+            }
+            5 => {
+                restore_apr0();
+            }
+            _ => panic!("priority not surpport"),
         }
     }
 }
