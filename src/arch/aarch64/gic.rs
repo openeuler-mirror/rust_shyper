@@ -622,9 +622,9 @@ impl GicState {
     }
 }
 
-pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE + 0x8_0000_0000);
-pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE + 0x8_0000_0000);
-pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE + 0x8_0000_0000);
+pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE);
+pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE);
+pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE);
 
 #[inline(always)]
 pub fn gich_lrs_num() -> usize {

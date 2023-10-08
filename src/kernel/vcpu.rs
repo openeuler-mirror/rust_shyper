@@ -135,9 +135,9 @@ impl Vcpu {
             inner.gic_ctx.add_irq(irq as u64);
         }
         inner.gic_ctx.add_irq(25);
-        let gicv_ctlr = unsafe { &*((Platform::GICV_BASE + 0x8_0000_0000) as *const u32) };
+        let gicv_ctlr = unsafe { &*(Platform::GICV_BASE as *const u32) };
         inner.gic_ctx.set_gicv_ctlr(*gicv_ctlr);
-        let gicv_pmr = unsafe { &*((Platform::GICV_BASE + 0x8_0000_0000 + 0x4) as *const u32) };
+        let gicv_pmr = unsafe { &*((Platform::GICV_BASE + 0x4) as *const u32) };
         inner.gic_ctx.set_gicv_pmr(*gicv_pmr);
     }
 
@@ -162,10 +162,10 @@ impl Vcpu {
             }
         }
 
-        let gicv_pmr = unsafe { &mut *((Platform::GICV_BASE + 0x8_0000_0000 + 0x4) as *mut u32) };
+        let gicv_pmr = unsafe { &mut *((Platform::GICV_BASE + 0x4) as *mut u32) };
         *gicv_pmr = inner.gic_ctx.gicv_pmr();
         // println!("Core[{}] save gic context", current_cpu().id);
-        let gicv_ctlr = unsafe { &mut *((Platform::GICV_BASE + 0x8_0000_0000) as *mut u32) };
+        let gicv_ctlr = unsafe { &mut *(Platform::GICV_BASE as *mut u32) };
         *gicv_ctlr = inner.gic_ctx.gicv_ctlr();
         // show_vcpu_reg_context();
     }
@@ -634,26 +634,20 @@ pub fn show_vcpu_reg_context() {
     }
 
     println!("GICH_MISR {:x}", GICH.misr());
-    println!("GICV_CTLR {:x}", unsafe {
-        *((Platform::GICV_BASE + 0x8_0000_0000) as *const u32)
-    });
-    println!("GICV_PMR {:x}", unsafe {
-        *((Platform::GICV_BASE + 0x8_0000_0000 + 0x4) as *const u32)
-    });
-    println!("GICV_BPR {:x}", unsafe {
-        *((Platform::GICV_BASE + 0x8_0000_0000 + 0x8) as *const u32)
-    });
+    println!("GICV_CTLR {:x}", unsafe { *(Platform::GICV_BASE as *const u32) });
+    println!("GICV_PMR {:x}", unsafe { *((Platform::GICV_BASE + 0x4) as *const u32) });
+    println!("GICV_BPR {:x}", unsafe { *((Platform::GICV_BASE + 0x8) as *const u32) });
     println!("GICV_ABPR {:x}", unsafe {
-        *((Platform::GICV_BASE + 0x8_0000_0000 + 0x1c) as *const u32)
+        *((Platform::GICV_BASE + 0x1c) as *const u32)
     });
     println!("GICV_STATUSR {:x}", unsafe {
-        *((Platform::GICV_BASE + 0x8_0000_0000 + 0x2c) as *const u32)
+        *((Platform::GICV_BASE + 0x2c) as *const u32)
     });
     println!(
         "GICV_APR[0] {:x}, GICV_APR[1] {:x}, GICV_APR[2] {:x}, GICV_APR[3] {:x}",
-        unsafe { *((Platform::GICV_BASE + 0x8_0000_0000 + 0xd0) as *const u32) },
-        unsafe { *((Platform::GICV_BASE + 0x8_0000_0000 + 0xd4) as *const u32) },
-        unsafe { *((Platform::GICV_BASE + 0x8_0000_0000 + 0xd8) as *const u32) },
-        unsafe { *((Platform::GICV_BASE + 0x8_0000_0000 + 0xdc) as *const u32) },
+        unsafe { *((Platform::GICV_BASE + 0xd0) as *const u32) },
+        unsafe { *((Platform::GICV_BASE + 0xd4) as *const u32) },
+        unsafe { *((Platform::GICV_BASE + 0xd8) as *const u32) },
+        unsafe { *((Platform::GICV_BASE + 0xdc) as *const u32) },
     );
 }

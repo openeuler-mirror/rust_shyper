@@ -2311,9 +2311,9 @@ pub fn partial_passthrough_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext
     if emu_ctx.write {
         // todo: add offset match
         let val = current_cpu().get_gpr(emu_ctx.reg);
-        ptr_read_write(Platform::GICD_BASE + 0x8_0000_0000 + offset, emu_ctx.width, val, false);
+        ptr_read_write(Platform::GICD_BASE + offset, emu_ctx.width, val, false);
     } else {
-        let res = ptr_read_write(Platform::GICD_BASE + 0x8_0000_0000 + offset, emu_ctx.width, 0, true);
+        let res = ptr_read_write(Platform::GICD_BASE + offset, emu_ctx.width, 0, true);
         current_cpu().set_gpr(emu_ctx.reg, res);
     }
 

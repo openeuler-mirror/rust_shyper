@@ -149,8 +149,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         //     pt.entry[i] = BlockDescriptor::invalid();
         // }
 
-        // map the devices to HIGH 32GB, whose offset is 2^35 = 0x8_0000_0000
-        lvl1_pt.entry[32] = BlockDescriptor::table(lvl2_base);
+        lvl1_pt.entry[0] = BlockDescriptor::table(lvl2_base);
         // 0x200000 ~ 2MB
         // UART0 ~ 0x3000000 - 0x3200000 (0x3100000)
         // UART1 ~ 0xc200000 - 0xc400000 (0xc280000)
@@ -193,8 +192,6 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         for i in 8..512 {
             lvl1_pt.entry[i] = BlockDescriptor::invalid();
         }
-        // 0x8_0000_0000 + 0x0_c000_0000
-        lvl1_pt.entry[32 + 3] = BlockDescriptor::table(lvl2_base);
     }
     #[cfg(feature = "qemu")]
     {
@@ -235,8 +232,6 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         for i in 8..512 {
             lvl1_pt.entry[i] = BlockDescriptor::invalid();
         }
-        lvl1_pt.entry[32 + (0xf000_0000 >> LVL1_SHIFT)] = BlockDescriptor::table(lvl2_base);
-        // map the devices offset 32GB 0x8_0000_0000
         // 0x200000 ~ 2MB
         // UART0 ~ 0xfea00000 - 0xfec00000 (0xfeb50000)
         // UART1 ~ 0xfea00000 - 0xfec00000 (0xfebc0000)
