@@ -131,7 +131,7 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
         crate::kernel::cpu_idle();
     }
     vm_init();
-    println!("Rust-Shyper Hypervisor init ok\n\nStart booting Monitor VM ...");
+    info!("Rust-Shyper Hypervisor init ok\n\nStart booting Monitor VM ...");
     vmm_boot_vm(0);
 
     loop {

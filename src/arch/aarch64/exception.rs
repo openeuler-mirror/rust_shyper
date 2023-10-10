@@ -95,7 +95,7 @@ pub fn exception_fault_addr() -> usize {
     let far = exception_far();
     let hpfar = if (exception_esr() & ESR_ELx_S1PTW) == 0 && exception_data_abort_is_permission_fault() {
         translate_far_to_hpfar(far).unwrap_or_else(|_| {
-            println!("error happen in translate_far_to_hpfar");
+            debug!("error happen in translate_far_to_hpfar");
             0
         })
     } else {
@@ -211,11 +211,11 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
     let status = fresh_status();
     if status != FreshStatus::None {
         if status != FreshStatus::Finish {
-            println!("lower_aarch64_synchronous: illegal fresh status {:#?}", status);
+            debug!("lower_aarch64_synchronous: illegal fresh status {:#?}", status);
             let time0 = time_current_us();
             FRESH_LOGIC_LOCK.lock();
             let time1 = time_current_us();
-            println!("lower_aarch64_synchronous: wait live update {} us", time1 - time0);
+            debug!("lower_aarch64_synchronous: wait live update {} us", time1 - time0);
         }
     }
     current_cpu().set_ctx(ctx);
@@ -234,7 +234,7 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
             hvc_handler();
         }
         _ => unsafe {
-            println!(
+            debug!(
                 "x0 {:x}, x1 {:x}, x29 {:x}",
                 (*ctx).gpr(0),
                 (*ctx).gpr(1),

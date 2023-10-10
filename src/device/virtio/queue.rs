@@ -98,7 +98,7 @@ impl Virtq {
                 return Some(avail_desc_idx);
             }
             None => {
-                println!("pop_avail_desc_idx: failed to avail table");
+                error!("pop_avail_desc_idx: failed to avail table");
                 return None;
             }
         }
@@ -111,7 +111,7 @@ impl Virtq {
                 inner.last_avail_idx -= 1;
             }
             None => {
-                println!("put_back_avail_desc_idx: failed to avail table");
+                error!("put_back_avail_desc_idx: failed to avail table");
             }
         }
     }
@@ -167,7 +167,7 @@ impl Virtq {
                 return true;
             }
             None => {
-                println!("update_used_ring: failed to used table");
+                error!("update_used_ring: failed to used table");
                 return false;
             }
         }
@@ -188,7 +188,7 @@ impl Virtq {
                 return handler(self.clone(), mmio, active_vm().unwrap());
             }
             None => {
-                println!("call_notify_handler: virtq notify handler is None");
+                error!("call_notify_handler: virtq notify handler is None");
                 return false;
             }
         }
@@ -197,10 +197,10 @@ impl Virtq {
     pub fn show_desc_info(&self, size: usize, vm: Vm) {
         let inner = self.inner.lock();
         let desc = inner.desc_table.as_ref().unwrap();
-        println!("[*desc_ring*]");
+        info!("[*desc_ring*]");
         for i in 0..size {
             let desc_addr = vm_ipa2pa(vm.clone(), desc[i].addr);
-            println!(
+            info!(
                 "index {}   desc_addr_ipa 0x{:x}   desc_addr_pa 0x{:x}   len 0x{:x}   flags {}  next {}",
                 i, desc[i].addr, desc_addr, desc[i].len, desc[i].flags, desc[i].next
             );
@@ -210,18 +210,18 @@ impl Virtq {
     pub fn show_avail_info(&self, size: usize) {
         let inner = self.inner.lock();
         let avail = inner.avail.as_ref().unwrap();
-        println!("[*avail_ring*]");
+        info!("[*avail_ring*]");
         for i in 0..size {
-            println!("index {} ring_idx {}", i, avail.ring[i]);
+            info!("index {} ring_idx {}", i, avail.ring[i]);
         }
     }
 
     pub fn show_used_info(&self, size: usize) {
         let inner = self.inner.lock();
         let used = inner.used.as_ref().unwrap();
-        println!("[*used_ring*]");
+        info!("[*used_ring*]");
         for i in 0..size {
-            println!(
+            info!(
                 "index {} ring_id {} ring_len {:x}",
                 i, used.ring[i].id, used.ring[i].len
             );
@@ -230,7 +230,7 @@ impl Virtq {
 
     pub fn show_addr_info(&self) {
         let inner = self.inner.lock();
-        println!(
+        info!(
             "avail_addr {:x}, desc_addr {:x}, used_addr {:x}",
             inner.avail_addr, inner.desc_table_addr, inner.used_addr
         );

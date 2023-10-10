@@ -145,7 +145,7 @@ pub fn unilib_fs_remove(vm_id: usize) {
 pub fn unilib_fs_init() -> Result<usize, ()> {
     let vm = active_vm().unwrap();
     let vm_id = vm.id();
-    println!("unilib_fs_init: VM[{}] init unilib-fs", vm.id());
+    info!("unilib_fs_init: VM[{}] init unilib-fs", vm.id());
     let unilib_msg = HvcUniLibMsg {
         fid: HVC_UNILIB,
         event: HVC_UNILIB_FS_INIT,
@@ -155,7 +155,7 @@ pub fn unilib_fs_init() -> Result<usize, ()> {
         arg_3: 0,
     };
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
-        println!("unilib fs init: failed to notify VM 0");
+        error!("unilib fs init: failed to notify VM 0");
         return Err(());
     }
     // Enter a loop, wait for VM0 to setup the unilib fs config struct.
@@ -163,7 +163,7 @@ pub fn unilib_fs_init() -> Result<usize, ()> {
         let lock = UNILIB_FS_LIST.lock();
         match lock.get(&vm_id) {
             Some(_) => {
-                println!("unilib_fs_init, fs append success, return");
+                trace!("unilib_fs_init, fs append success, return");
                 drop(lock);
                 return Ok(0);
             }
@@ -187,7 +187,7 @@ pub fn unilib_fs_append(mmio_ipa: usize) -> Result<usize, ()> {
     let mmio_pa = vm_ipa2pa(vm.clone(), mmio_ipa);
     let unilib_fs = UnilibFS { base_addr: mmio_pa };
     let buf_pa = vm_ipa2pa(vm, unilib_fs.buf_ipa());
-    println!(
+    info!(
         "unilib_fs_append: VM[{}] fs_mmio_ipa 0x{:x}, buf ipa 0x{:x}, buf_pa 0x{:x}",
         unilib_fs.vm_id(),
         mmio_ipa,
@@ -205,7 +205,7 @@ pub fn unilib_fs_append(mmio_ipa: usize) -> Result<usize, ()> {
 /// ## Arguments
 /// * `vm_id`        - The target GVM's VM id of this unilib fs operation.
 pub fn unilib_fs_finished(vm_id: usize) -> Result<usize, ()> {
-    println!(
+    info!(
         "unilib_fs_finished: VM[{}] fs io request is finished, currently unused",
         vm_id
     );
@@ -233,7 +233,7 @@ pub fn unilib_fs_open(path_start_ipa: usize, path_length: usize, flags: usize) -
     let fs_cfg = match fs_list_lock.get(&vm_id) {
         Some(cfg) => cfg,
         None => {
-            println!("VM[{}] doesn't register a unilib fs, return", vm_id);
+            error!("VM[{}] doesn't register a unilib fs, return", vm_id);
             return Err(());
         }
     };
@@ -258,7 +258,7 @@ pub fn unilib_fs_open(path_start_ipa: usize, path_length: usize, flags: usize) -
         arg_3: 0,
     };
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
-        println!("unilib fs open: failed to notify VM 0");
+        error!("unilib fs open: failed to notify VM 0");
         return Err(());
     }
 
@@ -283,7 +283,7 @@ pub fn unilib_fs_close(fd: usize) -> Result<usize, ()> {
     let fs_cfg = match fs_list_lock.get(&vm_id) {
         Some(cfg) => cfg,
         None => {
-            println!("VM[{}] doesn't register a unilib fs, return", vm_id);
+            error!("VM[{}] doesn't register a unilib fs, return", vm_id);
             return Err(());
         }
     };
@@ -300,7 +300,7 @@ pub fn unilib_fs_close(fd: usize) -> Result<usize, ()> {
         arg_3: 0,
     };
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
-        println!("unilib fs close: failed to notify VM 0");
+        error!("unilib fs close: failed to notify VM 0");
         return Err(());
     }
     // Still, we need to enter a loop, wait for VM to complete operation.
@@ -329,7 +329,7 @@ pub fn unilib_fs_read(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, ()
     let fs_cfg = match fs_list_lock.get(&vm_id) {
         Some(cfg) => cfg,
         None => {
-            println!("VM[{}] doesn't register a unilib fs, return", vm_id);
+            error!("VM[{}] doesn't register a unilib fs, return", vm_id);
             return Err(());
         }
     };
@@ -344,7 +344,7 @@ pub fn unilib_fs_read(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, ()
         arg_3: 0,
     };
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
-        println!("unilib fs read: failed to notify VM 0");
+        error!("unilib fs read: failed to notify VM 0");
         return Err(());
     }
 
@@ -382,7 +382,7 @@ pub fn unilib_fs_write(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, (
     let fs_cfg = match fs_list_lock.get(&vm_id) {
         Some(cfg) => cfg,
         None => {
-            println!("VM[{}] doesn't register a unilib fs, return", vm_id);
+            error!("VM[{}] doesn't register a unilib fs, return", vm_id);
             return Err(());
         }
     };
@@ -401,7 +401,7 @@ pub fn unilib_fs_write(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, (
         arg_3: 0,
     };
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
-        println!("unilib fs write: failed to notify VM 0");
+        error!("unilib fs write: failed to notify VM 0");
         return Err(());
     }
 
@@ -436,7 +436,7 @@ pub fn unilib_fs_lseek(fd: usize, offset: usize, whence: usize) -> Result<usize,
     let fs_cfg = match fs_list_lock.get(&vm_id) {
         Some(cfg) => cfg,
         None => {
-            println!("VM[{}] doesn't register a unilib fs, return", vm_id);
+            error!("VM[{}] doesn't register a unilib fs, return", vm_id);
             return Err(());
         }
     };
@@ -452,7 +452,7 @@ pub fn unilib_fs_lseek(fd: usize, offset: usize, whence: usize) -> Result<usize,
         arg_3: whence,
     };
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
-        println!("unilib fs read: failed to notify VM 0");
+        error!("unilib fs read: failed to notify VM 0");
         return Err(());
     }
     // Still, we need to enter a loop, wait for VM to complete operation.
@@ -481,7 +481,7 @@ pub fn unilib_fs_unlink(path_start_ipa: usize, path_length: usize) -> Result<usi
     let fs_cfg = match fs_list_lock.get(&vm_id) {
         Some(cfg) => cfg,
         None => {
-            println!("VM[{}] doesn't register a unilib fs, return", vm_id);
+            error!("VM[{}] doesn't register a unilib fs, return", vm_id);
             return Err(());
         }
     };
@@ -506,7 +506,7 @@ pub fn unilib_fs_unlink(path_start_ipa: usize, path_length: usize) -> Result<usi
         arg_3: 0,
     };
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::UniLib(unilib_msg)) {
-        println!("unilib fs unlink: failed to notify VM 0");
+        error!("unilib fs unlink: failed to notify VM 0");
         return Err(());
     }
 

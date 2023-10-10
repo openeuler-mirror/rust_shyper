@@ -55,7 +55,7 @@ impl Vcpu {
     }
 
     pub fn shutdown(&self) {
-        println!(
+        info!(
             "Core {} (vm {} vcpu {}) shutdown ok",
             current_cpu().id,
             active_vm_id(),
@@ -197,7 +197,7 @@ impl Vcpu {
         let inner = self.inner.lock();
         match current_cpu().ctx {
             None => {
-                println!("save_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
+                error!("save_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
             }
             Some(ctx) => {
                 memcpy_safe(
@@ -213,7 +213,7 @@ impl Vcpu {
         let inner = self.inner.lock();
         match current_cpu().ctx {
             None => {
-                println!("restore_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
+                error!("restore_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
             }
             Some(ctx) => {
                 memcpy_safe(
@@ -227,7 +227,7 @@ impl Vcpu {
 
     pub fn set_phys_id(&self, phys_id: usize) {
         let mut inner = self.inner.lock();
-        println!("set vcpu {} phys id {}", inner.id, phys_id);
+        debug!("set vcpu {} phys id {}", inner.id, phys_id);
         inner.phys_id = phys_id;
     }
 
@@ -443,7 +443,7 @@ impl VcpuInner {
         use crate::kernel::vm_if_get_type;
         match vm_if_get_type(self.vm_id()) {
             VmType::VmTBma => {
-                println!("vm {} bma ctx restore", self.vm_id());
+                debug!("vm {} bma ctx restore", self.vm_id());
                 self.reset_vm_ctx();
                 self.context_ext_regs_store();
             }
@@ -476,7 +476,7 @@ impl VcpuInner {
     }
 
     fn show_ctx(&self) {
-        println!(
+        info!(
             "cntvoff_el2 {:x}, sctlr_el1 {:x}, cntkctl_el1 {:x}, pmcr_el0 {:x}, vtcr_el2 {:x} x0 {:x}",
             self.vm_ctx.cntvoff_el2,
             self.vm_ctx.sctlr_el1,
@@ -485,7 +485,7 @@ impl VcpuInner {
             self.vm_ctx.vtcr_el2,
             self.vcpu_ctx.gpr(0)
         );
-        println!("id {} vm_ctx {:x?}", self.id, self.vm_ctx);
+        info!("id {} vm_ctx {:x?}", self.id, self.vm_ctx);
     }
 }
 

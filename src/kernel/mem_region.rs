@@ -99,7 +99,7 @@ impl HeapRegion {
     pub fn alloc_pages(&mut self, size: usize) -> Result<usize, AllocError> {
         let res = self.first_fit(size);
         if res.is_none() {
-            println!(
+            error!(
                 "alloc_pages: allocate {} pages failed (heap_base 0x{:x} remain {} total {})",
                 size, self.region.base, self.region.free, self.region.size
             );

@@ -101,9 +101,9 @@ impl VirtioIov {
             }
         }
 
-        println!("iov get_ptr failed");
-        println!("get_ptr iov {:#?}", inner.vector);
-        println!("size {}, idx {}", size, idx);
+        debug!("iov get_ptr failed");
+        debug!("get_ptr iov {:#?}", inner.vector);
+        debug!("size {}, idx {}", size, idx);
         return &[0];
     }
 

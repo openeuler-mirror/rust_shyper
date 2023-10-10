@@ -374,7 +374,7 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
         let req_node = req.req_node(idx);
         let sector = req_node.sector;
         if sector + req_node.iov_sum_up / SECTOR_BSIZE > region_start + region_size {
-            println!(
+            warn!(
                 "blk_req_handler: {} out of vm range",
                 if req_node.req_type == VIRTIO_BLK_T_IN as u32 {
                     "read"
@@ -412,7 +412,7 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                     let len = iov.len as usize;
 
                     if len < SECTOR_BSIZE {
-                        println!("blk_req_handler: read len < SECTOR_BSIZE");
+                        warn!("blk_req_handler: read len < SECTOR_BSIZE");
                         continue;
                     }
                     if !req.mediated() {
@@ -429,7 +429,7 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                     let data_bg = iov.data_bg;
                     let len = iov.len as usize;
                     if len < SECTOR_BSIZE {
-                        println!("blk_req_handler: read len < SECTOR_BSIZE");
+                        warn!("blk_req_handler: read len < SECTOR_BSIZE");
                         continue;
                     }
                     if !req.mediated() {
@@ -484,7 +484,7 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                 add_async_task(task, false);
             }
             _ => {
-                println!("Wrong block request type {} ", req_node.req_type);
+                warn!("Wrong block request type {} ", req_node.req_type);
                 continue;
             }
         }
@@ -527,7 +527,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
 
     // let begin = time_current_us();
     if vq.ready() == 0 {
-        println!("blk virt_queue is not ready!");
+        error!("blk virt_queue is not ready!");
         return false;
     }
 
@@ -572,7 +572,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
             if vq.desc_has_next(next_desc_idx) {
                 if head {
                     if vq.desc_is_writable(next_desc_idx) {
-                        println!(
+                        error!(
                             "Failed to get virt blk queue desc header, idx = {}, flag = {:x}",
                             next_desc_idx,
                             vq.desc_flags(next_desc_idx)
@@ -584,7 +584,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                     head = false;
                     let vreq_addr = vm_ipa2pa(vm.clone(), vq.desc_addr(next_desc_idx));
                     if vreq_addr == 0 {
-                        println!("virtio_blk_notify_handler: failed to get vreq");
+                        error!("virtio_blk_notify_handler: failed to get vreq");
                         return false;
                     }
                     let vreq = unsafe { &mut *(vreq_addr as *mut VirtioBlkReqNode) };
@@ -593,7 +593,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                 } else {
                     /*data handler*/
                     if (vq.desc_flags(next_desc_idx) & 0x2) as u32 >> 1 == req_node.req_type {
-                        println!(
+                        error!(
                             "Failed to get virt blk queue desc data, idx = {}, req.type = {}, desc.flags = {}",
                             next_desc_idx,
                             req_node.req_type,
@@ -605,7 +605,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                     }
                     let data_bg = vm_ipa2pa(vm.clone(), vq.desc_addr(next_desc_idx));
                     if data_bg == 0 {
-                        println!("virtio_blk_notify_handler: failed to get iov data begin");
+                        error!("virtio_blk_notify_handler: failed to get iov data begin");
                         return false;
                     }
 
@@ -619,14 +619,14 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
             } else {
                 /*state handler*/
                 if !vq.desc_is_writable(next_desc_idx) {
-                    println!("Failed to get virt blk queue desc status, idx = {}", next_desc_idx);
+                    error!("Failed to get virt blk queue desc status, idx = {}", next_desc_idx);
                     blk.notify(vm);
                     // vq.notify(dev.int_id(), vm.clone());
                     return false;
                 }
                 let vstatus_addr = vm_ipa2pa(vm.clone(), vq.desc_addr(next_desc_idx));
                 if vstatus_addr == 0 {
-                    println!("virtio_blk_notify_handler: vm[{}] failed to vstatus", vm.id());
+                    error!("virtio_blk_notify_handler: vm[{}] failed to vstatus", vm.id());
                     return false;
                 }
                 let vstatus = unsafe { &mut *(vstatus_addr as *mut u8) };
@@ -657,7 +657,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
     // let time1 = time_current_us();
 
     if vq.avail_flags() == 0 && process_count > 0 && !req.mediated() {
-        println!("virtio blk notify");
+        trace!("virtio blk notify");
         blk.notify(vm);
         // vq.notify(dev.int_id(), vm.clone());
     }

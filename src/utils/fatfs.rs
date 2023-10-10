@@ -64,7 +64,7 @@ impl core_io::Read for Disk {
             self.pointer += buf.len();
             Ok(buf.len())
         } else {
-            println!("read failed");
+            error!("read failed");
             Ok(0)
         }
     }
@@ -78,8 +78,8 @@ impl core_io::Write for Disk {
 
     // TODO: add fatfs write
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        println!("in write");
-        println!("write dropped");
+        trace!("in write");
+        trace!("write dropped");
         Ok(0)
     }
 }
@@ -165,7 +165,7 @@ pub fn fs_read_to_mem(filename: &str, buf: &mut [u8]) -> bool {
             return true;
         }
         Err(_) => {
-            println!("read file {} failed!", filename);
+            error!("read file {} failed!", filename);
             return false;
         }
     }

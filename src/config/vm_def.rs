@@ -26,7 +26,7 @@ use super::{
 };
 
 pub fn init_tmp_config_for_bma1() {
-    println!("init_tmp_config_for_bma1");
+    info!("init_tmp_config_for_bma1");
     // #################### bare metal app emu (vm1) ######################
     let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
     emu_dev_config.push(VmEmulatedDeviceConfig {
@@ -106,7 +106,7 @@ pub fn init_tmp_config_for_bma1() {
 }
 
 pub fn init_tmp_config_for_bma2() {
-    println!("init_tmp_config_for_bma2");
+    info!("init_tmp_config_for_bma2");
     // #################### bare metal app emu (vm1) ######################
     let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
     emu_dev_config.push(VmEmulatedDeviceConfig {
@@ -186,7 +186,7 @@ pub fn init_tmp_config_for_bma2() {
 }
 
 pub fn init_tmp_config_for_vm1() {
-    println!("init_tmp_config_for_vm1");
+    info!("init_tmp_config_for_vm1");
 
     // #################### vm1 emu ######################
     let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
@@ -325,12 +325,12 @@ pub fn init_tmp_config_for_vm1() {
             dtb_device_list: vm_dtb_devs,
         })),
     };
-    println!("generate tmp_config for vm1");
+    info!("generate tmp_config for vm1");
     let _ = vm_cfg_add_vm_entry(vm1_config);
 }
 
 pub fn init_tmp_config_for_vm2() {
-    println!("init_tmp_config_for_vm2");
+    info!("init_tmp_config_for_vm2");
 
     // #################### vm2 emu ######################
     let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
@@ -461,7 +461,7 @@ pub fn init_tmp_config_for_vm2() {
 }
 
 pub fn init_gicv3_config_for_vm1() {
-    println!("init_gicv3_config_for_vm1");
+    info!("init_gicv3_config_for_vm1");
 
     // #################### vm1 emu ######################
     let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
@@ -603,6 +603,6 @@ pub fn init_gicv3_config_for_vm1() {
             dtb_device_list: vm_dtb_devs,
         })),
     };
-    println!("generate tmp_config for vm1");
+    info!("generate tmp_config for vm1");
     let _ = vm_cfg_add_vm_entry(vm1_config);
 }

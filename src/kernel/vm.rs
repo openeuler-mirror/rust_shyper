@@ -363,7 +363,7 @@ impl Vm {
                 Some(vcpu)
             }
             None => {
-                println!(
+                error!(
                     "vcpu idx {} is to large than vcpu_list len {}",
                     index,
                     vm_inner.vcpu_list.len()
@@ -378,7 +378,7 @@ impl Vm {
         if vcpu.id() >= vm_inner.vcpu_list.len() {
             vm_inner.vcpu_list.push(vcpu);
         } else {
-            println!("VM[{}] insert VCPU {}", vm_inner.id, vcpu.id());
+            trace!("VM[{}] insert VCPU {}", vm_inner.id, vcpu.id());
             vm_inner.vcpu_list.insert(vcpu.id(), vcpu);
         }
     }
@@ -1003,7 +1003,7 @@ pub static VM_LIST: Mutex<Vec<Vm>> = Mutex::new(Vec::new());
 pub fn push_vm(id: usize) -> Result<(), ()> {
     let mut vm_list = VM_LIST.lock();
     if vm_list.iter().any(|x| x.id() == id) {
-        println!("push_vm: vm {} already exists", id);
+        error!("push_vm: vm {} already exists", id);
         Err(())
     } else {
         vm_list.push(Vm::new(id));
@@ -1033,7 +1033,7 @@ pub fn vm_list_size() -> usize {
 
 pub fn vm_ipa2pa(vm: Vm, ipa: usize) -> usize {
     if ipa == 0 {
-        println!("vm_ipa2pa: VM {} access invalid ipa {:x}", vm.id(), ipa);
+        error!("vm_ipa2pa: VM {} access invalid ipa {:x}", vm.id(), ipa);
         return 0;
     }
 
@@ -1047,13 +1047,13 @@ pub fn vm_ipa2pa(vm: Vm, ipa: usize) -> usize {
         }
     }
 
-    println!("vm_ipa2pa: VM {} access invalid ipa {:x}", vm.id(), ipa);
+    error!("vm_ipa2pa: VM {} access invalid ipa {:x}", vm.id(), ipa);
     return 0;
 }
 
 pub fn vm_pa2ipa(vm: Vm, pa: usize) -> usize {
     if pa == 0 {
-        println!("vm_pa2ipa: VM {} access invalid pa {:x}", vm.id(), pa);
+        error!("vm_pa2ipa: VM {} access invalid pa {:x}", vm.id(), pa);
         return 0;
     }
 
@@ -1063,13 +1063,13 @@ pub fn vm_pa2ipa(vm: Vm, pa: usize) -> usize {
         }
     }
 
-    println!("vm_pa2ipa: VM {} access invalid pa {:x}", vm.id(), pa);
+    error!("vm_pa2ipa: VM {} access invalid pa {:x}", vm.id(), pa);
     return 0;
 }
 
 pub fn pa2ipa(pa_region: &Vec<VmPa>, pa: usize) -> usize {
     if pa == 0 {
-        println!("pa2ipa: access invalid pa {:x}", pa);
+        error!("pa2ipa: access invalid pa {:x}", pa);
         return 0;
     }
 
@@ -1079,7 +1079,7 @@ pub fn pa2ipa(pa_region: &Vec<VmPa>, pa: usize) -> usize {
         }
     }
 
-    println!("pa2ipa: access invalid pa {:x}", pa);
+    error!("pa2ipa: access invalid pa {:x}", pa);
     return 0;
 }
 

@@ -375,7 +375,7 @@ impl SmmuV2 {
         rs0.GFSR.set(rs0.GFSR.get());
         rs0.NSGFSR.set(rs0.NSGFSR.get());
 
-        println!(
+        info!(
             concat!(
                 "SMMU info:\n",
                 "  page size {:#x}, num pages {}, context base {:#x}\n",
@@ -521,7 +521,7 @@ impl SmmuV2 {
                 }
             }
         }
-        println!("now, no compatible!");
+        debug!("now, no compatible!");
         false
     }
 

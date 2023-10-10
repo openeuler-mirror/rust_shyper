@@ -321,15 +321,15 @@ pub fn cpu_init() {
     let sp = current_cpu().stack.as_ptr() as usize + CPU_STACK_SIZE;
     let size = core::mem::size_of::<ContextFrame>();
     current_cpu().set_ctx((sp - size) as *mut _);
-    println!("Core {} init ok", cpu_id);
+    info!("Core {} init ok", cpu_id);
 
     if cfg!(not(feature = "secondary_start")) {
         crate::utils::barrier();
         // println!("after barrier cpu init");
         use crate::board::PLAT_DESC;
         if cpu_id == 0 {
-            println!("Bring up {} cores", PLAT_DESC.cpu_desc.num);
-            println!("Cpu init ok");
+            info!("Bring up {} cores", PLAT_DESC.cpu_desc.num);
+            info!("Cpu init ok");
         }
     }
 }

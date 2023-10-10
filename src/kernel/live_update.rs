@@ -244,7 +244,7 @@ pub extern "C" fn rust_shyper_update(address_list: &HypervisorAddr, alloc: bool)
             let gic_lrs_num = &*(address_list.gic_lrs_num as *const Mutex<usize>);
             gic_lrs_num_update(gic_lrs_num);
         }
-        println!("Finish Alloc VM / VCPU / CPU_IF");
+        info!("Finish Alloc VM / VCPU / CPU_IF");
         return;
     }
 
@@ -316,20 +316,20 @@ pub extern "C" fn rust_shyper_update(address_list: &HypervisorAddr, alloc: bool)
             let _ = logger_init();
             set_fresh_status(FreshStatus::Finish);
             drop(lock0);
-            println!(
+            info!(
                 "handle VM {} us, handle VCPU {} us, free lock {} us",
                 time1 - time0,
                 time2 - time1,
                 time3 - time2
             );
-            println!("Finish Update VM and VCPU_LIST");
-            println!("Update CPU[{}]", cpu.id);
-            println!("Update {} region for VM_REGION", VM_REGION.lock().region.len());
-            println!("Update HEAP_REGION");
-            println!("Update VM_IF_LIST");
-            println!("Update {} Mediated BLK", MEDIATED_BLK_LIST.lock().len());
-            println!("Update {} SHARE_MEM_LIST", SHARE_MEM_LIST.lock().len());
-            println!("Update CPU_IF_LIST");
+            info!("Finish Update VM and VCPU_LIST");
+            info!("Update CPU[{}]", cpu.id);
+            info!("Update {} region for VM_REGION", VM_REGION.lock().region.len());
+            info!("Update HEAP_REGION");
+            info!("Update VM_IF_LIST");
+            info!("Update {} Mediated BLK", MEDIATED_BLK_LIST.lock().len());
+            info!("Update {} SHARE_MEM_LIST", SHARE_MEM_LIST.lock().len());
+            info!("Update CPU_IF_LIST");
         }
     } else {
         let cpu = unsafe { &*(address_list.cpu as *const Cpu) };
@@ -353,7 +353,7 @@ pub fn fresh_hyper() {
     }
     if current_cpu().id == 0 {
         let ctx = current_cpu().ctx.unwrap();
-        println!("CPU[{}] ctx {:x}", current_cpu().id, ctx);
+        debug!("CPU[{}] ctx {:x}", current_cpu().id, ctx);
         current_cpu().clear_ctx();
         unsafe { fresh_hyper(ctx) };
     } else {
@@ -362,7 +362,7 @@ pub fn fresh_hyper() {
                 panic!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuInv);
             }
             CpuState::CpuIdle => {
-                println!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuIdle);
+                debug!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuIdle);
                 unsafe { fresh_cpu() };
                 // println!(
                 //     "Core[{}] current cpu irq {}",
@@ -373,7 +373,7 @@ pub fn fresh_hyper() {
                 cpu_idle();
             }
             CpuState::CpuRun => {
-                println!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuRun);
+                debug!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuRun);
                 // println!(
                 //     "Core[{}] current cpu irq {}",
                 //     current_cpu().id,
@@ -598,7 +598,7 @@ pub fn ipi_handler_list_update(src_ipi_handler_list: &Mutex<Vec<IpiHandler>>) {
         };
         ipi_register(ipi_handler.ipi_type, handler);
     }
-    println!("Update IPI_HANDLER_LIST");
+    info!("Update IPI_HANDLER_LIST");
 }
 
 pub fn vm_if_list_update(src_vm_if_list: &[Mutex<VmInterface>; VM_NUM_MAX]) {
@@ -650,13 +650,13 @@ pub fn current_cpu_update(src_cpu: &Cpu) {
     assert_eq!(cpu.current_irq, src_cpu.current_irq);
     assert_eq!(cpu.cpu_pt, src_cpu.cpu_pt);
     assert_eq!(cpu.stack, src_cpu.stack);
-    println!("Update CPU[{}]", cpu.id);
+    info!("Update CPU[{}]", cpu.id);
 }
 
 pub fn gic_lrs_num_update(src_gic_lrs_num: &Mutex<usize>) {
     let gic_lrs_num = *src_gic_lrs_num.lock();
     *GIC_LRS_NUM.lock() = gic_lrs_num;
-    println!("Update GIC_LRS_NUM");
+    info!("Update GIC_LRS_NUM");
 }
 
 // alloc vm_list
@@ -715,7 +715,7 @@ pub fn vm_list_alloc(src_vm_list: &Mutex<Vec<Vm>>) {
         dst_inner.med_blk_id = src_inner.med_blk_id;
     }
     assert_eq!(vm_list.len(), src_vm_list.lock().len());
-    println!("Alloc {} VM in VM_LIST", vm_list.len());
+    info!("Alloc {} VM in VM_LIST", vm_list.len());
 }
 
 // Set vm.vcpu_list in vcpu_update
@@ -774,7 +774,7 @@ pub fn vm_list_update(src_vm_list: &Mutex<Vec<Vm>>) {
                             (net.vq(0).unwrap().avail()),
                             vm_ipa2pa(vm.clone(), net.vq(0).unwrap().avail_addr())
                         );
-                        println!("VirtioNet save handler {:x}", unsafe {
+                        info!("VirtioNet save handler {:x}", unsafe {
                             *(&virtio_net_notify_handler as *const _ as *const usize)
                         });
                         mmio.save_mmio(net.clone(), Some(virtio_net_notify_handler));
@@ -794,7 +794,7 @@ pub fn vm_list_update(src_vm_list: &Mutex<Vec<Vm>>) {
                             (console.vq(0).unwrap().avail()),
                             vm_ipa2pa(vm.clone(), console.vq(0).unwrap().avail_addr())
                         );
-                        println!("VirtioConsole save handler {:x}", unsafe {
+                        info!("VirtioConsole save handler {:x}", unsafe {
                             *(&virtio_console_notify_handler as *const _ as *const usize)
                         });
                         mmio.save_mmio(console.clone(), Some(virtio_console_notify_handler));
@@ -865,7 +865,7 @@ pub fn interrupt_update(
     }
     let mut en_set = INTERRUPT_EN_SET.lock();
     (*en_set).extend(&*src_en_set.lock());
-    println!("Update INTERRUPT_GLB_BITMAP / INTERRUPT_HYPER_BITMAP / INTERRUPT_EN_SET / INTERRUPT_HANDLERS");
+    info!("Update INTERRUPT_GLB_BITMAP / INTERRUPT_HYPER_BITMAP / INTERRUPT_EN_SET / INTERRUPT_HANDLERS");
 }
 
 pub fn emu_dev_list_update(src_emu_dev_list: &Mutex<Vec<EmuDevEntry>>) {
@@ -893,7 +893,7 @@ pub fn emu_dev_list_update(src_emu_dev_list: &Mutex<Vec<EmuDevEntry>>) {
             handler: emu_handler,
         });
     }
-    println!("Update {} emu dev for EMU_DEVS_LIST", emu_dev_list.len());
+    info!("Update {} emu dev for EMU_DEVS_LIST", emu_dev_list.len());
 }
 
 pub fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
@@ -996,7 +996,7 @@ pub fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
     assert_eq!(vm_config_table.vm_num, src_config_table.vm_num);
     assert_eq!(vm_config_table.vm_bitmap, src_config_table.vm_bitmap);
     assert_eq!(vm_config_table.name, src_config_table.name);
-    println!("Update {} VM to DEF_VM_CONFIG_TABLE", vm_config_table.vm_num);
+    info!("Update {} VM to DEF_VM_CONFIG_TABLE", vm_config_table.vm_num);
 }
 
 pub fn vcpu_list_alloc(src_vcpu_list: &Mutex<Vec<Vcpu>>) {
@@ -1022,7 +1022,7 @@ pub fn vcpu_list_alloc(src_vcpu_list: &Mutex<Vec<Vcpu>>) {
         vcpu_list.push(vcpu);
     }
     assert_eq!(vcpu_list.len(), src_vcpu_list.lock().len());
-    println!("Alloc {} VCPU to VCPU_LIST", vcpu_list.len());
+    info!("Alloc {} VCPU to VCPU_LIST", vcpu_list.len());
 }
 
 pub fn vcpu_update(src_vcpu_list: &Mutex<Vec<Vcpu>>, src_vm_list: &Mutex<Vec<Vm>>) {

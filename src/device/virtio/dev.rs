@@ -325,7 +325,7 @@ impl VirtDevInner {
                         // }
                     }
                     Err(_) => {
-                        println!("VirtDevInner::init(): mem_pages_alloc failed");
+                        error!("VirtDevInner::init(): mem_pages_alloc failed");
                     }
                 }
 
@@ -344,7 +344,7 @@ impl VirtDevInner {
                         self.cache = Some(page_frame);
                     }
                     Err(_) => {
-                        println!("VirtDevInner::init(): mem_pages_alloc failed");
+                        error!("VirtDevInner::init(): mem_pages_alloc failed");
                     }
                 }
 
@@ -362,7 +362,7 @@ impl VirtDevInner {
                         self.cache = Some(page_frame);
                     }
                     Err(_) => {
-                        println!("VirtDevInner::init(): mem_pages_alloc failed");
+                        error!("VirtDevInner::init(): mem_pages_alloc failed");
                     }
                 }
             }

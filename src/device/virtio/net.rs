@@ -128,7 +128,7 @@ impl NetDesc {
         let inner = self.inner.lock();
         let start_addr = &inner.mac[0] as *const _ as usize;
         if trace() && start_addr + offset < 0x1000 {
-            println!("value addr is {}", start_addr + offset);
+            debug!("value addr is {}", start_addr + offset);
         }
         let value = unsafe { *((start_addr + offset) as *const u32) };
         return value;
@@ -197,7 +197,7 @@ const VIRTIO_NET_CTRL_ANNOUNCE_ACK: u8 = 0;
 
 pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     if vq.ready() == 0 {
-        println!("virtio net control queue is not ready!");
+        error!("virtio net control queue is not ready!");
         return false;
     }
 
@@ -213,7 +213,7 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         loop {
             let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
             if addr == 0 {
-                println!("virtio_net_handle_ctrl: failed to desc addr");
+                error!("virtio_net_handle_ctrl: failed to desc addr");
                 return false;
             }
             if vq.desc_flags(idx) & VIRTQ_DESC_F_WRITE != 0 {
@@ -247,7 +247,7 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
                 in_iov.from_buf(&status as *const _ as usize, size_of::<u8>());
             }
             _ => {
-                println!("Control queue header class can't match {}", ctrl.class);
+                warn!("Control queue header class can't match {}", ctrl.class);
             }
         }
 
@@ -255,7 +255,7 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         if vm.id() != 0 {
             let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
             if *VM_STATE_FLAG.lock() == 1 {
-                println!("vm1 virtio net ctrl write memory in 0x{:x}", used_addr);
+                debug!("vm1 virtio net ctrl write memory in 0x{:x}", used_addr);
             }
             vm_if_set_mem_map_bit(vm.clone(), used_addr);
 
@@ -274,7 +274,7 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
 
 pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     if vq.ready() == 0 {
-        println!("net virt_queue is not ready!");
+        error!("net virt_queue is not ready!");
         return false;
     }
 
@@ -296,7 +296,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         loop {
             let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
             if addr == 0 {
-                println!("virtio_net_notify_handler: failed to desc addr");
+                error!("virtio_net_notify_handler: failed to desc addr");
                 return false;
             }
             tx_iov.push_data(addr, vq.desc_len(idx) as usize);
@@ -316,7 +316,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         if vm.id() != 0 {
             let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
             if *VM_STATE_FLAG.lock() == 1 {
-                println!("vm1 virtio net write memory in 0x{:x}", used_addr);
+                debug!("vm1 virtio net write memory in 0x{:x}", used_addr);
             }
             vm_if_set_mem_map_bit(vm.clone(), used_addr);
             vm_if_set_mem_map_bit(vm.clone(), used_addr + PAGE_SIZE);
@@ -332,7 +332,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     }
 
     if !vq.avail_is_avail() {
-        println!("invalid descriptor table index");
+        error!("invalid descriptor table index");
         return false;
     }
 
@@ -343,7 +343,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         if vms_to_notify & 1 != 0 {
             let vm = match crate::kernel::vm(trgt_vmid) {
                 None => {
-                    println!(
+                    error!(
                         "virtio_net_notify_handler: target vm [{}] is not ready or not exist",
                         trgt_vmid
                     );
@@ -356,14 +356,14 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
                 let nic = match vm.emu_net_dev(0) {
                     EmuDevs::VirtioNet(x) => x,
                     _ => {
-                        println!("virtio_net_notify_handler: failed to get virtio net dev");
+                        error!("virtio_net_notify_handler: failed to get virtio net dev");
                         return false;
                     }
                 };
                 let rx_vq = match nic.vq(0) {
                     Ok(x) => x,
                     Err(_) => {
-                        println!(
+                        error!(
                             "virtio_net_notify_handler: vm[{}] failed to get virtio net rx virt queue",
                             vm.id()
                         );
@@ -381,7 +381,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
                 };
                 let cpu_trgt = vm_if_get_cpu_id(trgt_vmid);
                 if !ipi_send_msg(cpu_trgt, IpiType::IpiTEthernetMsg, IpiInnerMsg::EnternetMsg(msg)) {
-                    println!(
+                    error!(
                         "virtio_net_notify_handler: failed to send ipi message, target {}",
                         cpu_trgt
                     );
@@ -401,7 +401,7 @@ pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
             let trgt_vmid = ethernet_msg.trgt_vmid;
             let vm = match vm(trgt_vmid) {
                 None => {
-                    println!(
+                    error!(
                         "ethernet_ipi_rev_handler: target vm [{}] is not ready or not exist",
                         trgt_vmid
                     );
@@ -422,7 +422,7 @@ pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
             let rx_vq = match nic.vq(0) {
                 Ok(x) => x,
                 Err(_) => {
-                    println!(
+                    error!(
                         "ethernet_ipi_rev_handler: vm[{}] failed to get virtio net rx virt queue",
                         vm.id()
                     );
@@ -444,7 +444,7 @@ pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
 fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     // [ destination MAC - 6 ][ source MAC - 6 ][ EtherType - 2 ][ Payload ]
     if len < size_of::<VirtioNetHdr>() || len - size_of::<VirtioNetHdr>() < 6 + 6 + 2 {
-        println!(
+        warn!(
             "Too short for an ethernet frame, len {}, size of head {}",
             len,
             size_of::<VirtioNetHdr>()
@@ -531,7 +531,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     let rx_vq = match nic.vq(0) {
         Ok(x) => x,
         Err(_) => {
-            println!(
+            error!(
                 "ethernet_send_to: vm[{}] failed to get virtio net rx virt queue",
                 vm.id()
             );
@@ -541,7 +541,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
 
     let desc_header_idx_opt = rx_vq.pop_avail_desc_idx(rx_vq.avail_idx());
     if !rx_vq.avail_is_avail() {
-        println!("ethernet_send_to: receive invalid avail desc idx");
+        error!("ethernet_send_to: receive invalid avail desc idx");
         return false;
     } else if desc_header_idx_opt.is_none() {
         // println!("ethernet_send_to: desc_header_idx_opt is none");
@@ -556,14 +556,14 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     loop {
         let dst = vm_ipa2pa(vm.clone(), rx_vq.desc_addr(desc_idx));
         if dst == 0 {
-            println!(
+            debug!(
                 "rx_vq desc base table addr 0x{:x}, idx {}, avail table addr 0x{:x}, avail last idx {}",
                 rx_vq.desc_table_addr(),
                 desc_idx,
                 rx_vq.avail_addr(),
                 rx_vq.avail_idx()
             );
-            println!("ethernet_send_to: failed to get dst {}", vmid);
+            error!("ethernet_send_to: failed to get dst {}", vmid);
             return false;
         }
         let desc_len = rx_vq.desc_len(desc_idx) as usize;
@@ -571,7 +571,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
         if vmid != 0 {
             let mut addr = round_down(dst, PAGE_SIZE);
             if *VM_STATE_FLAG.lock() == 1 {
-                println!("A: vm0 virtio net write vm1 memory in 0x{:x}", addr);
+                debug!("A: vm0 virtio net write vm1 memory in 0x{:x}", addr);
             }
             while addr <= round_down(dst + desc_len, PAGE_SIZE) {
                 vm_if_set_mem_map_bit(vm.clone(), addr);
@@ -591,7 +591,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
 
     if rx_len < len {
         rx_vq.put_back_avail_desc_idx();
-        println!("ethernet_send_to: rx_len smaller than tx_len");
+        warn!("ethernet_send_to: rx_len smaller than tx_len");
         return false;
     }
     if trace() && tx_iov.get_buf(0) < 0x1000 {
@@ -601,7 +601,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     header.num_buffers = 1;
 
     if tx_iov.write_through_iov(rx_iov.clone(), len) > 0 {
-        println!(
+        error!(
             "ethernet_send_to: write through iov failed, rx_iov_num {} tx_iov_num {} rx_len {} tx_len {}",
             rx_iov.num(),
             tx_iov.num(),
@@ -614,7 +614,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     if vmid != 0 {
         let used_addr = vm_ipa2pa(vm.clone(), rx_vq.used_addr());
         if *VM_STATE_FLAG.lock() == 1 {
-            println!("B: vm0 virtio net write vm1 memory in 0x{:x}", used_addr);
+            debug!("B: vm0 virtio net write vm1 memory in 0x{:x}", used_addr);
         }
         vm_if_set_mem_map_bit(vm.clone(), used_addr);
         vm_if_set_mem_map_bit(vm, used_addr + PAGE_SIZE);

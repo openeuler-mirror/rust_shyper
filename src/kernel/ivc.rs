@@ -28,7 +28,7 @@ pub fn ivc_update_mq(receive_ipa: usize, cfg_ipa: usize) -> bool {
     let cfg_pa = vm_ipa2pa(vm, cfg_ipa);
 
     if receive_pa == 0 {
-        println!("ivc_update_mq: invalid receive_pa");
+        error!("ivc_update_mq: invalid receive_pa");
         return false;
     }
 
@@ -64,7 +64,7 @@ pub fn shyper_init(vm: Vm, base_ipa: usize, len: usize) -> bool {
             true
         }
         None => {
-            println!("shyper_init: shared mem should not be None");
+            error!("shyper_init: shared mem should not be None");
             false
         }
     }

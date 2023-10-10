@@ -51,7 +51,7 @@ fn vmm_init_memory(vm: Vm) -> bool {
         vm.set_pt(pt_dir_frame);
         vm.set_mem_region_num(config.memory_region().len());
     } else {
-        println!("vmm_init_memory: page alloc failed");
+        error!("vmm_init_memory: page alloc failed");
         return false;
     }
 
@@ -60,11 +60,11 @@ fn vmm_init_memory(vm: Vm) -> bool {
         vm_mem_size += vm_region.length;
 
         if pa == 0 {
-            println!("vmm_init_memory: vm memory region is not large enough");
+            error!("vmm_init_memory: vm memory region is not large enough");
             return false;
         }
 
-        println!(
+        info!(
             "VM {} memory region: ipa=<0x{:x}>, pa=<0x{:x}>, size=<0x{:x}>",
             vm_id, vm_region.ipa_start, pa, vm_region.length
         );
@@ -91,7 +91,7 @@ pub fn vmm_load_image(vm: Vm, bin: &[u8]) {
         }
 
         let offset = load_ipa - region.ipa_start;
-        println!(
+        info!(
             "VM {} loads kernel: ipa=<0x{:x}>, pa=<0x{:x}>, size=<{}K>",
             vm.id(),
             load_ipa,
@@ -113,7 +113,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
     let config = vm.config();
 
     if config.kernel_load_ipa() == 0 {
-        println!("vmm_init_image: kernel load ipa is null");
+        error!("vmm_init_image: kernel load ipa is null");
         return false;
     }
 
@@ -126,7 +126,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             Some(name) => {
                 #[cfg(feature = "tx2")]
                 if name == "L4T" {
-                    println!("MVM {} loading Image", vm.id());
+                    info!("MVM {} loading Image", vm.id());
                     // vmm_load_image(vm.clone(), include_bytes!("../../image/L4T"));
                     extern "C" {
                         fn _binary_vm0img_start();
@@ -140,11 +140,11 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                     };
                     vmm_load_image(vm.clone(), vm0image);
                 } else if name == "Image_vanilla" {
-                    println!("VM {} loading default Linux Image", vm.id());
+                    info!("VM {} loading default Linux Image", vm.id());
                     #[cfg(feature = "static-config")]
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                     #[cfg(not(feature = "static-config"))]
-                    println!("*** Please enable feature `static-config`");
+                    info!("*** Please enable feature `static-config`");
                 } else {
                     warn!("Image {} is not supported", name);
                 }
@@ -166,7 +166,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 }
                 #[cfg(feature = "rk3588")]
                 if name == "Linux-5.10" {
-                    println!("MVM {} loading Image", vm.id());
+                    info!("MVM {} loading Image", vm.id());
                     extern "C" {
                         fn _binary_vm0img_start();
                         fn _binary_vm0img_size();
@@ -179,11 +179,11 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                     };
                     vmm_load_image(vm.clone(), vm0image);
                 } else if name == "Image_vanilla" {
-                    println!("VM {} loading default Linux Image", vm.id());
+                    info!("VM {} loading default Linux Image", vm.id());
                     #[cfg(feature = "static-config")]
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                     #[cfg(not(feature = "static-config"))]
-                    println!("*** Please enable feature `static-config`");
+                    info!("*** Please enable feature `static-config`");
                 } else {
                     panic!("kernel image name empty")
                 }
@@ -200,7 +200,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             // Init dtb for MVM.
             use crate::SYSTEM_FDT;
             let offset = config.device_tree_load_ipa() - config.memory_region()[0].ipa_start;
-            println!("MVM[{}] dtb addr 0x{:x}", vm_id, vm.pa_start(0) + offset);
+            debug!("MVM[{}] dtb addr 0x{:x}", vm_id, vm.pa_start(0) + offset);
             vm.set_dtb((vm.pa_start(0) + offset) as *mut fdt::myctypes::c_void);
             unsafe {
                 let src = SYSTEM_FDT.get().unwrap();
@@ -214,7 +214,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             match create_fdt(config.clone()) {
                 Ok(dtb) => {
                     let offset = config.device_tree_load_ipa() - vm.config().memory_region()[0].ipa_start;
-                    println!("GVM[{}] dtb addr 0x{:x}", vm.id(), vm.pa_start(0) + offset);
+                    debug!("GVM[{}] dtb addr 0x{:x}", vm.id(), vm.pa_start(0) + offset);
                     crate::utils::memcpy_safe((vm.pa_start(0) + offset) as *const u8, dtb.as_ptr(), dtb.len());
                 }
                 _ => {
@@ -223,7 +223,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             }
         }
     } else {
-        println!(
+        warn!(
             "VM {} id {} device tree load ipa is not set",
             vm_id,
             vm.config().vm_name()
@@ -234,7 +234,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
     // Todo: support loading ramdisk from MVM shyper-cli.
     // ...
     if config.ramdisk_load_ipa() != 0 {
-        println!("VM {} use ramdisk CPIO_RAMDISK", vm_id);
+        info!("VM {} use ramdisk CPIO_RAMDISK", vm_id);
         let offset = config.ramdisk_load_ipa() - config.memory_region()[0].ipa_start;
         let len = CPIO_RAMDISK.len();
         let dst = unsafe { core::slice::from_raw_parts_mut((vm.pa_start(0) + offset) as *mut u8, len) };
@@ -503,10 +503,10 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                     }
                 }
             }
-            println!("after dtb size {}", fdt_size(dtb));
+            debug!("after dtb size {}", fdt_size(dtb));
         }
         None => {
-            println!("None dtb");
+            warn!("None dtb");
         }
     }
 }
@@ -532,7 +532,7 @@ pub fn vmm_setup_config(vm_id: usize) {
         }
     };
 
-    println!(
+    debug!(
         "vmm_setup_config VM[{}] name {:?} current core {}",
         vm_id,
         config.name.unwrap(),
@@ -595,9 +595,9 @@ pub fn vmm_cpu_assign_vcpu(vm_id: usize) {
             Some(vcpu) => vcpu,
         };
         if vcpu.id() == 0 {
-            println!("* Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
+            info!("* Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
         } else {
-            println!("Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
+            info!("Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
         }
         current_cpu().vcpu_array.append_vcpu(vcpu);
     }

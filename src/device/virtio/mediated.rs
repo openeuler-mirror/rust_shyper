@@ -191,7 +191,7 @@ pub fn mediated_blk_notify_handler(dev_ipa_reg: usize) -> Result<usize, ()> {
     let mediated_blk = match mediated_blk_list_get_from_pa(dev_pa_reg) {
         Some(blk) => blk,
         None => {
-            println!("illegal mediated blk pa {:x} ipa {:x}", dev_pa_reg, dev_ipa_reg);
+            error!("illegal mediated blk pa {:x} ipa {:x}", dev_pa_reg, dev_ipa_reg);
             return Err(());
         }
     };
@@ -199,7 +199,7 @@ pub fn mediated_blk_notify_handler(dev_ipa_reg: usize) -> Result<usize, ()> {
         // finish current IO task
         set_front_io_task_state(AsyncTaskState::Finish);
     } else {
-        println!("Mediated blk not belong to any VM");
+        warn!("Mediated blk not belong to any VM");
     }
     // invoke the excuter to handle finished IO task
     async_task_exe();
@@ -247,7 +247,7 @@ pub fn mediated_blk_read(blk_idx: usize, sector: usize, count: usize) {
     };
 
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::Default(med_msg)) {
-        println!("mediated_blk_read: failed to notify VM 0");
+        error!("mediated_blk_read: failed to notify VM 0");
     }
 }
 
@@ -266,6 +266,6 @@ pub fn mediated_blk_write(blk_idx: usize, sector: usize, count: usize) {
 
     // println!("mediated_blk_write send msg to vm0");
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::Default(med_msg)) {
-        println!("mediated_blk_write: failed to notify VM 0");
+        error!("mediated_blk_write: failed to notify VM 0");
     }
 }

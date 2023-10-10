@@ -74,7 +74,7 @@ pub fn data_abort_handler() {
     // }
     if !emu_handler(&emu_ctx) {
         active_vm().unwrap().show_pagetable(emu_ctx.address);
-        println!(
+        debug!(
             "write {}, width {}, reg width {}, addr {:x}, iss {:x}, reg idx {}, reg val 0x{:x}, esr 0x{:x}",
             exception_data_abort_access_is_write(),
             emu_ctx.width,

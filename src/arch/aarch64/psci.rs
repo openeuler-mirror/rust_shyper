@@ -310,7 +310,7 @@ pub fn psci_ipi_handler(msg: &IpiMessage) {
         IpiInnerMsg::Power(power_msg) => {
             match power_msg.event {
                 PowerEvent::PsciIpiVcpuAssignAndCpuOn => {
-                    println!("receive PsciIpiVcpuAssignAndCpuOn msg");
+                    trace!("receive PsciIpiVcpuAssignAndCpuOn msg");
                     let vm = vm(power_msg.src).unwrap();
                     let vcpu = vm.vcpuid_to_vcpu(power_msg.vcpuid).unwrap();
                     current_cpu().vcpu_array.append_vcpu(vcpu);
@@ -380,7 +380,7 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
 
     let cpu_idx = physical_linear_id.unwrap();
 
-    println!("[psci_guest_cpu_on] {vmpidr}, {cpu_idx}");
+    debug!("[psci_guest_cpu_on] {vmpidr}, {cpu_idx}");
 
     use crate::kernel::CPU_IF_LIST;
     use crate::kernel::StartReason;
@@ -403,7 +403,7 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
         let entry_point = crate::arch::_secondary_start as usize;
         let stack = unsafe { &BOOT_STACK as *const _ as usize + 4096 * 2 * cpu_idx as usize };
         r = power_arch_cpu_on(mpidr, entry_point, stack);
-        println!(
+        debug!(
             "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
             mpidr, entry_point
         );
@@ -493,7 +493,7 @@ pub fn psci_vm_maincpu_on(vmpidr: usize, entry: usize, ctx: usize, vm_id: usize)
         let entry_point = crate::arch::_secondary_start as usize;
         let stack = unsafe { &BOOT_STACK as *const _ as usize + 4096 * 2 * cpu_idx as usize };
         r = power_arch_cpu_on(mpidr, entry_point, stack);
-        println!(
+        debug!(
             "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
             mpidr, entry_point
         );
@@ -534,7 +534,7 @@ pub fn guest_cpu_on(mpidr: usize) {
     let vm = vm(vm_id).unwrap();
     let vcpu = vm.vcpuid_to_vcpu(vcpuid).unwrap();
 
-    println!("now add vcpu={} to mpidr={:X}", vcpu.id(), mpidr);
+    debug!("now add vcpu={} to mpidr={:X}", vcpu.id(), mpidr);
 
     current_cpu().vcpu_array.append_vcpu(vcpu);
 
@@ -547,7 +547,7 @@ pub fn guest_cpu_on(mpidr: usize) {
             if let Some(trgt_vcpu) = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {
                 psci_vcpu_on(trgt_vcpu, entry as usize, ctx as usize);
             } else {
-                println!("pop_vcpu_through_vmid error!");
+                error!("pop_vcpu_through_vmid error!");
                 return;
             }
         }

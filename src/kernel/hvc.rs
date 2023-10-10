@@ -211,7 +211,7 @@ pub fn hvc_guest_handler(
         HVC_CONFIG => hvc_config_handler(event, x0, x1, x2, x3, x4, x5, x6),
         HVC_UNILIB => hvc_unilib_handler(event, x0, x1, x2),
         _ => {
-            println!("hvc_guest_handler: unknown hvc type {} event {}", hvc_type, event);
+            error!("hvc_guest_handler: unknown hvc type {} event {}", hvc_type, event);
             Err(())
         }
     }
@@ -239,7 +239,7 @@ fn hvc_config_handler(
         HVC_CONFIG_DTB_DEVICE => vm_cfg_add_dtb_dev(x0, x1, x2, x3, x4, x5, x6),
         HVC_CONFIG_UPLOAD_KERNEL_IMAGE => vm_cfg_upload_kernel_image(x0, x1, x2, x3, x4),
         _ => {
-            println!("hvc_config_handler unknown event {}", event);
+            error!("hvc_config_handler unknown event {}", event);
             Err(())
         }
     }
@@ -285,7 +285,7 @@ fn hvc_vmm_handler(event: usize, x0: usize, _x1: usize) -> Result<usize, ()> {
         HVC_VMM_MIGRATE_START => {
             // demo: migration for bma1
             if x0 == 0 {
-                println!("migration for mvm is not supported");
+                error!("migration for mvm is not supported");
                 return Err(());
             }
 
@@ -379,7 +379,7 @@ fn hvc_vmm_handler(event: usize, x0: usize, _x1: usize) -> Result<usize, ()> {
             Ok(HVC_FINISH)
         }
         _ => {
-            println!("hvc_vmm unknown event {}", event);
+            error!("hvc_vmm unknown event {}", event);
             Err(())
         }
     }
@@ -413,7 +413,7 @@ fn hvc_ivc_handler(event: usize, x0: usize, x1: usize) -> Result<usize, ()> {
             Ok(base)
         }
         _ => {
-            println!("hvc_ivc_handler: unknown event {}", event);
+            error!("hvc_ivc_handler: unknown event {}", event);
             Err(())
         }
     }
@@ -424,7 +424,7 @@ fn hvc_mediated_handler(event: usize, x0: usize, x1: usize) -> Result<usize, ()>
         HVC_MEDIATED_DEV_APPEND => mediated_dev_append(x0, x1),
         HVC_MEDIATED_DEV_NOTIFY => mediated_blk_notify_handler(x0),
         _ => {
-            println!("unknown mediated event {}", event);
+            error!("unknown mediated event {}", event);
             return Err(());
         }
     }
@@ -443,7 +443,7 @@ fn hvc_unilib_handler(event: usize, x0: usize, x1: usize, x2: usize) -> Result<u
         HVC_UNILIB_FS_APPEND => unilib_fs_append(x0),
         HVC_UNILIB_FS_FINISHED => unilib_fs_finished(x0),
         _ => {
-            println!("unknown mediated event {}", event);
+            error!("unknown mediated event {}", event);
             return Err(());
         }
     }
@@ -466,7 +466,7 @@ pub fn hvc_send_msg_to_vm(vm_id: usize, guest_msg: &HvcGuestMsg) -> bool {
     }
 
     if target_addr == 0 {
-        println!("hvc_send_msg_to_vm: target VM{} interface is not prepared", vm_id);
+        warn!("hvc_send_msg_to_vm: target VM{} interface is not prepared", vm_id);
         return false;
     }
 
@@ -521,7 +521,7 @@ pub fn hvc_send_msg_to_vm(vm_id: usize, guest_msg: &HvcGuestMsg) -> bool {
             event,
         };
         if !ipi_send_msg(cpu_trgt, IpiType::IpiTHvc, IpiInnerMsg::HvcMsg(ipi_msg)) {
-            println!(
+            error!(
                 "hvc_send_msg_to_vm: Failed to send ipi message, target {} type {:#?}",
                 cpu_trgt,
                 IpiType::IpiTHvc
@@ -539,7 +539,7 @@ pub fn hvc_guest_notify(vm_id: usize) {
     let vm = vm(vm_id).unwrap();
     match current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {
         None => {
-            println!(
+            error!(
                 "hvc_guest_notify: Core {} failed to find vcpu of VM {}",
                 current_cpu().id,
                 vm_id
@@ -556,7 +556,7 @@ pub fn hvc_ipi_handler(msg: &IpiMessage) {
     match &msg.ipi_message {
         IpiInnerMsg::HvcMsg(msg) => {
             if current_cpu().vcpu_array.pop_vcpu_through_vmid(msg.trgt_vmid).is_none() {
-                println!(
+                error!(
                     "hvc_ipi_handler: Core {} failed to find vcpu of VM {}",
                     current_cpu().id,
                     msg.trgt_vmid
@@ -581,7 +581,7 @@ pub fn hvc_ipi_handler(msg: &IpiMessage) {
                         }
                         let trgt_vcpu = match current_cpu().vcpu_array.pop_vcpu_through_vmid(msg.trgt_vmid) {
                             None => {
-                                println!(
+                                error!(
                                     "Core {} failed to find target vcpu, vmid {}",
                                     current_cpu().id,
                                     msg.trgt_vmid
@@ -651,7 +651,7 @@ pub fn hvc_ipi_handler(msg: &IpiMessage) {
             }
         }
         _ => {
-            println!("vgic_ipi_handler: illegal ipi");
+            error!("vgic_ipi_handler: illegal ipi");
             return;
         }
     }
@@ -679,7 +679,7 @@ pub fn send_hvc_ipi(src_vmid: usize, trgt_vmid: usize, fid: usize, event: usize,
         event,
     };
     if !ipi_send_msg(trgt_cpuid, IpiType::IpiTHvc, IpiInnerMsg::HvcMsg(ipi_msg)) {
-        println!(
+        error!(
             "send_hvc_ipi: Failed to send ipi message, target {} type {:#?}",
             0,
             IpiType::IpiTHvc

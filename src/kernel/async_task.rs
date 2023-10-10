@@ -37,7 +37,7 @@ pub fn add_task_ipi_count() {
 pub fn add_task_count() {
     let mut count = TASK_COUNT.lock();
     if *count % 100 == 0 {
-        println!("task count {}, ipi count {}", *count, get_task_ipi_count());
+        trace!("task count {}, ipi count {}", *count, get_task_ipi_count());
     }
     *count += 1;
 }
@@ -481,7 +481,7 @@ pub fn push_used_info(desc_chain_head_idx: u32, used_len: u32, src_vmid: usize) 
             });
         }
         None => {
-            println!("async_push_used_info: src_vmid {} not existed", src_vmid);
+            error!("async_push_used_info: src_vmid {} not existed", src_vmid);
         }
     }
 }
@@ -498,7 +498,7 @@ fn update_used_info(vq: Virtq, src_vmid: usize) {
             // info_list.clear();
         }
         None => {
-            println!("async_push_used_info: src_vmid {} not existed", src_vmid);
+            error!("async_push_used_info: src_vmid {} not existed", src_vmid);
         }
     }
 }

@@ -27,7 +27,7 @@ pub fn vmm_remove_vm(vm_id: usize) {
 
     let vm = match vm(vm_id) {
         None => {
-            println!("vmm_remove_vm: vm[{}] not exist", vm_id);
+            error!("vmm_remove_vm: vm[{}] not exist", vm_id);
             return;
         }
         Some(vm) => vm,

@@ -42,7 +42,7 @@ impl EmuDevs {
                 if let EmuDevs::Vgic(src_vgic) = src_dev {
                     vgic.save_vgic(src_vgic);
                 } else {
-                    println!("EmuDevs::migrate_save: illegal src dev type for vgic");
+                    error!("EmuDevs::migrate_save: illegal src dev type for vgic");
                 }
             }
             EmuDevs::VirtioBlk(mmio) => {
@@ -56,21 +56,21 @@ impl EmuDevs {
                         },
                     );
                 } else {
-                    println!("EmuDevs::migrate_save: illegal src dev type for virtio blk");
+                    error!("EmuDevs::migrate_save: illegal src dev type for virtio blk");
                 }
             }
             EmuDevs::VirtioNet(mmio) => {
                 if let EmuDevs::VirtioNet(src_mmio) = src_dev {
                     mmio.save_mmio(src_mmio, Some(virtio_net_notify_handler));
                 } else {
-                    println!("EmuDevs::migrate_save: illegal src dev type for virtio net");
+                    error!("EmuDevs::migrate_save: illegal src dev type for virtio net");
                 }
             }
             EmuDevs::VirtioConsole(mmio) => {
                 if let EmuDevs::VirtioConsole(src_mmio) = src_dev {
                     mmio.save_mmio(src_mmio, Some(virtio_console_notify_handler));
                 } else {
-                    println!("EmuDevs::migrate_save: illegal src dev type for virtio console");
+                    error!("EmuDevs::migrate_save: illegal src dev type for virtio console");
                 }
             }
             EmuDevs::None => {}
@@ -186,7 +186,7 @@ pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
             return handler(id, emu_ctx);
         }
     }
-    println!(
+    error!(
         "emu_handler: no emul handler for Core {} data abort ipa 0x{:x}",
         current_cpu().id,
         ipa

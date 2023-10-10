@@ -354,7 +354,7 @@ impl VgicInt {
                 return Some(owner.id());
             }
             None => {
-                println!("owner_id is None");
+                error!("owner_id is None");
                 return None;
             }
         }
@@ -680,7 +680,8 @@ impl Vgic {
         for interrupt in src_vgicd.interrupts.iter() {
             cur_vgicd.interrupts.push(interrupt.update());
         }
-        println!(
+        // cur_vgicd.interrupts.append(&mut src_vgicd.interrupts);
+        debug!(
             "src vgicd interrupts len {}, cur interrupts len {}",
             src_vgicd.interrupts.len(),
             cur_vgicd.interrupts.len()
@@ -717,7 +718,7 @@ impl Vgic {
                             }
                         }
                     }
-                    println!(
+                    debug!(
                         "src vgicd cpu_priv interrupts len {}, cur interrupts cpu_priv len {}",
                         cpu_priv.interrupts.len(),
                         interrupts.len()
@@ -1187,7 +1188,7 @@ impl Vgic {
                         val: en as u8,
                     };
                     if !ipi_send_msg(int_phys_id, IpiType::IpiTIntc, IpiInnerMsg::Initc(ipi_msg)) {
-                        println!(
+                        error!(
                             "vgicd_set_enable: Failed to send ipi message, target {} type {}",
                             int_phys_id, 0
                         );
@@ -1196,7 +1197,7 @@ impl Vgic {
                 drop(interrupt_lock);
             }
             None => {
-                println!("vgicd_set_enable: interrupt {} is illegal", int_id);
+                error!("vgicd_set_enable: interrupt {} is illegal", int_id);
                 return;
             }
         }
@@ -1244,7 +1245,7 @@ impl Vgic {
                         let phys_id = owner.phys_id();
 
                         if !ipi_send_msg(phys_id, IpiType::IpiTIntc, IpiInnerMsg::Initc(m)) {
-                            println!(
+                            error!(
                                 "vgicd_set_pend: Failed to send ipi message, target {} type {}",
                                 phys_id, 0
                             );
@@ -1301,7 +1302,7 @@ impl Vgic {
                 };
                 let phys_id = interrupt.owner_phys_id().unwrap();
                 if !ipi_send_msg(phys_id, IpiType::IpiTIntc, IpiInnerMsg::Initc(m)) {
-                    println!(
+                    error!(
                         "vgicd_set_active: Failed to send ipi message, target {} type {}",
                         phys_id, 0
                     );
@@ -1337,7 +1338,7 @@ impl Vgic {
                     IpiType::IpiTIntc,
                     IpiInnerMsg::Initc(m),
                 ) {
-                    println!(
+                    error!(
                         "set_icfgr: Failed to send ipi message, target {} type {}",
                         interrupt.owner_phys_id().unwrap(),
                         0
@@ -1396,7 +1397,7 @@ impl Vgic {
                     IpiType::IpiTIntc,
                     IpiInnerMsg::Initc(m),
                 ) {
-                    println!(
+                    error!(
                         "set_prio: Failed to send ipi message, target {} type {}",
                         interrupt.owner_phys_id().unwrap(),
                         0
@@ -1488,7 +1489,7 @@ impl Vgic {
             let val = self.vgicd_typer() as usize;
             current_cpu().set_gpr(idx, val);
         } else {
-            println!("emu_typer_access: can't write to RO reg");
+            error!("emu_typer_access: can't write to RO reg");
         }
     }
 
@@ -1498,7 +1499,7 @@ impl Vgic {
             let val = self.vgicd_iidr() as usize;
             current_cpu().set_gpr(idx, val);
         } else {
-            println!("emu_iidr_access: can't write to RO reg");
+            error!("emu_iidr_access: can't write to RO reg");
         }
     }
 
@@ -1523,7 +1524,7 @@ impl Vgic {
             }
         }
         if first_int >= 16 && !vm_has_interrupt_flag {
-            println!(
+            error!(
                 "emu_isenabler_access: vm[{}] does not have interrupt {}",
                 vm_id, first_int
             );
@@ -2285,13 +2286,13 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
             val = intc.val;
         }
         _ => {
-            println!("vgic_ipi_handler: illegal ipi");
+            error!("vgic_ipi_handler: illegal ipi");
             return;
         }
     }
     let trgt_vcpu = match current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {
         None => {
-            println!("Core {} received vgic msg from unknown VM {}", current_cpu().id, vm_id);
+            error!("Core {} received vgic msg from unknown VM {}", current_cpu().id, vm_id);
             return;
         }
         Some(vcpu) => vcpu,
@@ -2307,7 +2308,7 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
     let vgic = vm.vgic();
 
     if vm_id as usize != vm.id() {
-        println!("VM {} received vgic msg from another vm {}", vm.id(), vm_id);
+        error!("VM {} received vgic msg from another vm {}", vm.id(), vm_id);
         return;
     }
     if let IpiInnerMsg::Initc(intc) = &msg.ipi_message {
@@ -2349,7 +2350,7 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
                 crate::kernel::interrupt_vm_inject(trgt_vcpu.vm().unwrap(), trgt_vcpu.clone(), int_id as usize, 0);
             }
             _ => {
-                println!("vgic_ipi_handler: core {} received unknown event", current_cpu().id)
+                error!("vgic_ipi_handler: core {} received unknown event", current_cpu().id)
             }
         }
     }

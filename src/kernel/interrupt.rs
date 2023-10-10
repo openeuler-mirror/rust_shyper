@@ -109,7 +109,7 @@ pub fn interrupt_init() {
             panic!("interrupt_init: failed to register ipi hyper fresh");
         }
 
-        println!("Interrupt init ok");
+        info!("Interrupt init ok");
     }
     interrupt_cpu_enable(INTERRUPT_IRQ_IPI, true);
 }
@@ -118,7 +118,7 @@ pub fn interrupt_vm_register(vm: Vm, id: usize) -> bool {
     // println!("VM {} register interrupt {}", vm.id(), id);
     let mut glb_bitmap_lock = INTERRUPT_GLB_BITMAP.lock();
     if glb_bitmap_lock.get(id) != 0 && id >= GIC_PRIVINT_NUM {
-        println!("interrupt_vm_register: VM {} interrupts conflict, id = {}", vm.id(), id);
+        warn!("interrupt_vm_register: VM {} interrupts conflict, id = {}", vm.id(), id);
         return false;
     }
 
@@ -149,7 +149,7 @@ pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize, _source: usize) {
     //     println!("inject int {} to core 1", int_id);
     // }
     if vcpu.phys_id() != current_cpu().id {
-        println!(
+        error!(
             "interrupt_vm_inject: Core {} failed to find target (VCPU {} VM {})",
             current_cpu().id,
             vcpu.id(),
@@ -220,7 +220,7 @@ pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
         }
     }
 
-    println!(
+    warn!(
         "interrupt_handler: core {} receive unsupported int {}",
         current_cpu().id,
         int_id
@@ -243,7 +243,7 @@ pub fn interrupt_inject_ipi_handler(msg: &IpiMessage) {
             }
         }
         _ => {
-            println!("interrupt_inject_ipi_handler: illegal ipi type");
+            error!("interrupt_inject_ipi_handler: illegal ipi type");
             return;
         }
     }

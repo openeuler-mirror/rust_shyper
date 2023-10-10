@@ -78,7 +78,7 @@ impl PlatOperation for QemuPlatform {
     }
 
     fn blk_init() {
-        println!("Platform block driver init ok");
+        info!("Platform block driver init ok");
         crate::driver::virtio_blk_init();
     }
 

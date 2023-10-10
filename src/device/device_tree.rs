@@ -24,7 +24,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
     #[cfg(feature = "tx2")]
     unsafe {
         use fdt::*;
-        println!("fdt orignal size {}", fdt_size(dtb));
+        info!("fdt orignal size {}", fdt_size(dtb));
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         let r = fdt_del_mem_rsv(dtb, 0);
@@ -78,7 +78,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         );
         assert_eq!(r, 0);
         let len = fdt_size(dtb);
-        println!("fdt after patched size {}", len);
+        info!("fdt after patched size {}", len);
         let slice = core::slice::from_raw_parts(dtb as *const u8, len as usize);
 
         SYSTEM_FDT.call_once(|| slice.to_vec());
@@ -90,14 +90,14 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         use crate::arch::PAGE_SIZE;
         let pi_fdt = PI4_DTB_ADDR as *mut fdt::myctypes::c_void;
         let len = round_up(fdt_size(pi_fdt) as usize, PAGE_SIZE) + PAGE_SIZE;
-        println!("fdt orignal size {}", len);
+        info!("fdt orignal size {}", len);
         let slice = core::slice::from_raw_parts(pi_fdt as *const u8, len as usize);
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
     #[cfg(feature = "qemu")]
     unsafe {
         use fdt::*;
-        println!("fdt orignal size {}, ptr {dtb:#p}", fdt_size(dtb));
+        info!("fdt orignal size {}, ptr {dtb:#p}", fdt_size(dtb));
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
@@ -150,14 +150,14 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         //assert_eq!(fdt_remove_node(dtb, "/flash@0\0".as_ptr()), 0);
 
         let len = fdt_size(dtb) as usize;
-        println!("fdt patched size {}", len);
+        info!("fdt patched size {}", len);
         let slice = core::slice::from_raw_parts(dtb as *const u8, len);
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
     #[cfg(feature = "rk3588")]
     unsafe {
         use fdt::*;
-        println!("fdt orignal size {}", fdt_size(dtb));
+        info!("fdt orignal size {}", fdt_size(dtb));
 
         // assert_eq!(fdt_remove_node(dtb, "/sram@10f000\0".as_ptr()), 0);
         //use for boot one core
@@ -200,7 +200,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         // assert_eq!(fdt_remove_node(dtb, "/fiq-debugger\0".as_ptr()), 0);
         // assert_eq!(fdt_remove_node(dtb, "/debug@fd104000\0".as_ptr()), 0);
         let len = fdt_size(dtb);
-        println!("fdt after patched size {}", len);
+        info!("fdt after patched size {}", len);
         let slice = core::slice::from_raw_parts(dtb as *const u8, len as usize);
 
         SYSTEM_FDT.call_once(|| slice.to_vec());
@@ -252,7 +252,7 @@ pub fn create_fdt(config: VmConfigEntry) -> Result<Vec<u8>, Error> {
             EmuDeviceType::EmuDeviceTVirtioBlk
             | EmuDeviceType::EmuDeviceTVirtioNet
             | EmuDeviceType::EmuDeviceTVirtioConsole => {
-                println!(
+                info!(
                     "virtio fdt node init {} {:x}",
                     emu_cfg.name.as_ref().unwrap(),
                     emu_cfg.base_ipa
@@ -260,7 +260,7 @@ pub fn create_fdt(config: VmConfigEntry) -> Result<Vec<u8>, Error> {
                 create_virtio_node(&mut fdt, &emu_cfg.name.unwrap(), emu_cfg.irq_id, emu_cfg.base_ipa)?;
             }
             EmuDeviceType::EmuDeviceTShyper => {
-                println!("shyper fdt node init {:x}", emu_cfg.base_ipa);
+                info!("shyper fdt node init {:x}", emu_cfg.base_ipa);
                 create_shyper_node(
                     &mut fdt,
                     &emu_cfg.name.unwrap(),
@@ -423,7 +423,7 @@ fn create_gic_node(fdt: &mut FdtWriter, gicc_addr: usize, gicd_addr: usize) -> F
 }
 
 fn create_gicv3_node(fdt: &mut FdtWriter, gicr_addr: usize, gicd_addr: usize) -> FdtWriterResult<()> {
-    println!("create_gicv3_node");
+    info!("create_gicv3_node");
     let gic_name = format!("interrupt-controller@{:x}", gicd_addr);
     let gic = fdt.begin_node(&gic_name)?;
 

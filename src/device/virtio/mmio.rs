@@ -195,7 +195,7 @@ impl VirtioMmio {
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(trgt_id, IpiType::IpiTIntInject, IpiInnerMsg::IntInjectMsg(m)) {
-                println!("notify_config: failed to send ipi to Core {}", trgt_id);
+                error!("notify_config: failed to send ipi to Core {}", trgt_id);
             }
         }
     }
@@ -212,7 +212,7 @@ impl VirtioMmio {
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(trgt_id, IpiType::IpiTIntInject, IpiInnerMsg::IntInjectMsg(m)) {
-                println!("notify_config: failed to send ipi to Core {}", trgt_id);
+                error!("notify_config: failed to send ipi to Core {}", trgt_id);
             }
         }
     }
@@ -485,7 +485,7 @@ fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: u
                 value = mmio.dev_stat();
             }
             _ => {
-                println!("virtio_be_init_handler wrong reg_read, address=0x{:x}", emu_ctx.address);
+                error!("virtio_be_init_handler wrong reg_read, address=0x{:x}", emu_ctx.address);
                 return;
             }
         }
@@ -521,7 +521,7 @@ fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: u
                 }
             }
             _ => {
-                println!("virtio_mmio_prologue_access: wrong reg write 0x{:x}", emu_ctx.address);
+                error!("virtio_mmio_prologue_access: wrong reg write 0x{:x}", emu_ctx.address);
                 return;
             }
         }
@@ -549,7 +549,7 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                 }
             }
             _ => {
-                println!(
+                error!(
                     "virtio_mmio_queue_access: wrong reg_read, address {:x}",
                     emu_ctx.address
                 );
@@ -621,7 +621,7 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                     virtq.or_desc_table_addr(value << 32);
                     let desc_table_addr = vm_ipa2pa(active_vm().unwrap(), virtq.desc_table_addr());
                     if desc_table_addr == 0 {
-                        println!("virtio_mmio_queue_access: invalid desc_table_addr");
+                        error!("virtio_mmio_queue_access: invalid desc_table_addr");
                         return;
                     }
                     virtq.set_desc_table(desc_table_addr);
@@ -649,7 +649,7 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                     virtq.or_avail_addr(value << 32);
                     let avail_addr = vm_ipa2pa(active_vm().unwrap(), virtq.avail_addr());
                     if avail_addr == 0 {
-                        println!("virtio_mmio_queue_access: invalid avail_addr");
+                        error!("virtio_mmio_queue_access: invalid avail_addr");
                         return;
                     }
                     virtq.set_avail(avail_addr);
@@ -677,7 +677,7 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                     virtq.or_used_addr(value << 32);
                     let used_addr = vm_ipa2pa(active_vm().unwrap(), virtq.used_addr());
                     if used_addr == 0 {
-                        println!("virtio_mmio_queue_access: invalid used_addr");
+                        error!("virtio_mmio_queue_access: invalid used_addr");
                         return;
                     }
                     virtq.set_used(used_addr);
@@ -690,7 +690,7 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                 }
             },
             _ => {
-                println!("virtio_mmio_queue_access: wrong reg write 0x{:x}", emu_ctx.address);
+                error!("virtio_mmio_queue_access: wrong reg write 0x{:x}", emu_ctx.address);
             }
         }
     }
@@ -715,7 +715,7 @@ fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize,
                 }
             },
             _ => {
-                println!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
+                error!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
                 return;
             }
         }
@@ -723,7 +723,7 @@ fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize,
         let val = value as usize;
         current_cpu().set_gpr(idx, val);
     } else {
-        println!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
+        error!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
     }
 }
 
@@ -745,7 +745,7 @@ pub fn emu_virtio_mmio_init(vm: Vm, emu_dev_id: usize, mediated: bool) -> bool {
             vm.set_emu_devs(emu_dev_id, EmuDevs::VirtioConsole(mmio.clone()));
         }
         _ => {
-            println!("emu_virtio_mmio_init: unknown emulated device type");
+            error!("emu_virtio_mmio_init: unknown emulated device type");
             return false;
         }
     }
@@ -792,7 +792,7 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
         // println!("in VIRTIO_MMIO_QUEUE_NOTIFY");
 
         if !mmio.notify_handler(current_cpu().get_gpr(emu_ctx.reg)) {
-            println!("Failed to handle virtio mmio request!");
+            error!("Failed to handle virtio mmio request!");
         }
     } else if offset == VIRTIO_MMIO_INTERRUPT_STATUS && !write {
         // println!("in VIRTIO_MMIO_INTERRUPT_STATUS");
@@ -816,7 +816,7 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
         // println!("in virtio_mmio_cfg_access");
         virtio_mmio_cfg_access(mmio, emu_ctx, offset, write);
     } else {
-        println!(
+        error!(
             "emu_virtio_mmio_handler: regs wrong {}, address 0x{:x}, offset 0x{:x}",
             if write { "write" } else { "read" },
             addr,

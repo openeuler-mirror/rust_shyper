@@ -181,7 +181,7 @@ pub fn ipi_irq_handler() {
         drop(ipi_handler_list);
 
         if len <= ipi_type {
-            println!("illegal ipi type {}", ipi_type)
+            error!("illegal ipi type {}", ipi_type)
         } else {
             handler(&ipi_msg);
         }
@@ -195,7 +195,7 @@ pub fn ipi_register(ipi_type: IpiType, handler: IpiHandlerFunc) -> bool {
     let mut ipi_handler_list = IPI_HANDLER_LIST.lock();
     for i in 0..ipi_handler_list.len() {
         if ipi_type as usize == ipi_handler_list[i].ipi_type as usize {
-            println!("ipi_register: try to cover exist ipi handler");
+            warn!("ipi_register: try to cover exist ipi handler");
             return false;
         }
     }
@@ -210,7 +210,7 @@ pub fn ipi_register(ipi_type: IpiType, handler: IpiHandlerFunc) -> bool {
 
 fn ipi_send(target_id: usize, msg: IpiMessage) -> bool {
     if target_id >= PLAT_DESC.cpu_desc.num {
-        println!("ipi_send: core {} not exist", target_id);
+        warn!("ipi_send: core {} not exist", target_id);
         return false;
     }
 
@@ -237,7 +237,7 @@ pub fn ipi_intra_broadcast_msg(vm: Vm, ipi_type: IpiType, msg: IpiInnerMsg) -> b
         if ((1 << i) & vm.ncpu()) != 0 && i != current_cpu().id {
             n += 1;
             if !ipi_send_msg(i, ipi_type, msg.clone()) {
-                println!(
+                error!(
                     "ipi_intra_broadcast_msg: Failed to send ipi request, cpu {} type {}",
                     i, ipi_type as usize
                 );

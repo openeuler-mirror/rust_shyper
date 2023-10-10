@@ -84,7 +84,7 @@ impl ConsoleDesc {
     pub fn offset_data(&self, offset: usize) -> u32 {
         let start_addr = self.start_addr();
         if trace() && start_addr + offset < 0x1000 {
-            println!("value addr is {}", start_addr + offset);
+            debug!("value addr is {}", start_addr + offset);
         }
         let value = unsafe { *((start_addr + offset) as *const u32) };
         return value;
@@ -154,7 +154,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
     }
 
     if vq.ready() == 0 {
-        println!("virtio_console_notify_handler: console virt_queue is not ready!");
+        error!("virtio_console_notify_handler: console virt_queue is not ready!");
         return false;
     }
 
@@ -164,7 +164,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
     let (trgt_vmid, trgt_console_ipa) = match dev.desc() {
         DevDesc::ConsoleDesc(desc) => desc.target_console(),
         _ => {
-            println!("virtio_console_notify_handler: console desc should not be None");
+            error!("virtio_console_notify_handler: console desc should not be None");
             return false;
         }
     };
@@ -180,7 +180,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         loop {
             let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
             if addr == 0 {
-                println!("virtio_console_notify_handler: failed to desc addr");
+                error!("virtio_console_notify_handler: failed to desc addr");
                 return false;
             }
             // println!("virtio_consle:addr:{:#x}", addr);
@@ -203,7 +203,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         // }
 
         if !virtio_console_recv(trgt_vmid, trgt_console_ipa, tx_iov.clone(), len) {
-            println!("virtio_console_notify_handler: failed send");
+            error!("virtio_console_notify_handler: failed send");
             // return false;
         }
         if vm.id() != 0 {
@@ -224,7 +224,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
     }
 
     if !vq.avail_is_avail() {
-        println!("invalid descriptor table index");
+        error!("invalid descriptor table index");
         return false;
     }
 
@@ -237,7 +237,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
 fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov, len: usize) -> bool {
     let trgt_vm = match vm(trgt_vmid as usize) {
         None => {
-            println!("target vm [{}] is not ready or not exist", trgt_vmid);
+            warn!("target vm [{}] is not ready or not exist", trgt_vmid);
             return true;
         }
         Some(vm) => vm,
@@ -246,7 +246,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
     let console = match trgt_vm.emu_console_dev(trgt_console_ipa as usize) {
         EmuDevs::VirtioConsole(x) => x,
         _ => {
-            println!(
+            error!(
                 "virtio_console_recv: trgt_vm[{}] failed to get virtio console dev",
                 trgt_vmid
             );
@@ -255,7 +255,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
     };
 
     if !console.dev().activated() {
-        println!(
+        warn!(
             "virtio_console_recv: trgt_vm[{}] virtio console dev is not ready",
             trgt_vmid
         );
@@ -265,7 +265,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
     let rx_vq = match console.vq(0) {
         Ok(x) => x,
         Err(_) => {
-            println!(
+            error!(
                 "virtio_console_recv: trgt_vm[{}] failed to get virtio console rx virt queue",
                 trgt_vmid
             );
@@ -275,7 +275,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
 
     let desc_header_idx_opt = rx_vq.pop_avail_desc_idx(rx_vq.avail_idx());
     if !rx_vq.avail_is_avail() {
-        println!("virtio_console_recv: receive invalid avail desc idx");
+        error!("virtio_console_recv: receive invalid avail desc idx");
         return false;
     } else if desc_header_idx_opt.is_none() {
         // println!("virtio_console_recv: desc_header_idx_opt.is_none()");
@@ -289,7 +289,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
     loop {
         let dst = vm_ipa2pa(trgt_vm.clone(), rx_vq.desc_addr(desc_idx));
         if dst == 0 {
-            println!(
+            error!(
                 "virtio_console_recv: failed to get dst, desc_idx {}, avail idx {}",
                 desc_idx,
                 rx_vq.avail_idx()
@@ -319,12 +319,12 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
 
     if rx_len < len {
         rx_vq.put_back_avail_desc_idx();
-        println!("virtio_console_recv: rx_len smaller than tx_len");
+        error!("virtio_console_recv: rx_len smaller than tx_len");
         return false;
     }
 
     if tx_iov.write_through_iov(rx_iov.clone(), len) > 0 {
-        println!(
+        error!(
             "virtio_console_recv: write through iov failed, rx_iov_num {} tx_iov_num {} rx_len {} tx_len {}",
             rx_iov.num(),
             tx_iov.num(),
@@ -340,7 +340,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         vm_if_set_mem_map_bit(trgt_vm.clone(), used_addr + PAGE_SIZE);
     }
     if !rx_vq.update_used_ring(len as u32, desc_idx_header as u32) {
-        println!(
+        error!(
             "virtio_console_recv: update used ring failed len {} rx_vq num {}",
             len,
             rx_vq.num()

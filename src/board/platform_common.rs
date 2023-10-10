@@ -123,7 +123,7 @@ pub trait PlatOperation {
     }
 
     fn sys_reboot() -> ! {
-        println!("Hypervisor reset...");
+        info!("Hypervisor reset...");
         crate::arch::power_arch_sys_reset();
         loop {
             core::hint::spin_loop();
@@ -131,7 +131,7 @@ pub trait PlatOperation {
     }
 
     fn sys_shutdown() -> ! {
-        println!("Hypervisor shutdown...");
+        info!("Hypervisor shutdown...");
         crate::arch::power_arch_sys_shutdown();
         loop {
             core::hint::spin_loop();
