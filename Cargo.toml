@@ -23,9 +23,6 @@ lto = true
 panic = "abort"
 debug = true
 
-[build-dependencies]
-cc = "1.0"
-
 [dependencies]
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
 fdt = { path = "libfdt-binding" }
