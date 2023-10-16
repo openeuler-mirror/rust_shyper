@@ -14,7 +14,28 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    println!("cargo:rerun-if-changed=./");
+    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-changed=./libfdt");
+    println!("cargo:rerun-if-changed=build.rs");
+
+    // compile libfdt-bingding
+    let fdt_dirs = ["./", "./libfdt"];
+    let c_files = fdt_dirs.iter().flat_map(|path| {
+        std::fs::read_dir(path).unwrap().filter_map(|f| {
+            let f = f.unwrap();
+            if f.file_type().unwrap().is_file() && matches!(f.path().extension(), Some(ext) if ext == "c") {
+                Some(f.path())
+            } else {
+                None
+            }
+        })
+    });
+    cc::Build::new()
+        .compiler("aarch64-none-elf-gcc")
+        .includes(fdt_dirs)
+        .files(c_files)
+        .flag("-w")
+        .compile("fdt-binding");
 
     let bindings = bindgen::Builder::default()
         .use_core()
