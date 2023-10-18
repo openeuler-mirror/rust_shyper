@@ -212,14 +212,16 @@ then you can interact with the guest VM.
 
 For more information about Rust-Shyper, see the following slides [Rust Embedded Hypervisor with VM Migration and Live-update](./doc/%E5%9F%BA%E4%BA%8ERust%E7%9A%84%E5%B5%8C%E5%85%A5%E5%BC%8F%E8%99%9A%E6%8B%9F%E6%9C%BA%E7%9B%91%E8%A7%86%E5%99%A8%E5%8F%8A%E7%83%AD%E6%9B%B4%E6%96%B0%E6%8A%80%E6%9C%AF%EF%BC%88%E7%8E%8B%E9%9B%B7%EF%BC%89.pdf)
 
+We also built a Unikernel that can run upon Rust-Shyper, called [Unishyper](https://gitee.com/unishyper/unishyper).
+
 #### About Us
 
 The developers of Rust-Shyper come from the OS research team of the School of Computer Science and Engineering, Beihang University. If you have any questions, please contact us via e-mail.
-- Lei Wang: Professor, [Homepage](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn
-- Bo Jiang: Associate Professor, [Homepage](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
-- Siran Li: Postgraduate student, ohmrlsr@buaa.edu.cn
-- Keyang Hu: Postgraduate student, hky1999@buaa.edu.cn
-- Ce Mo: Postgraduate student, moce4917@buaa.edu.cn
+- **Lei Wang**: [Homepage](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn
+- **Bo Jiang**: [Homepage](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
+- Siran Li: ohmrlsr@buaa.edu.cn
+- Keyang Hu: hky1999@buaa.edu.cn
+- Ce Mo: moce4917@buaa.edu.cn
 
 #### Contribution
 
