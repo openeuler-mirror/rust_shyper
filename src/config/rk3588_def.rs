@@ -140,6 +140,15 @@ pub fn mvm_config_init() {
         // dev_property: false means non-cachable here.
         // See 'vmm_init_passthrough_device'.
         PassthroughRegion { ipa: 0x0, pa: 0x0, length: 0x9400000, dev_property: false },
+        // device for pci
+        PassthroughRegion { ipa: 0xa41000000, pa: 0xa41000000, length: 0x400000, dev_property: true },
+        PassthroughRegion { ipa: 0xa40c00000, pa: 0xa40c00000, length: 0x400000, dev_property: true },
+        // device for PCI bus to be mapped in.
+        PassthroughRegion { ipa: 0xf4000000, pa: 0xf4000000, length: 0x1000000, dev_property: true },
+        PassthroughRegion { ipa: 0xf3000000, pa: 0xf3000000, length: 0x1000000, dev_property: true },
+        // device for its
+        PassthroughRegion { ipa: 0xfe640000, pa: 0xfe640000, length: 0x20000, dev_property: true },
+        PassthroughRegion { ipa: 0xfe660000, pa: 0xfe660000, length: 0x20000, dev_property: true },
     ];
     pt_dev_config.irqs = vec![
         20,  //fsc_interrupt_int_n
@@ -211,6 +220,17 @@ pub fn mvm_config_init() {
         254, //xhci-hcd:usb5
         265, //eth0
         266, //eth0
+        275, //eth0
+        276, //pcie
+        277, //pcie
+        278, //pcie
+        279, //pcie
+        280, //pcie
+        281, //pcie
+        282, //pcie
+        283, //pcie
+        284, //pcie
+        285, //pcie
         321, //rk_timer
         347, //feaf0000.watchdog
         349, //fd880000.i2c

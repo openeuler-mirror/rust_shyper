@@ -12,7 +12,7 @@ use tock_registers::*;
 use tock_registers::interfaces::*;
 
 use crate::utils::{memset_safe, bit_extract};
-use crate::arch::{LVL1_SHIFT, LVL2_SHIFT};
+use crate::arch::LVL2_SHIFT;
 
 use super::interface::*;
 
@@ -138,6 +138,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         use crate::arch::pt_lvl2_idx;
         use crate::board::PLAT_DESC;
         for i in 0..PLATFORM_PHYSICAL_LIMIT_GB {
+            use crate::arch::LVL1_SHIFT;
             let output_addr = i << LVL1_SHIFT;
             lvl1_pt.entry[i] = if output_addr >= PLAT_DESC.mem_desc.base {
                 BlockDescriptor::new(output_addr, false)
@@ -197,6 +198,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     {
         use crate::board::PLAT_DESC;
         for index in 0..PLATFORM_PHYSICAL_LIMIT_GB {
+            use crate::arch::LVL1_SHIFT;
             let pa = index << LVL1_SHIFT;
             lvl1_pt.entry[index] = BlockDescriptor::new(pa, pa < PLAT_DESC.mem_desc.base);
         }
