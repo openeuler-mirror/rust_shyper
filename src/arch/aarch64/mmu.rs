@@ -11,7 +11,7 @@
 use tock_registers::*;
 use tock_registers::interfaces::*;
 
-use crate::utils::memset_safe;
+use crate::utils::{memset_safe, bit_extract};
 use crate::arch::{LVL1_SHIFT, LVL2_SHIFT};
 
 use super::interface::*;
@@ -266,4 +266,33 @@ pub extern "C" fn mmu_init(pt: &PageTables) {
     // barrier::isb(barrier::SY);
     // SCTLR_EL2.modify(SCTLR_EL2::M::Enable + SCTLR_EL2::C::Cacheable + SCTLR_EL2::I::Cacheable);
     // barrier::isb(barrier::SY);
+}
+
+macro_rules! arm_at {
+    ($at_op:expr, $addr:expr) => {
+        unsafe {
+            core::arch::asm!(concat!("AT ", $at_op, ", {0}"), in(reg) $addr, options(nomem, nostack));
+            core::arch::asm!("isb");
+        }
+    };
+}
+
+const PAR_EL1_OFF: usize = 12;
+const PAR_EL1_LEN: usize = 36;
+
+pub fn gva2ipa(gva: usize) -> Result<usize, ()> {
+    use cortex_a::registers::PAR_EL1;
+
+    let par = PAR_EL1.get();
+    arm_at!("s1e1r", gva);
+    let tmp = PAR_EL1.get();
+    PAR_EL1.set(par);
+
+    if (tmp & PAR_EL1::F::TranslationAborted.value) != 0 {
+        Err(())
+    } else {
+        let par_pa = bit_extract(tmp as usize, PAR_EL1_OFF, PAR_EL1_LEN);
+        let pa = (par_pa << PAR_EL1_OFF) | (gva & (PAGE_SIZE - 1));
+        Ok(pa)
+    }
 }
