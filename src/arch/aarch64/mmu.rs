@@ -268,15 +268,6 @@ pub extern "C" fn mmu_init(pt: &PageTables) {
     // barrier::isb(barrier::SY);
 }
 
-macro_rules! arm_at {
-    ($at_op:expr, $addr:expr) => {
-        unsafe {
-            core::arch::asm!(concat!("AT ", $at_op, ", {0}"), in(reg) $addr, options(nomem, nostack));
-            core::arch::asm!("isb");
-        }
-    };
-}
-
 const PAR_EL1_OFF: usize = 12;
 const PAR_EL1_LEN: usize = 36;
 

@@ -62,3 +62,12 @@ macro_rules! msr {
 pub const fn sysreg_enc_addr(op0: usize, op1: usize, crn: usize, crm: usize, op2: usize) -> usize {
     (((op0) & 0x3) << 20) | (((op2) & 0x7) << 17) | (((op1) & 0x7) << 14) | (((crn) & 0xf) << 10) | (((crm) & 0xf) << 1)
 }
+
+macro_rules! arm_at {
+    ($at_op:expr, $addr:expr) => {
+        unsafe {
+            core::arch::asm!(concat!("AT ", $at_op, ", {0}"), in(reg) $addr, options(nomem, nostack));
+            core::arch::asm!("isb");
+        }
+    };
+}
