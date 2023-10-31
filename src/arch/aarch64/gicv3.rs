@@ -36,6 +36,7 @@ pub const GICD_TYPER_IDBITS_OFF: usize = 19;
 pub const GICD_TYPER_IDBITS_LEN: usize = 5;
 pub const GICD_TYPER_IDBITS_MSK: usize = (((1 << ((GICD_TYPER_IDBITS_LEN) - 1)) << 1) - 1) << (GICD_TYPER_IDBITS_OFF);
 const GICD_IROUTER_AFF_MSK: usize = GICD_IROUTER_RES0_MSK & !GICD_IROUTER_IRM_BIT;
+pub const GICD_TYPER_LPIS: usize = 1 << 17;
 
 //GICR BITS
 pub const GICR_TYPER_PRCNUM_OFF: usize = 8;
@@ -132,8 +133,8 @@ const GIC_INT_RT_NUM: usize = 1019 - 32 + 1;
 pub const GIC_LIST_REGS_NUM: usize = 64;
 
 pub const GICD_TYPER_CPUNUM_OFF: usize = 5;
-// pub const GICD_TYPER_CPUNUM_LEN: usize = 3;
-pub const GICD_TYPER_CPUNUM_MSK: usize = 0b11111;
+pub const GICD_TYPER_CPUNUM_LEN: usize = 3;
+pub const GICD_TYPER_CPUNUM_MSK: usize = ((1 << GICD_TYPER_CPUNUM_LEN) - 1) << (GICD_TYPER_CPUNUM_OFF);
 const GICD_TYPER_ITLINESNUM_LEN: usize = 0b11111;
 pub const ICC_CTLR_EOIMODE_BIT: usize = 0x1 << 1;
 
@@ -741,6 +742,26 @@ impl GicRedistributor {
 
     pub fn get_typer(&self, gicr_id: usize) -> u64 {
         self[gicr_id].TYPER.get()
+    }
+
+    pub fn get_propbaser(&self, gicr_id: usize) -> u64 {
+        self[gicr_id].PROPBASER.get()
+    }
+
+    pub fn set_propbaser(&self, gicr_id: usize, val: usize) {
+        self[gicr_id].PROPBASER.set(val as u64);
+    }
+
+    pub fn get_pendbaser(&self, gicr_id: usize) -> u64 {
+        self[gicr_id].PEDNBASER.get()
+    }
+
+    pub fn set_pendbaser(&self, gicr_id: usize, val: usize) {
+        self[gicr_id].PEDNBASER.set(val as u64);
+    }
+
+    pub fn set_ctrlr(&self, gicr_id: usize, val: usize) {
+        self[gicr_id].CTLR.set(val as u32);
     }
 
     pub fn get_iidr(&self, gicr_id: usize) -> u32 {

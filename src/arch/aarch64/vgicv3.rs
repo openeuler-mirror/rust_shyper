@@ -1479,7 +1479,7 @@ impl Vgic {
         } else {
             let idx = emu_ctx.reg;
             let val = self.vgicd_ctlr() as usize;
-            current_cpu().set_gpr(idx, val);
+            current_cpu().set_gpr(idx, val | GICD.ctlr() as usize);
         }
     }
 
@@ -1715,6 +1715,22 @@ impl Vgic {
         self.emu_activer_access(emu_ctx, false);
     }
 
+    fn emu_probaser_access(&self, emu_ctx: &EmuContext) {
+        if emu_ctx.write {
+            GICR.set_propbaser(current_cpu().id, current_cpu().get_gpr(emu_ctx.reg));
+        } else {
+            current_cpu().set_gpr(emu_ctx.reg, GICR.get_propbaser(current_cpu().id) as usize);
+        }
+    }
+
+    fn emu_pendbaser_access(&self, emu_ctx: &EmuContext) {
+        if emu_ctx.write {
+            GICR.set_pendbaser(current_cpu().id, current_cpu().get_gpr(emu_ctx.reg));
+        } else {
+            current_cpu().set_gpr(emu_ctx.reg, GICR.get_pendbaser(current_cpu().id) as usize);
+        }
+    }
+
     fn emu_icfgr_access(&self, emu_ctx: &EmuContext) {
         let first_int = ((emu_ctx.address & 0xffff) - 0x0C00) * 8 / GIC_CONFIG_BITS; // emu_ctx.address - OFFSET(GICR/D,ICFGR)
 
@@ -1933,7 +1949,9 @@ fn vgicr_get_id(emu_ctx: &EmuContext) -> u32 {
 
 fn vgicr_emul_ctrl_access(emu_ctx: &EmuContext) {
     if !emu_ctx.write {
-        current_cpu().set_gpr(emu_ctx.reg, 0)
+        current_cpu().set_gpr(emu_ctx.reg, GICR.get_ctrl(current_cpu().id as u32) as usize);
+    } else {
+        GICR.set_ctrlr(current_cpu().id, current_cpu().get_gpr(emu_ctx.reg));
     }
 }
 
@@ -2364,9 +2382,8 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
     let vgic = Arc::new(Vgic::default());
 
     let mut vgicd = vgic.vgicd.lock();
-    vgicd.typer = (GICD.typer() & GICD_TYPER_CPUNUM_MSK as u32)
-        | ((((vm.cpu_num() - 1) << GICD_TYPER_CPUNUM_OFF) & GICD_TYPER_CPUNUM_MSK) as u32)
-        | (((9 << GICD_TYPER_IDBITS_OFF) & GICD_TYPER_IDBITS_MSK) as u32);
+    vgicd.typer = (GICD.typer() & !(GICD_TYPER_CPUNUM_MSK | GICD_TYPER_LPIS) as u32)
+        | ((((vm.cpu_num() - 1) << GICD_TYPER_CPUNUM_OFF) & GICD_TYPER_CPUNUM_MSK) as u32);
     vgicd.iidr = GICD.iidr();
     vgicd.ctlr = 0b10;
 
@@ -2380,8 +2397,19 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
         let vmpidr = vm.vcpu(i).unwrap().get_vmpidr();
         typer |= (vmpidr & MPIDR_AFF_MSK) << GICR_TYPER_AFFVAL_OFF;
         typer |= !!((i == (vm.cpu_num() - 1)) as usize) << GICR_TYPER_LAST_OFF;
+        //need the low 6 bits for LPI/ITS init
+        //DPGS, bit [5]:Sets support for GICR_CTLR.DPG* bits
+        //DirectLPI, bit [3]: Indicates whether this Redistributor supports direct injection of LPIs.
+        //Dirty, bit [2]: Controls the functionality of GICR_VPENDBASER.Dirty.
+        //LPI VLPIS, bit [1]: Indicates whether the GIC implementation supports virtual LPIs and the direct injection of virtual LPIs
+        //PLPIS, bit [0]: Indicates whether the GIC implementation supports physical LPIs
+        typer |= 0b10_0001;
 
-        let mut cpu_priv = VgicCpuPriv::new(typer, 0, GICR.get_iidr(vm.vcpu(i).unwrap().phys_id()) as usize);
+        let mut cpu_priv = VgicCpuPriv::new(
+            typer,
+            GICR.get_ctrl(vm.vcpu(i).unwrap().phys_id() as u32) as usize,
+            GICR.get_iidr(vm.vcpu(i).unwrap().phys_id()) as usize,
+        );
 
         for int_idx in 0..GIC_SGIS_NUM {
             let vcpu = vm.vcpu(i).unwrap();
@@ -2426,6 +2454,8 @@ pub fn emu_vgicr_init(vm: Vm, emu_dev_id: usize) {
 
 const VGICR_REG_OFFSET_CLTR: usize = 0x0;
 const VGICR_REG_OFFSET_TYPER: usize = 0x8;
+const VGICR_REG_OFFSET_PROPBASER: usize = 0x70;
+const VGICR_REG_OFFSET_PENDBASER: usize = 0x78;
 const VGICR_REG_OFFSET_ISENABLER0: usize = 0x10100;
 const VGICR_REG_OFFSET_ISPENDR0: usize = 0x10200;
 const VGICR_REG_OFFSET_ISACTIVER0: usize = 0x10300;
@@ -2510,6 +2540,12 @@ pub fn emul_vgicr_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
         }
         VGICR_REG_OFFSET_ICFGR0 | VGICR_REG_OFFSET_ICFGR1 => {
             vgic.emu_icfgr_access(emu_ctx);
+        }
+        VGICR_REG_OFFSET_PROPBASER => {
+            vgic.emu_probaser_access(emu_ctx);
+        }
+        VGICR_REG_OFFSET_PENDBASER => {
+            vgic.emu_pendbaser_access(emu_ctx);
         }
         _ => {
             if offset >= 0x10400 && offset < 0x10420 {
