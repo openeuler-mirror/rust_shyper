@@ -8,26 +8,10 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use std::fs;
 use std::env::var;
 use std::process::Command;
 
 fn main() {
-    let files = fs::read_dir("libfdt-binding").unwrap().into_iter().filter_map(|f| {
-        let f = f.as_ref().unwrap();
-        if f.file_type().unwrap().is_file() && matches!(f.path().extension(), Some(ext) if ext == "c") {
-            Some(f.path())
-        } else {
-            None
-        }
-    });
-    cc::Build::new()
-        .compiler("aarch64-none-elf-gcc")
-        .include("libfdt-binding")
-        .files(files)
-        .flag("-w")
-        .compile("fdt-binding");
-
     let arch = var("CARGO_CFG_TARGET_ARCH").unwrap();
     let text_start = if cfg!(feature = "tx2") {
         if cfg!(feature = "update") {

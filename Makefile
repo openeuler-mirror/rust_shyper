@@ -31,6 +31,10 @@ ifeq (${PROFILE}, release)
 CARGO_FLAGS := ${CARGO_FLAGS} --release
 endif
 
+# Make 'cc' crate in dependencies cross compiles properly.
+export CROSS_COMPILE := ${TOOLCHAIN}-
+export CFLAGS := -mgeneral-regs-only
+
 CARGO_ACTION ?= build
 
 .PHONY: build qemu qemu_gicv3 tx2 pi4 tx2_update tx2_ramdisk rk3588_release gdb clean

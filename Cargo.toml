@@ -27,14 +27,13 @@ panic = "abort"
 debug = true
 
 [build-dependencies]
-cc = "1.0"
 chrono = "0.4.23"
 built = { version = "0.6.1", features = [] }
 gethostname = "0.4.3"
 
 [dependencies]
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
-fdt = { path = "libfdt-binding" }
+fdt = { git = "https://github.com/karin0/libfdt-rs" }
 log = { version = "0.4", features = [
     "max_level_trace",
     "release_max_level_info",
