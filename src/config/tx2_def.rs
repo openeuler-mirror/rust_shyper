@@ -257,7 +257,7 @@ pub fn mvm_config_init() {
         })),
         vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config })),
         vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
-        vm_dtb_devs: Arc::new(Mutex::new(VMDtbDevConfigList::default())),
+        ..Default::default()
     };
     let _ = vm_cfg_add_vm_entry(mvm_config_entry);
 }

@@ -233,26 +233,28 @@ pub struct VmConfigEntry {
     pub vm_emu_dev_confg: Arc<Mutex<VmEmulatedDeviceConfigList>>,
     pub vm_pt_dev_confg: Arc<Mutex<VmPassthroughDeviceConfig>>,
     pub vm_dtb_devs: Arc<Mutex<VMDtbDevConfigList>>,
+    pub fdt_overlay: Arc<Mutex<Vec<u8>>>,
 }
 
-impl VmConfigEntry {
-    pub fn default() -> VmConfigEntry {
+impl Default for VmConfigEntry {
+    fn default() -> VmConfigEntry {
         VmConfigEntry {
             id: 0,
             name: Some(String::from("unknown")),
             os_type: VmType::VmTBma,
-
             cmdline: String::from("root=/dev/vda rw audit=0"),
-
             image: Arc::new(Mutex::new(VmImageConfig::default())),
             memory: Arc::new(Mutex::new(VmMemoryConfig::default())),
             cpu: Arc::new(Mutex::new(VmCpuConfig::default())),
             vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList::default())),
             vm_pt_dev_confg: Arc::new(Mutex::new(VmPassthroughDeviceConfig::default())),
             vm_dtb_devs: Arc::new(Mutex::new(VMDtbDevConfigList::default())),
+            fdt_overlay: Arc::new(Mutex::new(Vec::new())),
         }
     }
+}
 
+impl VmConfigEntry {
     pub fn new(
         name: String,
         cmdline: String,
@@ -262,7 +264,6 @@ impl VmConfigEntry {
         ramdisk_load_ipa: usize,
     ) -> VmConfigEntry {
         VmConfigEntry {
-            id: 0,
             name: Some(name),
             os_type: VmType::from_usize(vm_type),
             cmdline,
@@ -271,11 +272,7 @@ impl VmConfigEntry {
                 device_tree_load_ipa,
                 ramdisk_load_ipa,
             ))),
-            memory: Arc::new(Mutex::new(VmMemoryConfig::default())),
-            cpu: Arc::new(Mutex::new(VmCpuConfig::default())),
-            vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList::default())),
-            vm_pt_dev_confg: Arc::new(Mutex::new(VmPassthroughDeviceConfig::default())),
-            vm_dtb_devs: Arc::new(Mutex::new(VMDtbDevConfigList::default())),
+            ..Default::default()
         }
     }
 

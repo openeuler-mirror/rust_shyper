@@ -990,6 +990,7 @@ pub fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
             vm_emu_dev_confg: Arc::new(Mutex::new(vm_emu_dev_confg)),
             vm_pt_dev_confg: Arc::new(Mutex::new(vm_pt_dev_confg)),
             vm_dtb_devs: Arc::new(Mutex::new(vm_dtb_devs)),
+            ..Default::default()
         });
     }
     assert_eq!(vm_config_table.entries.len(), src_config_table.entries.len());
