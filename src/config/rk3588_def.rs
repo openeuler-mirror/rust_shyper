@@ -124,13 +124,21 @@ pub fn mvm_config_init() {
         }
     ];
 
-    // vm0 passthrough
     let mut pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig::default();
-    pt_dev_config.regions = vec![
-        // PassthroughRegion { ipa: 0xf0000000, pa: 0xf0000000, length: 0x10000000, dev_property: true },
-        //all, exclude gic
-        PassthroughRegion { ipa: 0xfb000000, pa: 0xfb000000, length: 0x100_0000, dev_property: true },
-        PassthroughRegion { ipa: 0xfc000000, pa: 0xfc000000, length: 0xfe600000 - 0xfc000000, dev_property: true },
+    let mut pt = crate::utils::interval::IntervalExcluder::new();
+
+    // all, exclude gic
+    pt.add_range(0xfb000000, 0xfe600000);
+
+    // exclude ethernet@0xfe1c0000 for 'noeth'
+    #[cfg(feature = "rk3588-noeth")]
+    pt.exclude_len(0xfe1c0000, 0x10000);
+
+    pt_dev_config.regions = pt.into_iter().map(|t| {
+        PassthroughRegion { ipa: t.left, pa: t.left, length: t.len(), dev_property: true }
+    }).collect();
+
+    pt_dev_config.regions.extend(&[
         PassthroughRegion { ipa: 0xfe680000 + 0x100000, pa: 0xfe680000 + 0x100000, length: 0xfeb40000 - (0xfe680000 + 0x100000), dev_property: true },
         PassthroughRegion { ipa: 0xfebc0000, pa: 0xfebc0000, length: 0x10000_0000 - 0xfebc0000, dev_property: true },
         // serial@feb5000——ttyFIQ
@@ -149,7 +157,8 @@ pub fn mvm_config_init() {
         // device for its
         PassthroughRegion { ipa: 0xfe640000, pa: 0xfe640000, length: 0x20000, dev_property: true },
         PassthroughRegion { ipa: 0xfe660000, pa: 0xfe660000, length: 0x20000, dev_property: true },
-    ];
+    ]);
+
     pt_dev_config.irqs = vec![
         20,  //fsc_interrupt_int_n
         23,  //ARM-PMU
@@ -218,7 +227,9 @@ pub fn mvm_config_init() {
         251, //ehci_hcd:usb4
         252, //dwc3
         254, //xhci-hcd:usb5
+        #[cfg(not(feature = "rk3588-noeth"))]
         265, //eth0
+        #[cfg(not(feature = "rk3588-noeth"))]
         266, //eth0
         275, //eth0
         276, //pcie

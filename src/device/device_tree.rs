@@ -195,6 +195,9 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         // assert_eq!(fdt_remove_node(dtb, "/pcie@fe180000\0".as_ptr()), 0);
         // assert_eq!(fdt_remove_node(dtb, "/pcie@fe190000\0".as_ptr()), 0);
 
+        #[cfg(feature = "rk3588-noeth")]
+        assert_eq!(fdt_remove_node(dtb, "/ethernet@fe1c0000\0".as_ptr()), 0);
+
         // assert_eq!(fdt_remove_node(dtb, "/chosen\0".as_ptr()), 0);
         // assert_eq!(fdt_remove_node(dtb, "/tsadc@fec00000\0".as_ptr()), 0);
         // assert_eq!(fdt_remove_node(dtb, "/tsadc@fec00000\0".as_ptr()), 0);

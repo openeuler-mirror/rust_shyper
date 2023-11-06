@@ -66,3 +66,5 @@ ramdisk = []
 static-config = []
 lvl4 = []
 secondary_start = []
+
+rk3588-noeth = ["rk3588"]
