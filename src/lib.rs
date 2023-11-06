@@ -18,6 +18,7 @@
 #![feature(naked_functions)]
 #![feature(asm_const)]
 #![feature(error_in_core)]
+#![feature(slice_group_by)]
 #![allow(unused_doc_comments)]
 #![allow(special_module_name)]
 

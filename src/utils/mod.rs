@@ -19,6 +19,7 @@ pub use self::util::*;
 mod barrier;
 mod bitmap;
 // mod fatfs;
+pub mod interval;
 mod print;
 mod string;
 mod time;
