@@ -352,7 +352,7 @@ pub fn fresh_hyper() {
         pub fn fresh_hyper(ctx: usize);
     }
     if current_cpu().id == 0 {
-        let ctx = current_cpu().ctx.unwrap();
+        let ctx = current_cpu().ctx_ptr().unwrap() as usize;
         debug!("CPU[{}] ctx {:x}", current_cpu().id, ctx);
         current_cpu().clear_ctx();
         unsafe { fresh_hyper(ctx) };
@@ -380,9 +380,9 @@ pub fn fresh_hyper() {
                 //     current_cpu().current_irq
                 // );
                 gicc_clear_current_irq(true);
-                let ctx = current_cpu().ctx.unwrap();
+                let ctx = current_cpu().ctx_ptr().unwrap();
                 current_cpu().clear_ctx();
-                unsafe { fresh_hyper(ctx) };
+                unsafe { fresh_hyper(ctx as usize) };
             }
         }
     }

@@ -83,7 +83,7 @@ impl Scheduler for SchedulerRR {
         if let Some(next_vcpu) = self.next() {
             current_cpu().schedule_to(next_vcpu);
         } else {
-            match current_cpu().ctx {
+            match current_cpu().ctx_ptr() {
                 None => {
                     error!("run_idle_thread: cpu{} ctx is NULL", current_cpu().id);
                 }

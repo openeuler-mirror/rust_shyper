@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::vec::Vec;
+use core::ptr;
 
 use spin::Mutex;
 
@@ -110,7 +111,7 @@ pub struct Cpu {
     pub id: usize,
     pub cpu_state: CpuState,
     pub active_vcpu: Option<Vcpu>,
-    pub ctx: Option<usize>,
+    pub ctx: *mut ContextFrame,
 
     pub sched: SchedType,
     pub vcpu_array: VcpuArray,
@@ -125,7 +126,7 @@ impl Cpu {
             id: 0,
             cpu_state: CpuState::CpuInv,
             active_vcpu: None,
-            ctx: None,
+            ctx: ptr::null_mut(),
             sched: SchedType::None,
             vcpu_array: VcpuArray::new(),
             current_irq: 0,
@@ -139,84 +140,56 @@ impl Cpu {
     }
 
     pub fn set_ctx(&mut self, ctx: *mut ContextFrame) {
-        self.ctx = Some(ctx as usize);
+        self.ctx = ctx;
     }
 
     pub fn clear_ctx(&mut self) {
-        self.ctx = None;
+        self.ctx = ptr::null_mut();
+    }
+
+    pub fn ctx(&self) -> Option<&ContextFrame> {
+        self.ctx_ptr().map(|addr| unsafe { &*addr })
+    }
+
+    pub fn ctx_mut(&self) -> Option<&mut ContextFrame> {
+        self.ctx_ptr().map(|addr| unsafe { &mut *addr })
+    }
+
+    pub fn ctx_ptr(&self) -> Option<*mut ContextFrame> {
+        if self.ctx.is_null() {
+            None
+        } else {
+            if trace() && (self.ctx as usize) < 0x1000 {
+                panic!("illegal ctx addr {:p}", self.ctx);
+            }
+            Some(self.ctx)
+        }
     }
 
     pub fn set_gpr(&self, idx: usize, val: usize) {
         if idx >= CONTEXT_GPR_NUM {
             return;
         }
-        match self.ctx {
-            Some(ctx_addr) => {
-                if trace() && ctx_addr < 0x1000 {
-                    panic!("illegal ctx addr {:x}", ctx_addr);
-                }
-                let ctx = ctx_addr as *mut ContextFrame;
-                unsafe {
-                    (*ctx).set_gpr(idx, val);
-                }
-            }
-            None => {}
-        }
+        self.ctx_mut().unwrap().set_gpr(idx, val)
     }
 
     pub fn get_gpr(&self, idx: usize) -> usize {
         if idx >= CONTEXT_GPR_NUM {
             return 0;
         }
-        match self.ctx {
-            Some(ctx_addr) => {
-                if trace() && ctx_addr < 0x1000 {
-                    panic!("illegal ctx addr {:x}", ctx_addr);
-                }
-                let ctx = ctx_addr as *mut ContextFrame;
-                unsafe { (*ctx).gpr(idx) }
-            }
-            None => 0,
-        }
+        self.ctx_mut().unwrap().gpr(idx)
     }
 
     pub fn get_elr(&self) -> usize {
-        match self.ctx {
-            Some(ctx_addr) => {
-                if trace() && ctx_addr < 0x1000 {
-                    panic!("illegal ctx addr {:x}", ctx_addr);
-                }
-                let ctx = ctx_addr as *mut ContextFrame;
-                unsafe { (*ctx).exception_pc() }
-            }
-            None => 0,
-        }
+        self.ctx().unwrap().exception_pc()
     }
 
     pub fn get_spsr(&self) -> usize {
-        match self.ctx {
-            Some(ctx_addr) => {
-                if trace() && ctx_addr < 0x1000 {
-                    panic!("illegal ctx addr {:x}", ctx_addr);
-                }
-                let ctx = ctx_addr as *mut ContextFrame;
-                unsafe { (*ctx).spsr as usize }
-            }
-            None => 0,
-        }
+        self.ctx().unwrap().spsr as usize
     }
 
     pub fn set_elr(&self, val: usize) {
-        match self.ctx {
-            Some(ctx_addr) => {
-                if trace() && ctx_addr < 0x1000 {
-                    panic!("illegal ctx addr {:x}", ctx_addr);
-                }
-                let ctx = ctx_addr as *mut ContextFrame;
-                unsafe { (*ctx).set_exception_pc(val) }
-            }
-            None => {}
-        }
+        self.ctx_mut().unwrap().set_exception_pc(val)
     }
 
     pub fn set_active_vcpu(&mut self, active_vcpu: Option<Vcpu>) {

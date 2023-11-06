@@ -299,7 +299,7 @@ fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
             fn context_vm_entry(ctx: usize) -> !;
         }
         unsafe {
-            context_vm_entry(current_cpu().ctx.unwrap());
+            context_vm_entry(current_cpu().ctx_ptr().unwrap() as usize);
         }
     }
 }

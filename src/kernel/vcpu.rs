@@ -195,7 +195,7 @@ impl Vcpu {
 
     pub fn save_cpu_ctx(&self) {
         let inner = self.inner.lock();
-        match current_cpu().ctx {
+        match current_cpu().ctx_ptr() {
             None => {
                 error!("save_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
             }
@@ -211,7 +211,7 @@ impl Vcpu {
 
     fn restore_cpu_ctx(&self) {
         let inner = self.inner.lock();
-        match current_cpu().ctx {
+        match current_cpu().ctx_ptr() {
             None => {
                 error!("restore_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
             }
@@ -545,7 +545,7 @@ pub fn vcpu_run(announce: bool) -> ! {
         fn context_vm_entry(ctx: usize) -> !;
     }
     unsafe {
-        context_vm_entry(current_cpu().ctx.unwrap());
+        context_vm_entry(current_cpu().ctx as usize);
     }
 }
 
