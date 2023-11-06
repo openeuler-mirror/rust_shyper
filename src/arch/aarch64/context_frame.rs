@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use core::arch::global_asm;
-use core::fmt::Formatter;
+use core::fmt;
 
 use cortex_a::registers::*;
 
@@ -23,7 +23,7 @@ extern "C" {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct Aarch64ContextFrame {
     gpr: [u64; 31],
     pub spsr: u64,
@@ -31,8 +31,8 @@ pub struct Aarch64ContextFrame {
     sp: u64,
 }
 
-impl core::fmt::Display for Aarch64ContextFrame {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), core::fmt::Error> {
+impl fmt::Display for Aarch64ContextFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         for i in 0..31 {
             write!(f, "x{:02}: {:016x}   ", i, self.gpr[i])?;
             if (i + 1) % 2 == 0 {
@@ -43,6 +43,12 @@ impl core::fmt::Display for Aarch64ContextFrame {
         write!(f, "elr: {:016x}", self.elr)?;
         writeln!(f, "   sp:  {:016x}", self.sp)?;
         Ok(())
+    }
+}
+
+impl fmt::Debug for Aarch64ContextFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(f, "elr {:x} lr {:x}", self.elr, self.gpr[30])
     }
 }
 
