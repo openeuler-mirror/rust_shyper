@@ -501,18 +501,6 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 emu_cfg.name.unwrap().as_ptr(),
                             );
                         }
-                        EmuDeviceTGICR => {
-                            #[cfg(any(feature = "tx2", feature = "qemu"))]
-                            print!("trace fdt_setup_gicr\n");
-                        }
-                        EmuDeviceTSGIR => {
-                            #[cfg(feature = "gicv3")]
-                            trace!("EmuDeviceTSGIR");
-                        }
-                        EmuDeviceTICCSRE => {
-                            #[cfg(feature = "gicv3")]
-                            trace!("EmuDeviceTICCSRE");
-                        }
                         EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
                             #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_virtio(
@@ -531,13 +519,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 emu_cfg.length as u64,
                             );
                         }
-                        EmuDeviceTIOMMU => {
-                            #[cfg(feature = "tx2")]
-                            trace!("EmuDeviceTIOMMU");
-                        }
-                        _ => {
-                            todo!();
-                        }
+                        _ => {}
                     }
                 }
             }
