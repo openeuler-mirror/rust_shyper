@@ -9,7 +9,10 @@
 // See the Mulan PSL v2 for more details.
 
 pub use self::aarch64::*;
+
+#[cfg(feature = "pi4")]
 pub use self::gpio::*;
+
 #[cfg(feature = "qemu")]
 pub use self::virtio::*;
 

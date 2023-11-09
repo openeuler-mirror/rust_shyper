@@ -242,9 +242,9 @@ register_structs! {
         (0x0f10 => CPENDSGIR: [ReadWrite<u32>; GIC_SGI_REGS_NUM]), //SGI Clear-Pending Registers
         (0x0f20 => SPENDSGIR: [ReadWrite<u32>; GIC_SGI_REGS_NUM]), //SGI Set-Pending Registers
         (0x0f30 => reserved7),
-        (0x6000 => IROUTER: [ReadWrite<u64>; ((0x8000 - 0x6000) / size_of::<u64>())]), //Interrupt Routing Registers for extended SPI range
+        (0x6000 => IROUTER: [ReadWrite<u64>; (0x8000 - 0x6000) / size_of::<u64>()]), //Interrupt Routing Registers for extended SPI range
         (0x8000 => reserved21),
-        (0xffd0 => ID: [ReadOnly<u32>;((0x10000 - 0xffd0) / size_of::<u32>())]), //Reserved for ID registers
+        (0xffd0 => ID: [ReadOnly<u32>; (0x10000 - 0xffd0) / size_of::<u32>()]), //Reserved for ID registers
         (0x10000 => @END),
     }
 }
@@ -527,7 +527,7 @@ register_structs! {
         (0x00b8 => reserved14),
         (0x00c0 => SYNCR: ReadOnly<u64>),    // Redistributor Synchronize Register
         (0x00c8 => reserved13),
-        (0xffd0 => ID: [ReadOnly<u32>;((0x10000 - 0xFFD0) / size_of::<u32>())]),
+        (0xffd0 => ID: [ReadOnly<u32>; (0x10000 - 0xFFD0) / size_of::<u32>()]),
         (0x10000 => reserved12),
         (0x10080 => IGROUPR0: ReadWrite<u32>), //SGI_base frame, all below
         (0x10084 => reserved11),

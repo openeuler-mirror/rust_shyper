@@ -323,7 +323,7 @@ pub static mut CPU_LIST: [Cpu; PLATFORM_CPU_NUM_MAX] = [const { Cpu::default() }
 // #[link_section = ".text.boot"]
 pub extern "C" fn cpu_map_self(mpidr: usize) -> usize {
     let cpu_id = Platform::mpidr2cpuid(mpidr);
-    let mut cpu = unsafe { &mut CPU_LIST[cpu_id] };
+    let cpu = unsafe { &mut CPU_LIST[cpu_id] };
     (*cpu).id = cpu_id;
 
     let lvl1_addr = pt_map_banked_cpu(cpu);

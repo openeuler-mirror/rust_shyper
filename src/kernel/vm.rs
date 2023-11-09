@@ -777,7 +777,7 @@ impl Vm {
         let size = size_of::<VMData>();
         match mem_pages_alloc(round_up(size, PAGE_SIZE) / PAGE_SIZE) {
             Ok(pf) => {
-                let mut vm_data = unsafe { &mut *(pf.pa as *mut VMData) };
+                let vm_data = unsafe { &mut *(pf.pa as *mut VMData) };
                 let base = get_share_mem(VM_CONTEXT_SEND);
                 // println!("pt map base 0x{:x} size 0x{:x}", base, size);
                 mvm.pt_map_range(base, round_up(size, PAGE_SIZE), pf.pa(), PTE_S2_RO, true);

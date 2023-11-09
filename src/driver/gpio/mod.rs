@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+#[cfg(feature = "pi4")]
 pub use self::gpio::*;
 
+#[cfg(feature = "pi4")]
 mod gpio;
