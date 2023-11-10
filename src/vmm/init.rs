@@ -20,7 +20,7 @@ use crate::arch::PAGE_SIZE;
 #[cfg(not(feature = "gicv3"))]
 use crate::board::*;
 use crate::config::vm_cfg_entry;
-use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init};
+use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init, meta};
 #[cfg(feature = "gicv3")]
 use crate::device::{emu_register_reg, EmuRegType};
 use crate::device::create_fdt;
@@ -392,6 +392,20 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     emul_vgicr_handler,
                 );
                 emu_vgicr_init(vm.clone(), idx);
+            }
+            EmuDeviceTMeta => {
+                if meta::register(idx, &vm, emu_dev).is_ok() {
+                    emu_register_dev(
+                        EmuDeviceTMeta,
+                        vm.id(),
+                        idx,
+                        emu_dev.base_ipa,
+                        emu_dev.length,
+                        meta::emu_meta_handler,
+                    );
+                } else {
+                    return false;
+                }
             }
             _ => {
                 warn!("vmm_init_emulated_device: unknown emulated device");

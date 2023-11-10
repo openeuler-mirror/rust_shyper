@@ -16,4 +16,5 @@ pub use self::virtio::*;
 mod device;
 mod device_tree;
 mod emu;
+pub mod meta;
 mod virtio;

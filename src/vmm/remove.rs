@@ -10,7 +10,7 @@
 
 use crate::arch::{GIC_SGIS_NUM, gicc_clear_current_irq};
 use crate::config::vm_cfg_remove_vm_entry;
-use crate::device::emu_remove_dev;
+use crate::device::{emu_remove_dev, EmuDeviceType, meta};
 use crate::kernel::{
     current_cpu, interrupt_vm_remove, ipi_send_msg, IpiInnerMsg, IpiType, IpiVmmMsg, mem_vm_region_free,
     remove_async_used_info, remove_vm, remove_vm_async_task, vcpu_remove, vm, Vm, Scheduler, cpu_idle,
@@ -102,6 +102,9 @@ fn vmm_remove_emulated_device(vm: Vm) {
         if !emu_dev.emu_type.removable() {
             warn!("vmm_remove_emulated_device: cannot remove device {}", emu_dev.emu_type);
             return;
+        }
+        if emu_dev.emu_type == EmuDeviceType::EmuDeviceTMeta {
+            meta::unregister(idx);
         }
         emu_remove_dev(vm.id(), idx, emu_dev.base_ipa, emu_dev.length);
         // println!(

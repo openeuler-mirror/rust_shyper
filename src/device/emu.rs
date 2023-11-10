@@ -11,6 +11,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
+use core::ptr;
 
 use spin::Mutex;
 use spin::RwLock;
@@ -78,6 +79,7 @@ impl EmuDevs {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct EmuContext {
     pub address: usize,
     pub width: usize,
@@ -85,6 +87,28 @@ pub struct EmuContext {
     pub sign_ext: bool,
     pub reg: usize,
     pub reg_width: usize,
+}
+
+impl EmuContext {
+    pub unsafe fn read(&self) -> usize {
+        match self.width {
+            1 => ptr::read_volatile(self.address as *const u8) as usize,
+            2 => ptr::read_volatile(self.address as *const u16) as usize,
+            4 => ptr::read_volatile(self.address as *const u32) as usize,
+            8 => ptr::read_volatile(self.address as *const u64) as usize,
+            _ => panic!("unexpected read width {} at {:x}", self.width, self.address),
+        }
+    }
+
+    pub unsafe fn write(&self, val: usize) {
+        match self.width {
+            1 => ptr::write_volatile(self.address as *mut u8, val as u8),
+            2 => ptr::write_volatile(self.address as *mut u16, val as u16),
+            4 => ptr::write_volatile(self.address as *mut u32, val as u32),
+            8 => ptr::write_volatile(self.address as *mut u64, val as u64),
+            _ => panic!("unexpected write width {} at {:x}", self.width, self.address),
+        }
+    }
 }
 
 pub struct EmuDevEntry {
@@ -110,6 +134,7 @@ pub enum EmuDeviceType {
     EmuDeviceTICCSRE = 9,
     EmuDeviceTSGIR = 10,
     EmuDeviceTGICR = 11,
+    EmuDeviceTMeta = 12,
 }
 
 impl Display for EmuDeviceType {
@@ -127,6 +152,7 @@ impl Display for EmuDeviceType {
             EmuDeviceType::EmuDeviceTICCSRE => write!(f, "interrupt ICC SRE"),
             EmuDeviceType::EmuDeviceTSGIR => write!(f, "interrupt ICC SGIR"),
             EmuDeviceType::EmuDeviceTGICR => write!(f, "interrupt controller gicr"),
+            EmuDeviceType::EmuDeviceTMeta => write!(f, "meta device"),
         }
     }
 }
@@ -162,6 +188,7 @@ impl EmuDeviceType {
             9 => EmuDeviceType::EmuDeviceTICCSRE,
             10 => EmuDeviceType::EmuDeviceTSGIR,
             11 => EmuDeviceType::EmuDeviceTGICR,
+            12 => EmuDeviceType::EmuDeviceTMeta,
             _ => panic!("Unknown  EmuDeviceType value: {}", value),
         }
     }
