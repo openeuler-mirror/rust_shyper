@@ -18,8 +18,7 @@ use spin::{Mutex, RwLock};
 
 use crate::arch::{
     emu_intc_handler, emu_smmu_handler, GIC_LRS_NUM, gic_maintenance_handler, gicc_clear_current_irq, INTERRUPT_EN_SET,
-    PageTable, partial_passthrough_intc_handler, psci_ipi_handler, SMMU_V2, SmmuV2, TIMER_FREQ, TIMER_SLICE, Vgic,
-    vgic_ipi_handler,
+    PageTable, partial_passthrough_intc_handler, SMMU_V2, SmmuV2, TIMER_FREQ, TIMER_SLICE, Vgic,
 };
 use crate::board::PLAT_DESC;
 use crate::config::{
@@ -27,22 +26,20 @@ use crate::config::{
     VmEmulatedDeviceConfig, VmEmulatedDeviceConfigList, VmMemoryConfig, VmPassthroughDeviceConfig,
 };
 use crate::device::{
-    BlkIov, EMU_DEVS_LIST, emu_virtio_mmio_handler, EmuDevEntry, EmuDeviceType, EmuDevs, ethernet_ipi_rev_handler,
-    MEDIATED_BLK_LIST, mediated_ipi_handler, MediatedBlk, virtio_blk_notify_handler, virtio_console_notify_handler,
-    virtio_mediated_blk_notify_handler, virtio_net_notify_handler, VirtioMmio,
+    BlkIov, EMU_DEVS_LIST, emu_virtio_mmio_handler, EmuDevEntry, EmuDeviceType, EmuDevs, MEDIATED_BLK_LIST,
+    MediatedBlk, virtio_blk_notify_handler, virtio_console_notify_handler, virtio_mediated_blk_notify_handler,
+    virtio_net_notify_handler, VirtioMmio,
 };
 use crate::kernel::{
     async_blk_io_req, ASYNC_EXE_STATUS, ASYNC_IO_TASK_LIST, async_ipi_req, ASYNC_IPI_TASK_LIST, ASYNC_USED_INFO_LIST,
     AsyncExeStatus, AsyncTask, AsyncTaskData, CPU, Cpu, cpu_idle, CPU_IF_LIST, CpuIf, CpuState, current_cpu, FairQueue,
-    HEAP_REGION, HeapRegion, hvc_ipi_handler, INTERRUPT_GLB_BITMAP, INTERRUPT_HANDLERS, INTERRUPT_HYPER_BITMAP,
-    interrupt_inject_ipi_handler, InterruptHandler, IoAsyncMsg, IPI_HANDLER_LIST, ipi_irq_handler, ipi_register,
-    ipi_send_msg, IpiHandler, IpiInnerMsg, IpiMediatedMsg, IpiMessage, IpiType, mem_heap_region_init, SchedType,
-    SchedulerUpdate, SHARE_MEM_LIST, timer_irq_handler, UsedInfo, Vcpu, VCPU_LIST, VcpuInner, vm, Vm, VM_IF_LIST,
-    vm_ipa2pa, VM_LIST, VM_NUM_MAX, VM_REGION, VmInterface, VmRegion, logger_init,
+    HEAP_REGION, HeapRegion, INTERRUPT_GLB_BITMAP, INTERRUPT_HANDLERS, INTERRUPT_HYPER_BITMAP, InterruptHandler,
+    IoAsyncMsg, ipi_irq_handler, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiMessage, IpiType, mem_heap_region_init,
+    SchedType, SchedulerUpdate, SHARE_MEM_LIST, timer_irq_handler, UsedInfo, Vcpu, VCPU_LIST, VcpuInner, vm, Vm,
+    VM_IF_LIST, vm_ipa2pa, VM_LIST, VM_NUM_MAX, VM_REGION, VmInterface, VmRegion, logger_init,
 };
 use crate::utils::{BitAlloc256, BitMap, FlexBitmap, time_current_us};
 use crate::mm::{heap_init, PageFrame};
-use crate::vmm::vmm_ipi_handler;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum FreshStatus {
@@ -93,7 +90,6 @@ pub struct HypervisorAddr {
     gic_lrs_num: usize,
     // address for ipi
     cpu_if_list: usize,
-    ipi_handler_list: usize,
     // arch time
     time_freq: usize,
     time_slice: usize,
@@ -134,7 +130,6 @@ pub fn update_request() {
     let cpu = unsafe { &CPU as *const _ as usize };
     let cpu_if_list = &CPU_IF_LIST as *const _ as usize;
     let gic_lrs_num = &GIC_LRS_NUM as *const _ as usize;
-    let ipi_handler_list = &IPI_HANDLER_LIST as *const _ as usize;
     let time_freq = &TIMER_FREQ as *const _ as usize;
     let time_slice = &TIMER_SLICE as *const _ as usize;
     let mediated_blk_list = &MEDIATED_BLK_LIST as *const _ as usize;
@@ -161,7 +156,6 @@ pub fn update_request() {
         cpu,
         cpu_if_list,
         gic_lrs_num,
-        ipi_handler_list,
         time_freq,
         time_slice,
         mediated_blk_list,
@@ -213,10 +207,6 @@ pub extern "C" fn rust_shyper_update(address_list: &HypervisorAddr, alloc: bool)
             // CPU_IF
             let cpu_if = &*(address_list.cpu_if_list as *const Mutex<Vec<CpuIf>>);
             cpu_if_alloc(cpu_if);
-
-            // IPI_HANDLER_LIST
-            let ipi_handler_list = &*(address_list.ipi_handler_list as *const Mutex<Vec<IpiHandler>>);
-            ipi_handler_list_update(ipi_handler_list);
 
             // TIMER_FREQ & TIMER_SLICE
             let time_freq = &*(address_list.time_freq as *const Mutex<usize>);
@@ -582,23 +572,6 @@ pub fn cpu_if_update(src_cpu_if: &Mutex<Vec<CpuIf>>) {
         //     cpu_if_list[idx].msg_queue.len()
         // );
     }
-}
-
-pub fn ipi_handler_list_update(src_ipi_handler_list: &Mutex<Vec<IpiHandler>>) {
-    for ipi_handler in src_ipi_handler_list.lock().iter() {
-        let handler = match ipi_handler.ipi_type {
-            IpiType::IpiTIntc => vgic_ipi_handler,
-            IpiType::IpiTPower => psci_ipi_handler,
-            IpiType::IpiTEthernetMsg => ethernet_ipi_rev_handler,
-            IpiType::IpiTHvc => hvc_ipi_handler,
-            IpiType::IpiTVMM => vmm_ipi_handler,
-            IpiType::IpiTMediatedDev => mediated_ipi_handler,
-            IpiType::IpiTIntInject => interrupt_inject_ipi_handler,
-            IpiType::IpiTHyperFresh => hyper_fresh_ipi_handler,
-        };
-        ipi_register(ipi_handler.ipi_type, handler);
-    }
-    info!("Update IPI_HANDLER_LIST");
 }
 
 pub fn vm_if_list_update(src_vm_if_list: &[Mutex<VmInterface>; VM_NUM_MAX]) {

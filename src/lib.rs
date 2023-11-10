@@ -26,28 +26,19 @@
 extern crate alloc;
 extern crate fdt;
 #[macro_use]
-// extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate memoffset;
 
-// extern crate rlibc;
-
-use device::{init_vm0_dtb, mediated_dev_init};
-use kernel::{cpu_init, interrupt_init, mem_init, timer_init, cpu_sched_init, hvc_init, iommu_init};
+use device::init_vm0_dtb;
+use kernel::{cpu_init, interrupt_init, mem_init, timer_init};
 use mm::heap_init;
 use vmm::{vm_init, vmm_boot_vm};
 
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => ($crate::utils::_print(format_args!($($arg)*)));
-}
+use crate::kernel::{cpu_sched_init, iommu_init};
 
-#[macro_export]
-macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
-}
+#[macro_use]
+mod macros;
 
 #[allow(dead_code)]
 mod arch;
@@ -115,16 +106,12 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
         kernel::logger_init().unwrap();
         mem_init();
         init_vm0_dtb(dtb).unwrap();
-        hvc_init();
         iommu_init();
     }
     cpu_init();
     interrupt_init();
     timer_init();
     cpu_sched_init();
-    if cpu_id == 0 {
-        mediated_dev_init();
-    }
 
     #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();
@@ -133,7 +120,10 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
         crate::kernel::cpu_idle();
     }
     vm_init();
-    info!("Rust-Shyper Hypervisor init ok\n\nStart booting Monitor VM ...");
+    info!(
+        "{} Hypervisor init ok\n\nStart booting Monitor VM ...",
+        env!("CARGO_PKG_NAME")
+    );
     vmm_boot_vm(0);
 
     loop {

@@ -283,9 +283,7 @@ pub fn cpu_init() {
     if cpu_id == 0 {
         cpu_if_init();
         if cfg!(not(feature = "secondary_start")) {
-            use crate::arch::power_arch_init;
             Platform::power_on_secondary_cores();
-            power_arch_init();
         }
     }
 

@@ -18,8 +18,8 @@ use crate::arch::gicc_clear_current_irq;
 use crate::config::*;
 use crate::device::{mediated_blk_notify_handler, mediated_dev_append};
 use crate::kernel::{
-    active_vm, active_vm_id, current_cpu, DIRTY_MEM_THRESHOLD, interrupt_vm_inject, ipi_register, ipi_send_msg,
-    IpiHvcMsg, IpiInnerMsg, IpiMessage, IpiType, ivc_update_mq, map_migrate_vm_mem, mem_heap_region_reserve,
+    active_vm, active_vm_id, current_cpu, DIRTY_MEM_THRESHOLD, interrupt_vm_inject, ipi_send_msg, IpiHvcMsg,
+    IpiInnerMsg, IpiMessage, IpiType, ivc_update_mq, map_migrate_vm_mem, mem_heap_region_reserve,
     migrate_finish_ipi_handler, migrate_ready, Scheduler, send_migrate_memcpy_msg, unmap_migrate_vm_mem,
     UPDATE_IMG_BASE_ADDR, update_request, vcpu_idle, vm, vm_if_copy_mem_map, vm_if_dirty_mem_map, vm_if_get_cpu_id,
     vm_if_ivc_arg, vm_if_ivc_arg_ptr, vm_if_mem_map_dirty_sum, vm_if_mem_map_page_num, vm_if_set_ivc_arg_ptr,
@@ -666,12 +666,6 @@ fn mvm_migrate_memory(trgt_vmid: usize) {
     // tlb_invalidate_guest_all();
     vm_if_copy_mem_map(trgt_vmid);
     send_migrate_memcpy_msg(trgt_vmid);
-}
-
-pub fn hvc_init() {
-    if !ipi_register(IpiType::IpiTHvc, hvc_ipi_handler) {
-        panic!("hvc_init: failed to register hvc ipi {}", IpiType::IpiTHvc as usize)
-    }
 }
 
 pub fn send_hvc_ipi(src_vmid: usize, trgt_vmid: usize, fid: usize, event: usize, trgt_cpuid: usize) {

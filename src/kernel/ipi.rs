@@ -8,10 +8,6 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use alloc::vec::Vec;
-
-use spin::Mutex;
-
 use crate::arch::INTERRUPT_IRQ_IPI;
 use crate::board::PLAT_DESC;
 use crate::device::{VirtioMmio, Virtq};
@@ -115,16 +111,17 @@ pub struct IpiIntInjectMsg {
     pub int_id: usize,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum IpiType {
-    IpiTIntc = 0,
-    IpiTPower = 1,
-    IpiTEthernetMsg = 2,
-    IpiTHyperFresh = 3,
-    IpiTHvc = 4,
-    IpiTVMM = 5,
-    IpiTMediatedDev = 6,
-    IpiTIntInject = 8,
+declare_enum_with_handler! {
+    pub enum IpiType [IPI_HANDLER_LIST => IpiHandlerFunc] {
+        IpiTIntc => crate::arch::vgic_ipi_handler,
+        IpiTPower => crate::arch::psci_ipi_handler,
+        IpiTEthernetMsg => crate::device::ethernet_ipi_rev_handler,
+        IpiTHyperFresh => crate::kernel::hyper_fresh_ipi_handler,
+        IpiTHvc => crate::kernel::hvc_ipi_handler,
+        IpiTVMM => crate::vmm::vmm_ipi_handler,
+        IpiTMediatedDev => crate::device::mediated_ipi_handler,
+        IpiTIntInject => crate::kernel::interrupt_inject_ipi_handler,
+    }
 }
 
 #[derive(Clone)]
@@ -162,8 +159,6 @@ impl IpiHandler {
     }
 }
 
-pub static IPI_HANDLER_LIST: Mutex<Vec<IpiHandler>> = Mutex::new(Vec::new());
-
 pub fn ipi_irq_handler() {
     // println!("ipi handler");
     let cpu_id = current_cpu().id;
@@ -175,37 +170,14 @@ pub fn ipi_irq_handler() {
         let ipi_msg = msg.unwrap();
         let ipi_type = ipi_msg.ipi_type as usize;
 
-        let ipi_handler_list = IPI_HANDLER_LIST.lock();
-        let len = ipi_handler_list.len();
-        let handler = ipi_handler_list[ipi_type].handler.clone();
-        drop(ipi_handler_list);
-
-        if len <= ipi_type {
-            error!("illegal ipi type {}", ipi_type)
-        } else {
+        if let Some(handler) = IPI_HANDLER_LIST.get(ipi_type) {
             handler(&ipi_msg);
+        } else {
+            error!("illegal ipi type {}", ipi_type)
         }
         let mut cpu_if_list = CPU_IF_LIST.lock();
         msg = cpu_if_list[cpu_id].pop();
     }
-}
-
-pub fn ipi_register(ipi_type: IpiType, handler: IpiHandlerFunc) -> bool {
-    // check handler max
-    let mut ipi_handler_list = IPI_HANDLER_LIST.lock();
-    for i in 0..ipi_handler_list.len() {
-        if ipi_type as usize == ipi_handler_list[i].ipi_type as usize {
-            warn!("ipi_register: try to cover exist ipi handler");
-            return false;
-        }
-    }
-
-    while (ipi_type as usize) >= ipi_handler_list.len() {
-        ipi_handler_list.push(IpiHandler::new(handler, ipi_type));
-    }
-    ipi_handler_list[ipi_type as usize] = IpiHandler::new(handler, ipi_type);
-    // ipi_handler_list.push(IpiHandler::new(handler, ipi_type));
-    true
 }
 
 fn ipi_send(target_id: usize, msg: IpiMessage) -> bool {

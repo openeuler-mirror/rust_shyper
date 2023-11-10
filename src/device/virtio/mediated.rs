@@ -17,7 +17,7 @@ use crate::kernel::{
     active_vm, async_task_exe, AsyncTaskState, finish_async_task, hvc_send_msg_to_vm, HvcDefaultMsg, HvcGuestMsg,
     IpiInnerMsg, set_front_io_task_state, vm, vm_ipa2pa, VM_LIST,
 };
-use crate::kernel::{ipi_register, IpiMessage, IpiType};
+use crate::kernel::IpiMessage;
 use crate::utils::trace;
 
 pub static MEDIATED_BLK_LIST: Mutex<Vec<MediatedBlk>> = Mutex::new(Vec::new());
@@ -152,12 +152,6 @@ pub struct MediatedBlkReq {
     req_type: u32,
     sector: usize,
     count: usize,
-}
-
-pub fn mediated_dev_init() {
-    if !ipi_register(IpiType::IpiTMediatedDev, mediated_ipi_handler) {
-        panic!("mediated_dev_init: failed to register ipi IpiTMediatedDev");
-    }
 }
 
 // only run in vm0

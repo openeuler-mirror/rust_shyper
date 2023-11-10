@@ -14,10 +14,9 @@ use spin::Mutex;
 
 use crate::arch::{interrupt_arch_ipi_send, interrupt_arch_vm_inject};
 use crate::arch::{GIC_PRIVINT_NUM, interrupt_arch_vm_register};
-use crate::kernel::{current_cpu, hyper_fresh_ipi_handler, ipi_irq_handler, IpiInnerMsg, IpiMessage, Vcpu, VcpuState};
-use crate::kernel::{ipi_register, IpiType, Vm};
+use crate::kernel::{current_cpu, ipi_irq_handler, IpiInnerMsg, IpiMessage, Vcpu, VcpuState};
+use crate::kernel::Vm;
 use crate::utils::{BitAlloc, BitAlloc256, BitAlloc4K, BitMap};
-use crate::vmm::vmm_ipi_handler;
 
 use super::Scheduler;
 
@@ -84,30 +83,6 @@ pub fn interrupt_init() {
     let cpu_id = current_cpu().id;
     if cpu_id == 0 {
         interrupt_reserve_int(INTERRUPT_IRQ_IPI, InterruptHandler::IpiIrqHandler(ipi_irq_handler));
-
-        if !ipi_register(IpiType::IpiTIntInject, interrupt_inject_ipi_handler) {
-            panic!(
-                "interrupt_init: failed to register int inject ipi {:#?}",
-                IpiType::IpiTIntInject
-            )
-        }
-        use crate::arch::vgic_ipi_handler;
-        if !ipi_register(IpiType::IpiTIntc, vgic_ipi_handler) {
-            panic!("interrupt_init: failed to register intc ipi {:#?}", IpiType::IpiTIntc)
-        }
-        use crate::device::ethernet_ipi_rev_handler;
-        if !ipi_register(IpiType::IpiTEthernetMsg, ethernet_ipi_rev_handler) {
-            panic!(
-                "interrupt_init: failed to register eth ipi {:#?}",
-                IpiType::IpiTEthernetMsg,
-            );
-        }
-        if !ipi_register(IpiType::IpiTVMM, vmm_ipi_handler) {
-            panic!("interrupt_init: failed to register ipi vmm");
-        }
-        if !ipi_register(IpiType::IpiTHyperFresh, hyper_fresh_ipi_handler) {
-            panic!("interrupt_init: failed to register ipi hyper fresh");
-        }
 
         info!("Interrupt init ok");
     }

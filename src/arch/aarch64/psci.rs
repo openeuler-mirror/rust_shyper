@@ -63,13 +63,6 @@ const TEGRA_SIP_GET_ACTMON_CLK_COUNTERS: usize = 0xC2FFFE02;
 
 pub const PSCI_TOS_NOT_PRESENT_MP: usize = 2;
 
-pub fn power_arch_init() {
-    use crate::kernel::ipi_register;
-    if !ipi_register(IpiType::IpiTPower, psci_ipi_handler) {
-        panic!("power_arch_init: failed to register ipi IpiTPower");
-    }
-}
-
 pub fn power_arch_vm_shutdown_secondary_cores(vm: Vm) {
     let m = IpiPowerMessage {
         src: vm.id(),
