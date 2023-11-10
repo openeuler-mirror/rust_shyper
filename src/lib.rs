@@ -18,6 +18,7 @@
 #![feature(asm_const)]
 #![feature(error_in_core)]
 #![feature(slice_group_by)]
+#![feature(c_str_literals)]
 #![allow(unused_doc_comments)]
 #![allow(special_module_name)]
 
@@ -33,11 +34,9 @@ extern crate memoffset;
 // extern crate rlibc;
 
 use device::{init_vm0_dtb, mediated_dev_init};
-use kernel::{cpu_init, interrupt_init, mem_init, timer_init};
+use kernel::{cpu_init, interrupt_init, mem_init, timer_init, cpu_sched_init, hvc_init, iommu_init};
 use mm::heap_init;
 use vmm::{vm_init, vmm_boot_vm};
-
-use crate::kernel::{cpu_sched_init, hvc_init, iommu_init};
 
 #[macro_export]
 macro_rules! print {
@@ -113,9 +112,9 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
         }
 
         heap_init();
-        let _ = kernel::logger_init();
+        kernel::logger_init().unwrap();
         mem_init();
-        init_vm0_dtb(dtb);
+        init_vm0_dtb(dtb).unwrap();
         hvc_init();
         iommu_init();
     }

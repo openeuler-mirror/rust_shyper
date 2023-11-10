@@ -9,22 +9,27 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::vec::Vec;
+use crate::alloc::borrow::ToOwned;
 
-use vm_fdt::{Error, FdtWriter, FdtWriterResult};
+use fdt::binding::Fdt;
+use vm_fdt::{FdtWriter, FdtWriterResult};
 
 use crate::config::{DtbDevType, VmDtbDevConfig};
 use crate::config::VmConfigEntry;
 use crate::device::EmuDeviceType;
+use crate::error::Result;
 use crate::SYSTEM_FDT;
 use crate::vmm::CPIO_RAMDISK;
 
 const PI4_DTB_ADDR: usize = 0xf0000000;
 
-pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
+pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
+    use fdt::*;
+    unsafe {
+        info!("fdt {dtb:p} has original size {}", fdt_size(dtb));
+    };
     #[cfg(feature = "tx2")]
     unsafe {
-        use fdt::*;
-        info!("fdt orignal size {}", fdt_size(dtb));
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         let r = fdt_del_mem_rsv(dtb, 0);
@@ -85,7 +90,6 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
     }
     #[cfg(feature = "pi4")]
     unsafe {
-        use fdt::*;
         use crate::utils::round_up;
         use crate::arch::PAGE_SIZE;
         let pi_fdt = PI4_DTB_ADDR as *mut fdt::myctypes::c_void;
@@ -96,8 +100,6 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
     }
     #[cfg(feature = "qemu")]
     unsafe {
-        use fdt::*;
-        info!("fdt orignal size {}, ptr {dtb:#p}", fdt_size(dtb));
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
@@ -155,67 +157,16 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) {
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
     #[cfg(feature = "rk3588")]
-    unsafe {
-        use fdt::*;
-        info!("fdt orignal size {}", fdt_size(dtb));
-
-        // assert_eq!(fdt_remove_node(dtb, "/sram@10f000\0".as_ptr()), 0);
-        //use for boot one core
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core1\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core2\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core3\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@100\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@200\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@300\0".as_ptr()), 0);
-
-        //use for boot 4 cores in cluster-1. and if want to boot all,don`t remove any code about cpu
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster1\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster2\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@400\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@500\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@600\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@700\0".as_ptr()), 0);
-        // //use for boot 2 cores in cluster-1
-        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core2\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core3\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@200\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@300\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/cpus/idle-states\0".as_ptr()), 0);
-
-        // assert_eq!(fdt_remove_node(dtb, "/timer@feae0000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/timer\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/i2c@feaa0000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/reserved-memory\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/serial@feb70000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/serial@feb80000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/serial@feb60000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/serial@feba0000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/serial@feb50000\0".as_ptr()), 0);
-
-        // assert_eq!(fdt_remove_node(dtb, "/pcie@fe180000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/pcie@fe190000\0".as_ptr()), 0);
-
-        #[cfg(feature = "rk3588-noeth")]
-        assert_eq!(fdt_remove_node(dtb, "/ethernet@fe1c0000\0".as_ptr()), 0);
-
-        // assert_eq!(fdt_remove_node(dtb, "/chosen\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/tsadc@fec00000\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/tsadc@fec00000\0".as_ptr()), 0);
-        assert_eq!(fdt_remove_node(dtb, "/memory\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/pinctrl/uart2/uart2m0-xfer\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/pinctrl/uart2/uart2m1-xfer\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/fiq-debugger\0".as_ptr()), 0);
-        // assert_eq!(fdt_remove_node(dtb, "/debug@fd104000\0".as_ptr()), 0);
-        let len = fdt_size(dtb);
-        info!("fdt after patched size {}", len);
-        let slice = core::slice::from_raw_parts(dtb as *const u8, len as usize);
-
-        SYSTEM_FDT.call_once(|| slice.to_vec());
+    {
+        let mut fdt = unsafe { Fdt::from_ptr(dtb as *const u8) }.to_owned();
+        crate::config::patch_fdt(&mut fdt)?;
+        SYSTEM_FDT.call_once(move || fdt.into_inner());
     }
+    Ok(())
 }
 
 // create vm1 fdt demo
-pub fn create_fdt(config: VmConfigEntry) -> Result<Vec<u8>, Error> {
+pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     let mut fdt = FdtWriter::new()?;
 
     let root_node = fdt.begin_node("root")?;
