@@ -123,6 +123,8 @@ pub const HVC_CONFIG_PASSTHROUGH_DEVICE_IRQS: usize = 6;
 pub const HVC_CONFIG_PASSTHROUGH_DEVICE_STREAMS_IDS: usize = 7;
 pub const HVC_CONFIG_DTB_DEVICE: usize = 8;
 pub const HVC_CONFIG_UPLOAD_KERNEL_IMAGE: usize = 9;
+pub const HVC_CONFIG_MEMORY_COLOR_BUDGET: usize = 10;
+pub const HVC_CONFIG_UPLOAD_DEVICE_TREE: usize = 11;
 
 #[cfg(feature = "tx2")]
 pub const HVC_IRQ: usize = 32 + 0x20;
@@ -238,6 +240,7 @@ fn hvc_config_handler(
         HVC_CONFIG_PASSTHROUGH_DEVICE_STREAMS_IDS => vm_cfg_add_passthrough_device_streams_ids(x0, x1, x2),
         HVC_CONFIG_DTB_DEVICE => vm_cfg_add_dtb_dev(x0, x1, x2, x3, x4, x5, x6),
         HVC_CONFIG_UPLOAD_KERNEL_IMAGE => vm_cfg_upload_kernel_image(x0, x1, x2, x3, x4),
+        HVC_CONFIG_UPLOAD_DEVICE_TREE => vm_cfg_upload_device_tree(x0, x1, x2, x3, x4),
         _ => {
             error!("hvc_config_handler unknown event {}", event);
             Err(())

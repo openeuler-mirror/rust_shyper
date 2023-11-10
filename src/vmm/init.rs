@@ -35,6 +35,9 @@ use crate::kernel::{active_vcpu_id, vcpu_run};
 use crate::kernel::interrupt_vm_register;
 use crate::kernel::VM_NUM_MAX;
 use crate::utils::trace;
+use crate::error::Result;
+
+use fdt::binding::*;
 
 #[cfg(feature = "ramdisk")]
 pub static CPIO_RAMDISK: &'static [u8] = include_bytes!("../../image/net_rootfs.cpio");
@@ -106,6 +109,17 @@ pub fn vmm_load_image(vm: Vm, bin: &[u8]) {
         return;
     }
     panic!("vmm_load_image: Image config conflicts with memory config");
+}
+
+fn overlay_fdt(vm: &Vm, dtb: &[u8], overlay: &mut [u8]) -> Result<FdtBuf> {
+    let fdt = Fdt::from_bytes(dtb)?;
+    debug!("VM[{}] dtb old size {}", vm.id(), fdt.len());
+    let mut buf = FdtBuf::from_fdt_capacity(fdt, (dtb.len() + overlay.len()) * 2)?;
+    let fdt_overlay = Fdt::from_bytes_mut(overlay)?;
+    buf.overlay_apply(fdt_overlay)?;
+    buf.pack()?;
+    debug!("VM[{}] dtb new size {}", vm.id(), buf.len());
+    Ok(buf)
 }
 
 pub fn vmm_init_image(vm: Vm) -> bool {
@@ -213,9 +227,33 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             // Init dtb for GVM.
             match create_fdt(config.clone()) {
                 Ok(dtb) => {
+                    let mut overlay = config.fdt_overlay.lock();
                     let offset = config.device_tree_load_ipa() - vm.config().memory_region()[0].ipa_start;
-                    debug!("GVM[{}] dtb addr 0x{:x}", vm.id(), vm.pa_start(0) + offset);
-                    crate::utils::memcpy_safe((vm.pa_start(0) + offset) as *const u8, dtb.as_ptr(), dtb.len());
+                    let target = (vm.pa_start(0) + offset) as *mut u8;
+                    debug!(
+                        "GVM[{}] dtb addr 0x{:x} overlay {}",
+                        vm.id(),
+                        target as usize,
+                        overlay.len()
+                    );
+                    if overlay.is_empty() {
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(dtb.as_ptr(), target, dtb.len());
+                        }
+                    } else {
+                        let buf = match overlay_fdt(&vm, &dtb, &mut overlay) {
+                            Ok(x) => x,
+                            Err(e) => {
+                                error!("overlay_fdt failed: {:?}", e);
+                                return false;
+                            }
+                        };
+                        overlay.clear();
+                        overlay.shrink_to_fit();
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(buf.as_ptr(), target, buf.len());
+                        }
+                    }
                 }
                 _ => {
                     panic!("vmm_setup_config: create fdt for vm{} fail", vm.id());

@@ -1077,3 +1077,36 @@ pub fn vm_cfg_upload_kernel_image(
     dst.copy_from_slice(src);
     Ok(0)
 }
+
+pub fn vm_cfg_upload_device_tree(
+    vmid: usize,
+    _img_size: usize,
+    cache_ipa: usize,
+    load_offset: usize,
+    load_size: usize,
+) -> Result<usize, ()> {
+    let cfg = match vm_cfg_entry(vmid) {
+        None => {
+            error!("vm_cfg_upload_device_tree: vm {} not found", vmid);
+            return Err(());
+        }
+        Some(cfg) => cfg,
+    };
+
+    info!(
+        "vm_cfg_upload_device_tree: VM[{}] upload device tree. cache_ipa: {:x} load_offset: {:x} load_size: {}",
+        vmid, cache_ipa, load_offset, load_size,
+    );
+
+    let cache_pa = vm_ipa2pa(active_vm().unwrap(), cache_ipa);
+    if cache_pa == 0 {
+        error!("illegal cache ipa {:x}", cache_ipa);
+        return Err(());
+    }
+
+    let src = unsafe { core::slice::from_raw_parts(cache_pa as *mut u8, load_size) };
+    let mut dst = cfg.fdt_overlay.lock();
+    dst.extend_from_slice(src);
+
+    Ok(0)
+}
