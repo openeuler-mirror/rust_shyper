@@ -17,6 +17,7 @@
 #![feature(inline_const)]
 #![feature(naked_functions)]
 #![feature(asm_const)]
+#![feature(error_in_core)]
 #![allow(unused_doc_comments)]
 #![allow(special_module_name)]
 
@@ -69,6 +70,8 @@ mod panic;
 mod utils;
 #[allow(dead_code)]
 mod vmm;
+
+mod error;
 
 // use lib::{BitAlloc, BitAlloc256};
 
