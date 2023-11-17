@@ -19,16 +19,30 @@ use crate::arch::{PAGE_SIZE, PTE_S2_FIELD_AP_RO, PTE_S2_NORMAL, PTE_S2_RO};
 use crate::arch::GICC_CTLR_EN_BIT;
 use crate::arch::PageTable;
 use crate::arch::Vgic;
-use crate::board::{Platform, PlatOperation};
+use crate::arch::{GicContext, VmContext, Aarch64ContextFrame};
+use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
 use crate::config::VmConfigEntry;
-use crate::device::EmuDevs;
-use crate::kernel::{
-    EmuDevData, get_share_mem, mem_pages_alloc, VirtioMmioData, VM_CONTEXT_RECEIVE, VM_CONTEXT_SEND, VMData,
-};
+use crate::device::{EmuDevs, VirtioMmioData, EMU_DEV_NUM_MAX};
+use crate::kernel::{get_share_mem, mem_pages_alloc, VM_CONTEXT_RECEIVE, VM_CONTEXT_SEND};
 use crate::utils::*;
 use crate::mm::PageFrame;
-
+use crate::kernel::migrate::migrate::VgicMigData;
 use super::vcpu::Vcpu;
+
+pub enum EmuDevData {
+    VirtioBlk(VirtioMmioData),
+    VirtioNet(VirtioMmioData),
+    VirtioConsole(VirtioMmioData),
+    None,
+}
+
+pub struct VMData {
+    pub vm_ctx: [VmContext; PLATFORM_VCPU_NUM_MAX],
+    pub vcpu_ctx: [Aarch64ContextFrame; PLATFORM_VCPU_NUM_MAX],
+    pub gic_ctx: [GicContext; PLATFORM_VCPU_NUM_MAX],
+    pub vgic_ctx: VgicMigData,
+    pub emu_devs: [EmuDevData; EMU_DEV_NUM_MAX],
+}
 
 pub const DIRTY_MEM_THRESHOLD: usize = 0x2000;
 pub const VM_NUM_MAX: usize = 8;

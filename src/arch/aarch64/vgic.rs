@@ -18,16 +18,14 @@ use crate::{arch::GICH, kernel::IpiInitcMessage};
 use crate::board::{PLATFORM_CPU_NUM_MAX, Platform, PlatOperation};
 use crate::device::EmuContext;
 use crate::device::EmuDevs;
-use crate::kernel::{
-    active_vcpu_id, current_cpu, restore_vcpu_gic, save_vcpu_gic, VgicCpuPrivData, VgicIntData, VgicMigData,
-};
+use crate::kernel::{active_vcpu_id, current_cpu, restore_vcpu_gic, save_vcpu_gic};
 use crate::kernel::{active_vm, active_vm_id, active_vm_ncpu};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm, vm};
 use crate::utils::{bit_extract, bit_get, bit_set, bitmap_find_nth, ptr_read_write};
 
 use super::gic::*;
-
+use crate::kernel::migrate::migrate::{VgicCpuPrivData, VgicIntData, VgicMigData};
 #[derive(Clone)]
 struct VgicInt {
     inner: Arc<Mutex<VgicIntInner>>,
@@ -39,7 +37,7 @@ impl VgicInt {
         let new_this = Self::new(self.id() as usize);
         match self.owner() {
             Some(vcpu) => {
-                let vm = vcpu.vm().unwrap();
+                let vm = vm(vcpu.vm().unwrap().id()).unwrap();
                 new_this.set_owner(vm.vcpu(vcpu.id()).unwrap());
             }
             None => {}

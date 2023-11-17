@@ -348,6 +348,39 @@ impl Vcpu {
     }
 }
 
+struct IdleThread {
+    pub ctx: ContextFrame,
+}
+
+fn idle_thread() {
+    loop {
+        cortex_a::asm::wfi();
+    }
+}
+
+static IDLE_THREAD: spin::Lazy<IdleThread> = spin::Lazy::new(|| {
+    let mut ctx = ContextFrame::new(idle_thread as usize, current_cpu().stack_top(), 0);
+    use cortex_a::registers::SPSR_EL2;
+    ctx.set_exception_pc(idle_thread as usize);
+    ctx.spsr = (SPSR_EL2::M::EL2h + SPSR_EL2::F::Masked + SPSR_EL2::A::Masked + SPSR_EL2::D::Masked).value;
+    IdleThread { ctx }
+});
+
+pub fn run_idle_thread() {
+    trace!("Core {} idle", current_cpu().id);
+    current_cpu().cpu_state = CpuState::CpuIdle;
+    crate::utils::memcpy_safe(
+        current_cpu().ctx as *const u8,
+        &(IDLE_THREAD.ctx) as *const _ as *const u8,
+        core::mem::size_of::<ContextFrame>(),
+    );
+}
+
+pub fn find_vcpu_by_id(id: usize) -> Option<Vcpu> {
+    let vcpu_list = VCPU_LIST.lock();
+    vcpu_list.iter().find(|&x| x.id() == id).cloned()
+}
+
 pub struct VcpuInner {
     pub id: usize,
     pub phys_id: usize,

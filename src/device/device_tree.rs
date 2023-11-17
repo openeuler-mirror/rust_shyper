@@ -9,7 +9,6 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::vec::Vec;
-use crate::alloc::borrow::ToOwned;
 
 use fdt::binding::Fdt;
 use vm_fdt::{FdtWriter, FdtWriterResult};
@@ -158,6 +157,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     }
     #[cfg(feature = "rk3588")]
     {
+        use crate::alloc::borrow::ToOwned;
         let mut fdt = unsafe { Fdt::from_ptr(dtb as *const u8) }.to_owned();
         crate::config::patch_fdt(&mut fdt)?;
         SYSTEM_FDT.call_once(move || fdt.into_inner());

@@ -63,7 +63,11 @@ tx2_ramdisk:
 
 tx2_update:
 	$(MAKE) build BOARD=tx2 FEATURES=update TEXT_START=0x8a000000 VM0_IMAGE_PATH="./image/L4T"
-	# bash upload_update
+	bash upload_update
+	
+tx2_update_low:
+	$(MAKE) build BOARD=tx2 FEATURES=update_low TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
+	bash upload_update_low
 
 pi4:
 	$(MAKE) build BOARD=pi4 TEXT_START=0xf0080000 VM0_IMAGE_PATH="./image/Image_pi4_5.4.83_tlb"

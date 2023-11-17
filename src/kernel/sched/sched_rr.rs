@@ -9,8 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::vec::Vec;
-use crate::arch::{ContextFrame, ContextFrameTrait};
-use crate::kernel::{Vcpu, Scheduler, SchedulerUpdate, current_cpu, VcpuState, timer_enable, vm};
+use crate::kernel::{Vcpu, Scheduler, SchedulerUpdate, current_cpu, VcpuState, timer_enable, vm, run_idle_thread};
 
 pub struct SchedulerRR {
     queue: Vec<Vcpu>,
@@ -37,23 +36,6 @@ impl Default for SchedulerRR {
         }
     }
 }
-
-struct IdleThread {
-    pub ctx: ContextFrame,
-}
-
-fn idle_thread() {
-    loop {
-        cortex_a::asm::wfi();
-    }
-}
-
-static IDLE_THREAD: spin::Lazy<IdleThread> = spin::Lazy::new(|| {
-    let mut ctx = ContextFrame::new(idle_thread as usize, 0, 0);
-    use cortex_a::registers::SPSR_EL2;
-    ctx.spsr = (SPSR_EL2::M::EL2h + SPSR_EL2::F::Masked + SPSR_EL2::A::Masked + SPSR_EL2::D::Masked).value;
-    IdleThread { ctx }
-});
 
 impl Scheduler for SchedulerRR {
     fn init(&mut self) {}
@@ -87,14 +69,8 @@ impl Scheduler for SchedulerRR {
                 None => {
                     error!("run_idle_thread: cpu{} ctx is NULL", current_cpu().id);
                 }
-                Some(ctx) => {
-                    info!("Core {} idle", current_cpu().id);
-                    current_cpu().cpu_state = crate::kernel::CpuState::CpuIdle;
-                    crate::utils::memcpy_safe(
-                        ctx as *const u8,
-                        &(IDLE_THREAD.ctx) as *const _ as *const u8,
-                        core::mem::size_of::<ContextFrame>(),
-                    );
+                Some(_ctx) => {
+                    run_idle_thread();
                 }
             }
         }
@@ -156,7 +132,6 @@ impl Scheduler for SchedulerRR {
     }
 }
 
-// #[cfg(feature = "update")]
 impl SchedulerUpdate for SchedulerRR {
     fn update(&self) -> Self {
         let src_rr = self;

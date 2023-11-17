@@ -12,13 +12,8 @@ use tock_registers::*;
 use tock_registers::interfaces::*;
 
 use crate::utils::{memset_safe, bit_extract};
-use crate::arch::LVL2_SHIFT;
 
 use super::interface::*;
-
-#[cfg(feature = "update")]
-#[cfg(feature = "tx2")]
-global_asm!(include_str!("start_update.S"));
 
 register_bitfields! {u64,
     pub TableDescriptor [
@@ -168,6 +163,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     }
     #[cfg(feature = "pi4")]
     {
+        use crate::arch::LVL2_SHIFT;
         // crate::driver::putc('o' as u8);
         // crate::driver::putc('r' as u8);
         // crate::driver::putc('e' as u8);
@@ -196,6 +192,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     }
     #[cfg(feature = "qemu")]
     {
+        use crate::arch::LVL2_SHIFT;
         use crate::board::PLAT_DESC;
         for index in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             use crate::arch::LVL1_SHIFT;
@@ -212,6 +209,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
     }
     #[cfg(feature = "rk3588")]
     {
+        use crate::arch::LVL2_SHIFT;
         // 0x0020_0000 ~ 0xc000_0000 --> normal memory (3GB)
         lvl1_pt.entry[0] = BlockDescriptor::new(0, false);
         lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, false);

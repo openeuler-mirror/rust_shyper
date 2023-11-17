@@ -37,7 +37,6 @@ pub trait Scheduler {
     fn yield_to(&mut self, vcpu: Vcpu);
 }
 
-// #[cfg(feature = "update")]
 pub trait SchedulerUpdate {
     fn update(&self) -> Self;
 }

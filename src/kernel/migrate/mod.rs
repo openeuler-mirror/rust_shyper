@@ -8,16 +8,4 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use core::arch::asm;
-
-pub fn tlb_invalidate_guest_all() {
-    unsafe {
-        asm!("dsb ish", "tlbi vmalls12e1is", "dsb ish", "isb");
-    }
-}
-
-pub fn invalid_hypervisor_all() {
-    unsafe {
-        asm!("dsb ish", "tlbi alle2is", "dsb ish", "isb", options(nostack));
-    }
-}
+pub mod migrate;

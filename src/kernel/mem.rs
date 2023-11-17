@@ -17,7 +17,7 @@ use crate::mm::PageFrame;
 use super::mem_region::*;
 
 use self::AllocError::*;
-
+use core::slice::from_raw_parts_mut;
 pub const VM_MEM_REGION_MAX: usize = 4;
 
 pub fn mem_init() {
@@ -25,6 +25,15 @@ pub fn mem_init() {
     mem_vm_region_init();
     mem_shared_mem_init();
     info!("Mem init ok");
+}
+
+pub unsafe fn clear_bss() {
+    extern "C" {
+        fn _bss_begin();
+        fn _bss_end();
+    }
+    println!("clear bss : from {:x} to {:x}", _bss_begin as usize, _bss_end as usize);
+    from_raw_parts_mut(_bss_begin as usize as *mut u8, _bss_end as usize - _bss_begin as usize).fill(0);
 }
 
 pub fn mem_heap_region_init() {
@@ -68,6 +77,10 @@ pub fn mem_heap_region_init() {
 /// ```
 pub fn mem_heap_region_reserve(base_addr: usize, size: usize) {
     let mut heap = HEAP_REGION.lock();
+    // //TODO: a compromise way for live_update
+    if base_addr < heap.region.base {
+        return;
+    }
     heap.reserve_pages(base_addr, round_up(size, PAGE_SIZE) / PAGE_SIZE);
     info!(
         "Reserve Heap Region 0x{:x} ~ 0x{:x}",

@@ -18,11 +18,11 @@ use crate::device::{
     virtio_net_handle_ctrl, virtio_net_notify_handler,
 };
 use crate::device::{EmuDevs, VirtioDeviceType};
-use crate::device::{VirtioQueue, Virtq};
+use crate::device::{VirtioQueue, Virtq, VirtqData};
 use crate::device::{VIRTQUEUE_BLK_MAX_SIZE, VIRTQUEUE_CONSOLE_MAX_SIZE, VIRTQUEUE_NET_MAX_SIZE};
-use crate::device::VirtDev;
+use crate::device::{VirtDev, VirtDevData};
 use crate::device::VIRTQ_READY;
-use crate::kernel::{current_cpu, ipi_send_msg, IpiInnerMsg, IpiIntInjectMsg, IpiType, VirtioMmioData, vm_ipa2pa, VmPa};
+use crate::kernel::{current_cpu, ipi_send_msg, IpiInnerMsg, IpiIntInjectMsg, IpiType, vm_ipa2pa, VmPa};
 use crate::kernel::{active_vm, active_vm_id};
 use crate::kernel::Vm;
 
@@ -72,6 +72,16 @@ pub struct VirtMmioRegs {
     irt_stat: u32,
     irt_ack: u32,
     dev_stat: u32,
+}
+
+pub struct VirtioMmioData {
+    pub id: usize,
+    pub driver_features: usize,
+    pub driver_status: usize,
+    pub regs: VirtMmioRegs,
+    pub dev: VirtDevData,
+    pub oppo_dev: VirtDevData,
+    pub vq: [VirtqData; 4], // TODO: 4 is hard code for vq max len
 }
 
 impl VirtMmioRegs {

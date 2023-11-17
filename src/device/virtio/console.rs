@@ -17,7 +17,7 @@ use crate::device::{VirtioMmio, Virtq};
 use crate::device::DevDesc;
 use crate::device::EmuDevs;
 use crate::device::VirtioIov;
-use crate::kernel::{active_vm, ConsoleDescData, vm_if_set_mem_map_bit, vm_ipa2pa};
+use crate::kernel::{active_vm, vm_if_set_mem_map_bit, vm_ipa2pa};
 use crate::kernel::vm;
 use crate::kernel::Vm;
 use crate::utils::{round_down, trace};
@@ -44,6 +44,16 @@ const VIRTIO_CONSOLE_PORT_NAME: usize = 7;
 #[derive(Clone)]
 pub struct ConsoleDesc {
     inner: Arc<Mutex<ConsoleDescInner>>,
+}
+
+pub struct ConsoleDescData {
+    pub oppo_end_vmid: u16,
+    pub oppo_end_ipa: u64,
+    // vm access
+    pub cols: u16,
+    pub rows: u16,
+    pub max_nr_ports: u32,
+    pub emerg_wr: u32,
 }
 
 impl ConsoleDesc {

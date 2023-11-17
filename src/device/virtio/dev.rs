@@ -14,21 +14,41 @@ use spin::Mutex;
 
 use crate::config::VmEmulatedDeviceConfig;
 // use crate::device::add_mediated_dev;
-use crate::device::{net_features, NetDesc};
-use crate::device::{console_features, ConsoleDesc};
+use crate::device::{net_features, NetDesc, NetDescData};
+use crate::device::{console_features, ConsoleDesc, ConsoleDescData};
 use crate::device::{BlkDesc, BLOCKIF_IOV_MAX, VirtioBlkReq};
 use crate::device::{VIRTIO_BLK_F_SEG_MAX, VIRTIO_BLK_F_SIZE_MAX, VIRTIO_F_VERSION_1};
 use crate::device::{BlkStat, NicStat};
 use crate::device::DevReq::BlkReq;
-use crate::kernel::{ConsoleDescData, DevDescData, mem_pages_alloc, NetDescData, VirtDevData};
+use crate::kernel::mem_pages_alloc;
 use crate::mm::PageFrame;
-
 #[derive(Copy, Clone, Debug)]
 pub enum VirtioDeviceType {
     None = 0,
     Net = 1,
     Block = 2,
     Console = 3,
+}
+
+pub struct BlkDescData {}
+
+pub enum DevDescData {
+    // reserve blk desc
+    BlkDesc(BlkDescData),
+    NetDesc(NetDescData),
+    ConsoleDesc(ConsoleDescData),
+    None,
+}
+pub struct VirtDevData {
+    pub activated: bool,
+    pub dev_type: VirtioDeviceType,
+    pub features: usize,
+    pub generation: usize,
+    pub int_id: usize,
+    pub desc: DevDescData,
+    // req: reserve; we used nfs, no need to mig blk req data
+    // cache: reserve
+    // stat: reserve
 }
 
 #[derive(Clone)]

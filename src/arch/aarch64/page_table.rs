@@ -88,8 +88,6 @@ pub const PTE_S2_RO: usize = PTE_S2_FIELD_MEM_ATTR_NORMAL_INNER_WRITE_BACK_CACHE
     | PTE_S2_FIELD_SH_OUTER_SHAREABLE
     | PTE_S2_FIELD_AF;
 
-pub const CPU_BANKED_ADDRESS: usize = 0x400000000;
-
 pub const fn pte_s1_field_attr_indx(idx: usize) -> usize {
     idx << 2
 }
@@ -118,25 +116,7 @@ pub fn pt_map_banked_cpu(cpu: &mut Cpu) -> usize {
     memset_safe(&(cpu.cpu_pt.lvl2) as *const _ as *mut u8, 0, PAGE_SIZE);
     memset_safe(&(cpu.cpu_pt.lvl3) as *const _ as *mut u8, 0, PAGE_SIZE);
 
-    let cpu_addr = cpu as *const _ as usize;
-    let lvl2_addr = &(cpu.cpu_pt.lvl2) as *const _ as usize;
-    let lvl3_addr = &(cpu.cpu_pt.lvl3) as *const _ as usize;
-    cpu.cpu_pt.lvl1[pt_lvl1_idx(CPU_BANKED_ADDRESS)] = lvl2_addr | PTE_S1_NORMAL | PTE_TABLE;
-    cpu.cpu_pt.lvl2[pt_lvl2_idx(CPU_BANKED_ADDRESS)] = lvl3_addr | PTE_S1_NORMAL | PTE_TABLE;
-
-    use core::mem::size_of;
-    let page_num = round_up(size_of::<Cpu>(), PAGE_SIZE) / PAGE_SIZE;
-
-    for i in 0..page_num {
-        cpu.cpu_pt.lvl3[pt_lvl3_idx(CPU_BANKED_ADDRESS) + i] = (cpu_addr + i * PAGE_SIZE) | PTE_S1_NORMAL | PTE_PAGE;
-    }
-
-    // println!("cpu addr {:x}", cpu_addr);
-    // println!("lvl2 addr {:x}", lvl2_addr);
-    // println!("lvl3 addr {:x}", lvl3_addr);
-    let ret: usize = &(cpu.cpu_pt.lvl1) as *const _ as usize;
-    //print!("1");
-    ret
+    &(cpu.cpu_pt.lvl1) as *const _ as usize
 }
 
 #[repr(transparent)]

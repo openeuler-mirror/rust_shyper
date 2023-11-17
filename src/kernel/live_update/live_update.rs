@@ -13,12 +13,17 @@ use alloc::collections::{BTreeMap, BTreeSet, LinkedList};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-
+use crate::arch::ContextFrameTrait;
 use spin::{Mutex, RwLock};
+use crate::kernel::cpu::CPU_LIST;
+use crate::arch::{
+    invalid_hypervisor_all, current_cpu_arch, PAGE_SIZE, PAGE_SHIFT, ContextFrame, set_current_cpu, Aarch64ContextFrame,
+};
 
 use crate::arch::{
     emu_intc_handler, emu_smmu_handler, GIC_LRS_NUM, gic_maintenance_handler, gicc_clear_current_irq, INTERRUPT_EN_SET,
-    PageTable, partial_passthrough_intc_handler, SMMU_V2, SmmuV2, TIMER_FREQ, TIMER_SLICE, Vgic,
+    PageTable, partial_passthrough_intc_handler, SMMU_V2, SmmuV2, TIMER_FREQ, TIMER_SLICE, Vgic, LVL2_PAGE_TABLE,
+    update_request_asm,
 };
 use crate::board::PLAT_DESC;
 use crate::config::{
@@ -32,13 +37,14 @@ use crate::device::{
 };
 use crate::kernel::{
     async_blk_io_req, ASYNC_EXE_STATUS, ASYNC_IO_TASK_LIST, async_ipi_req, ASYNC_IPI_TASK_LIST, ASYNC_USED_INFO_LIST,
-    AsyncExeStatus, AsyncTask, AsyncTaskData, CPU, Cpu, cpu_idle, CPU_IF_LIST, CpuIf, CpuState, current_cpu, FairQueue,
-    HEAP_REGION, HeapRegion, INTERRUPT_GLB_BITMAP, INTERRUPT_HANDLERS, INTERRUPT_HYPER_BITMAP, InterruptHandler,
-    IoAsyncMsg, ipi_irq_handler, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiMessage, IpiType, mem_heap_region_init,
-    SchedType, SchedulerUpdate, SHARE_MEM_LIST, timer_irq_handler, UsedInfo, Vcpu, VCPU_LIST, VcpuInner, vm, Vm,
-    VM_IF_LIST, vm_ipa2pa, VM_LIST, VM_NUM_MAX, VM_REGION, VmInterface, VmRegion, logger_init,
+    AsyncExeStatus, AsyncTask, AsyncTaskData, Cpu, CPU_IF_LIST, CpuIf, CpuState, current_cpu, FairQueue, HEAP_REGION,
+    HeapRegion, INTERRUPT_GLB_BITMAP, INTERRUPT_HANDLERS, INTERRUPT_HYPER_BITMAP, InterruptHandler, IoAsyncMsg,
+    ipi_irq_handler, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiMessage, IpiType, SchedType, SchedulerUpdate,
+    SHARE_MEM_LIST, timer_irq_handler, UsedInfo, Vcpu, VCPU_LIST, VcpuInner, vm, Vm, VM_IF_LIST, vm_ipa2pa, VM_LIST,
+    VM_NUM_MAX, VM_REGION, VmInterface, VmRegion, logger_init, CPU_STACK_SIZE, clear_bss, find_vcpu_by_id,
+    IPI_HANDLER_LIST, run_idle_thread,
 };
-use crate::utils::{BitAlloc256, BitMap, FlexBitmap, time_current_us};
+use crate::utils::{BitAlloc256, BitMap, FlexBitmap, time_current_us, memcpy_safe};
 use crate::mm::{heap_init, PageFrame};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -50,14 +56,11 @@ pub enum FreshStatus {
     None,
 }
 
-#[cfg(feature = "update")]
-static FRESH_STATUS: RwLock<FreshStatus> = RwLock::new(FreshStatus::Start);
-#[cfg(not(feature = "update"))]
 static FRESH_STATUS: RwLock<FreshStatus> = RwLock::new(FreshStatus::None);
 
 pub static FRESH_LOGIC_LOCK: Mutex<()> = Mutex::new(());
 pub static FRESH_IRQ_LOGIC_LOCK: Mutex<()> = Mutex::new(());
-// static FRESH_STATUS: FreshStatus = FreshStatus::None;
+pub static RUST_SHYPER_UPDATE_LOCK: Mutex<()> = Mutex::new(());
 
 fn set_fresh_status(status: FreshStatus) {
     *FRESH_STATUS.write() = status;
@@ -90,6 +93,7 @@ pub struct HypervisorAddr {
     gic_lrs_num: usize,
     // address for ipi
     cpu_if_list: usize,
+    ipi_handler_list: usize,
     // arch time
     time_freq: usize,
     time_slice: usize,
@@ -104,17 +108,11 @@ pub struct HypervisorAddr {
     shared_mem_list: usize,
     // smmu_v2
     smmu_v2: usize,
-}
-
-pub fn hyper_fresh_ipi_handler(_msg: &IpiMessage) {
-    update_request();
+    //CPU lvl2 page dir for devices
+    hva2pa_lvl2_base: usize,
 }
 
 pub fn update_request() {
-    // println!("Src Hypervisor Core[{}] send update request", current_cpu().id);
-    extern "C" {
-        pub fn update_request(address_list: &HypervisorAddr, alloc: bool);
-    }
     // VM_STATE_FLAG UNILIB_FS_LIST SYSTEM_FDT
     let vm_config_table = &DEF_VM_CONFIG_TABLE as *const _ as usize;
     let emu_dev_list = &EMU_DEVS_LIST as *const _ as usize;
@@ -127,9 +125,10 @@ pub fn update_request() {
     let vm_list = &VM_LIST as *const _ as usize;
     let vm_if_list = &VM_IF_LIST as *const _ as usize;
     let vcpu_list = &VCPU_LIST as *const _ as usize;
-    let cpu = unsafe { &CPU as *const _ as usize };
+    let cpu = current_cpu_arch() as usize;
     let cpu_if_list = &CPU_IF_LIST as *const _ as usize;
     let gic_lrs_num = &GIC_LRS_NUM as *const _ as usize;
+    let ipi_handler_list = &IPI_HANDLER_LIST as *const _ as usize;
     let time_freq = &TIMER_FREQ as *const _ as usize;
     let time_slice = &TIMER_SLICE as *const _ as usize;
     let mediated_blk_list = &MEDIATED_BLK_LIST as *const _ as usize;
@@ -139,6 +138,7 @@ pub fn update_request() {
     let async_used_info_list = &ASYNC_USED_INFO_LIST as *const _ as usize;
     let shared_mem_list = &SHARE_MEM_LIST as *const _ as usize;
     let smmu_v2 = &SMMU_V2 as *const _ as usize;
+    let hva2pa_lvl2_base = unsafe { &LVL2_PAGE_TABLE } as *const _ as usize;
 
     let addr_list = HypervisorAddr {
         cpu_id: current_cpu().id,
@@ -156,6 +156,7 @@ pub fn update_request() {
         cpu,
         cpu_if_list,
         gic_lrs_num,
+        ipi_handler_list,
         time_freq,
         time_slice,
         mediated_blk_list,
@@ -165,10 +166,11 @@ pub fn update_request() {
         async_used_info_list,
         shared_mem_list,
         smmu_v2,
+        hva2pa_lvl2_base,
     };
     if current_cpu().id == 0 {
         unsafe {
-            update_request(&addr_list, true);
+            update_request_asm(&addr_list, true);
         }
         for cpu_id in 0..PLAT_DESC.cpu_desc.num {
             if cpu_id != current_cpu().id {
@@ -177,21 +179,26 @@ pub fn update_request() {
         }
     }
     unsafe {
-        update_request(&addr_list, false);
+        update_request_asm(&addr_list, false);
     }
 }
 
 #[no_mangle]
 pub extern "C" fn rust_shyper_update(address_list: &HypervisorAddr, alloc: bool) {
     // TODO: vm0_dtb?
-    // let mut time0 = 0;
-    // let mut time1 = 0;
+
     if alloc {
         // cpu id is 0
+        unsafe {
+            clear_bss();
+        }
         heap_init();
-        mem_heap_region_init();
         // alloc and pre_copy
         unsafe {
+            // // HEAP_REGION
+            let heap_region = &*(address_list.heap_region as *const Mutex<HeapRegion>);
+            heap_region_update(heap_region);
+
             // DEF_VM_CONFIG_TABLE
             let vm_config_table = &*(address_list.vm_config_table as *const Mutex<VmConfigTable>);
             vm_config_table_update(vm_config_table);
@@ -237,16 +244,17 @@ pub extern "C" fn rust_shyper_update(address_list: &HypervisorAddr, alloc: bool)
         info!("Finish Alloc VM / VCPU / CPU_IF");
         return;
     }
-
+    let lock = RUST_SHYPER_UPDATE_LOCK.lock();
     if address_list.cpu_id == 0 {
         let lock0 = FRESH_LOGIC_LOCK.lock();
         let lock1 = FRESH_IRQ_LOGIC_LOCK.lock();
-        // set_fresh_status(FreshStatus::Start);
+        set_fresh_status(FreshStatus::Start);
         unsafe {
             // VM_LIST
             let time0 = time_current_us();
             let vm_list = &*(address_list.vm_list as *const Mutex<Vec<Vm>>);
             vm_list_update(vm_list);
+            info!("Finish update vm list");
             set_fresh_status(FreshStatus::FreshVM);
             let time1 = time_current_us();
 
@@ -257,35 +265,35 @@ pub extern "C" fn rust_shyper_update(address_list: &HypervisorAddr, alloc: bool)
             drop(lock1);
             set_fresh_status(FreshStatus::FreshVCPU);
             let time3 = time_current_us();
-
+            info!("Finish Update VCPU_LIST");
             // CPU: Must update after vcpu and vm
             let cpu = &*(address_list.cpu as *const Cpu);
-            current_cpu_update(cpu);
-
+            current_cpu_update(cpu, address_list.hva2pa_lvl2_base);
+            info!("Update CPU[{}]", cpu.id);
             // VM_REGION
             let vm_region = &*(address_list.vm_region as *const Mutex<VmRegion>);
             vm_region_update(vm_region);
-
+            info!("Update {} region for VM_REGION", VM_REGION.lock().region.len());
             // HEAP_REGION
             let heap_region = &*(address_list.heap_region as *const Mutex<HeapRegion>);
             heap_region_update(heap_region);
-
+            info!("Update HEAP_REGION");
             // VM_IF_LIST
             let vm_if_list = &*(address_list.vm_if_list as *const [Mutex<VmInterface>; VM_NUM_MAX]);
             vm_if_list_update(vm_if_list);
-
+            info!("Update VM_IF_LIST");
             // MEDIATED_BLK_LIST
             let mediated_blk_list = &*(address_list.mediated_blk_list as *const Mutex<Vec<MediatedBlk>>);
             mediated_blk_list_update(mediated_blk_list);
-
+            info!("Update {} Mediated BLK", MEDIATED_BLK_LIST.lock().len());
             // SHARED_MEM_LIST
             let shared_mem_list = &*(address_list.shared_mem_list as *const Mutex<BTreeMap<usize, usize>>);
             shared_mem_list_update(shared_mem_list);
-
+            info!("Update {} SHARE_MEM_LIST", SHARE_MEM_LIST.lock().len());
             // cpu_if_list
             let cpu_if = &*(address_list.cpu_if_list as *const Mutex<Vec<CpuIf>>);
             cpu_if_update(cpu_if);
-
+            info!("Update CPU_IF_LIST");
             // ASYNC_EXE_STATUS、ASYNC_IPI_TASK_LIST、ASYNC_IO_TASK_LIST、ASYNC_USED_INFO_LIST
             let async_exe_status = &*(address_list.async_exe_status as *const Mutex<AsyncExeStatus>);
             let async_ipi_task_list = &*(address_list.async_ipi_task_list as *const Mutex<LinkedList<AsyncTask>>);
@@ -312,76 +320,73 @@ pub extern "C" fn rust_shyper_update(address_list: &HypervisorAddr, alloc: bool)
                 time2 - time1,
                 time3 - time2
             );
-            info!("Finish Update VM and VCPU_LIST");
-            info!("Update CPU[{}]", cpu.id);
-            info!("Update {} region for VM_REGION", VM_REGION.lock().region.len());
-            info!("Update HEAP_REGION");
-            info!("Update VM_IF_LIST");
-            info!("Update {} Mediated BLK", MEDIATED_BLK_LIST.lock().len());
-            info!("Update {} SHARE_MEM_LIST", SHARE_MEM_LIST.lock().len());
-            info!("Update CPU_IF_LIST");
         }
     } else {
         let cpu = unsafe { &*(address_list.cpu as *const Cpu) };
-        // let time0 = time_current_us();
-        // CPU: Must update after vcpu and vm alloc
-        current_cpu_update(cpu);
-        // let time1 = time_current_us();
-        // println!("Update CPU[{}], time {}us", cpu.id, time1 - time0);
+        current_cpu_update(cpu, address_list.hva2pa_lvl2_base);
     }
-    // barrier();
-    // if current_cpu().id != 0 {
-    //     println!("Core[{}] handle time {}", current_cpu().id, time1 - time0,);
-    // }
+    drop(lock);
     fresh_hyper();
 }
 
 pub fn fresh_hyper() {
     extern "C" {
         pub fn fresh_cpu();
-        pub fn fresh_hyper(ctx: usize);
+        pub fn fresh_hyper_asm(ctx: usize);
+        fn update_stack(dst_stack_base: usize, src_stack_base: usize);
     }
+    let dst_cpu = unsafe { &mut CPU_LIST[current_cpu().id] };
+    assert_eq!(dst_cpu.id, current_cpu().id);
+    let new_ttbr0_el2 = &dst_cpu.cpu_pt.lvl1 as *const _ as u64;
+    debug!("new new_ttbr0_el2 addr is {:x}", new_ttbr0_el2);
+    use cortex_a::registers::*;
+    let dst_stack_base = &dst_cpu.stack as *const _ as usize;
+    dst_cpu.stack.clone_from(&current_cpu().stack);
+    invalid_hypervisor_all();
+    set_current_cpu(dst_cpu as *const _ as u64);
+    TTBR0_EL2.set(new_ttbr0_el2);
+
+    invalid_hypervisor_all();
+
+    unsafe { crate::arch::cache_invalidate_d(dst_stack_base, CPU_STACK_SIZE) };
+    let ctx = current_cpu().ctx as usize;
     if current_cpu().id == 0 {
-        let ctx = current_cpu().ctx_ptr().unwrap() as usize;
-        debug!("CPU[{}] ctx {:x}", current_cpu().id, ctx);
+        info!("CPU[{}] ctx {:x}", current_cpu().id, ctx);
         current_cpu().clear_ctx();
-        unsafe { fresh_hyper(ctx) };
+        unsafe { fresh_hyper_asm(ctx) };
     } else {
         match current_cpu().cpu_state {
             CpuState::CpuInv => {
                 panic!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuInv);
             }
             CpuState::CpuIdle => {
-                debug!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuIdle);
-                unsafe { fresh_cpu() };
-                // println!(
-                //     "Core[{}] current cpu irq {}",
-                //     current_cpu().id,
-                //     current_cpu().current_irq
-                // );
+                run_idle_thread();
                 gicc_clear_current_irq(true);
-                cpu_idle();
+                unsafe { fresh_hyper_asm(current_cpu().ctx as usize) };
             }
             CpuState::CpuRun => {
-                debug!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuRun);
-                // println!(
-                //     "Core[{}] current cpu irq {}",
-                //     current_cpu().id,
-                //     current_cpu().current_irq
-                // );
+                info!("Core[{}] state {:#?}", current_cpu().id, CpuState::CpuRun);
                 gicc_clear_current_irq(true);
-                let ctx = current_cpu().ctx_ptr().unwrap();
+                let ctx = current_cpu().ctx as usize;
                 current_cpu().clear_ctx();
-                unsafe { fresh_hyper(ctx as usize) };
+                unsafe { fresh_hyper_asm(ctx) };
             }
         }
     }
 }
 
 pub fn shared_mem_list_update(src_shared_mem_list: &Mutex<BTreeMap<usize, usize>>) {
-    let mut shared_mem_list = SHARE_MEM_LIST.lock();
-    for (key, val) in src_shared_mem_list.lock().iter() {
-        shared_mem_list.insert(*key, *val);
+    info!("share mem list addr {:x}", &SHARE_MEM_LIST as *const _ as usize);
+    match SHARE_MEM_LIST.try_lock() {
+        Some(mut shared_mem_list) => {
+            info!("try src mem list addr {:x}", &src_shared_mem_list as *const _ as usize);
+            for (key, val) in src_shared_mem_list.lock().iter() {
+                shared_mem_list.insert(*key, *val);
+            }
+        }
+        None => {
+            panic!("get SHARE_MEM_LIST fail");
+        }
     }
 }
 
@@ -429,7 +434,6 @@ pub fn async_task_update(
             task: Arc::new(Mutex::new(Box::pin(async_ipi_req()))),
         })
     }
-    // for io_task in src_async_io_task_list.lock().iter() {
     while !src_async_io_task_list.lock().is_empty() {
         let io_task = src_async_io_task_list.lock().pop_front().unwrap();
         let vm_id = io_task.src_vmid;
@@ -487,12 +491,6 @@ pub fn async_task_update(
         }
         async_used_info_list.insert(*key, new_used_info);
     }
-    // println!("Update {} ipi task for ASYNC_IPI_TASK_LIST", async_ipi_task_list.len());
-    // println!("Update {} io task for ASYNC_IO_TASK_LIST", async_io_task_list.len());
-    // println!(
-    //     "Update {} used info for ASYNC_USED_INFO_LIST",
-    //     async_used_info_list.len()
-    // );
 }
 
 pub fn mediated_blk_list_update(src_mediated_blk_list: &Mutex<Vec<MediatedBlk>>) {
@@ -530,7 +528,7 @@ pub fn cpu_if_update(src_cpu_if: &Mutex<Vec<CpuIf>>) {
                 IpiInnerMsg::Power(power) => IpiInnerMsg::Power(power),
                 IpiInnerMsg::EnternetMsg(eth_msg) => IpiInnerMsg::EnternetMsg(eth_msg),
                 IpiInnerMsg::VmmMsg(vmm_msg) => IpiInnerMsg::VmmMsg(vmm_msg),
-                IpiInnerMsg::VcpuMsg(vmm_msg) => IpiInnerMsg::VcpuMsg(vmm_msg),
+                IpiInnerMsg::VcpuMsg(vcpu_msg) => IpiInnerMsg::VcpuMsg(vcpu_msg),
                 IpiInnerMsg::MediatedMsg(mediated_msg) => {
                     let mmio_id = mediated_msg.blk.id();
                     let vm_id = mediated_msg.src_id;
@@ -565,12 +563,6 @@ pub fn cpu_if_update(src_cpu_if: &Mutex<Vec<CpuIf>>) {
                 },
             );
         }
-        // println!(
-        //     "Update {} ipi msg for CpuIf[{}], after update len is {}",
-        //     cpu_if.msg_queue.len(),
-        //     idx,
-        //     cpu_if_list[idx].msg_queue.len()
-        // );
     }
 }
 
@@ -604,36 +596,52 @@ pub fn vm_if_list_update(src_vm_if_list: &[Mutex<VmInterface>; VM_NUM_MAX]) {
     }
 }
 
-pub fn current_cpu_update(src_cpu: &Cpu) {
-    let cpu = current_cpu();
+fn current_cpu_update(src_cpu: &Cpu, hva2pa_lvl2_base: usize) {
     // only need to alloc a new VcpuPool from heap, other props all map at 0x400000000
-    // current_cpu().sched = src_cpu.sched;
+    let dst_cpu = unsafe { &mut CPU_LIST[src_cpu.id] };
+    let lvl2_page_table = unsafe { &LVL2_PAGE_TABLE } as *const _ as usize;
     match &src_cpu.sched {
         SchedType::SchedRR(rr) => {
-            cpu.sched = SchedType::SchedRR(rr.update());
+            dst_cpu.sched = SchedType::SchedRR(rr.update());
         }
         SchedType::None => {
-            cpu.sched = SchedType::None;
+            dst_cpu.sched = SchedType::None;
         }
     }
+    dst_cpu.id = src_cpu.id;
+    dst_cpu.cpu_state = src_cpu.cpu_state;
+    dst_cpu.active_vcpu = match &src_cpu.active_vcpu {
+        Some(active_vcpu) => find_vcpu_by_id(active_vcpu.id()),
+        None => None,
+    };
+    let dst_stack_base = dst_cpu.stack.as_ptr() as usize;
+    let src_stack_base = src_cpu.stack.as_ptr() as usize;
+    dst_cpu.ctx = (src_cpu.ctx as usize + dst_stack_base - src_stack_base) as *mut Aarch64ContextFrame;
+    for vcpu in src_cpu.vcpu_array.iter().flatten() {
+        dst_cpu.vcpu_array.append_vcpu(find_vcpu_by_id(vcpu.id()).unwrap());
+    }
+    dst_cpu.current_irq = src_cpu.current_irq;
 
-    assert_eq!(cpu.id, src_cpu.id);
-    assert_eq!(cpu.ctx, src_cpu.ctx);
-    assert_eq!(cpu.cpu_state, src_cpu.cpu_state);
-    assert_eq!(cpu.current_irq, src_cpu.current_irq);
-    assert_eq!(cpu.cpu_pt, src_cpu.cpu_pt);
-    assert_eq!(cpu.stack, src_cpu.stack);
-    info!("Update CPU[{}]", cpu.id);
+    dst_cpu.cpu_pt.clone_from(&src_cpu.cpu_pt);
+
+    memcpy_safe(lvl2_page_table as *mut u8, hva2pa_lvl2_base as *mut u8, PAGE_SIZE);
+    dst_cpu.cpu_pt.lvl1[0] &= (1 << PAGE_SHIFT) - 1;
+    dst_cpu.cpu_pt.lvl1[0] |= (lvl2_page_table >> PAGE_SHIFT << PAGE_SHIFT) as usize;
+    let sp = unsafe { &*(src_cpu.ctx as *mut ContextFrame) }.stack_pointer();
+    let new_sp = sp + dst_stack_base - src_stack_base;
+    unsafe { &mut *(dst_cpu.ctx as *mut ContextFrame) }.set_stack_pointer(new_sp);
+
+    info!("Update CPU[{}]", dst_cpu.id);
 }
 
-pub fn gic_lrs_num_update(src_gic_lrs_num: &Mutex<usize>) {
+fn gic_lrs_num_update(src_gic_lrs_num: &Mutex<usize>) {
     let gic_lrs_num = *src_gic_lrs_num.lock();
     *GIC_LRS_NUM.lock() = gic_lrs_num;
     info!("Update GIC_LRS_NUM");
 }
 
 // alloc vm_list
-pub fn vm_list_alloc(src_vm_list: &Mutex<Vec<Vm>>) {
+fn vm_list_alloc(src_vm_list: &Mutex<Vec<Vm>>) {
     let mut vm_list = VM_LIST.lock();
     for vm in src_vm_list.lock().iter() {
         let new_vm = Vm::new(vm.id());
@@ -692,15 +700,12 @@ pub fn vm_list_alloc(src_vm_list: &Mutex<Vec<Vm>>) {
 }
 
 // Set vm.vcpu_list in vcpu_update
-pub fn vm_list_update(src_vm_list: &Mutex<Vec<Vm>>) {
+fn vm_list_update(src_vm_list: &Mutex<Vec<Vm>>) {
     // let mut vm_list = VM_LIST.lock();
     assert_eq!(VM_LIST.lock().len(), src_vm_list.lock().len());
-    // vm_list.clear();
-    // drop(vm_list);
     for (idx, vm) in src_vm_list.lock().iter().enumerate() {
         let emu_devs = {
             let mut emu_devs = vec![];
-            // drop(old_inner);
             let old_emu_devs = vm.inner.lock().emu_devs.clone();
             for dev in old_emu_devs.iter() {
                 // TODO: wip
@@ -779,16 +784,15 @@ pub fn vm_list_update(src_vm_list: &Mutex<Vec<Vm>>) {
             }
             emu_devs
         };
-        let dst_vm = VM_LIST.lock()[idx].clone();
+        let dst_vm = &(VM_LIST.lock()[idx]);
         let mut dst_inner = dst_vm.inner.lock();
         let src_inner = vm.inner.lock();
         assert_eq!(dst_inner.id, src_inner.id);
         dst_inner.emu_devs = emu_devs;
     }
-    // println!("Update VM_LIST");
 }
 
-pub fn heap_region_update(src_heap_region: &Mutex<HeapRegion>) {
+fn heap_region_update(src_heap_region: &Mutex<HeapRegion>) {
     let mut heap_region = HEAP_REGION.lock();
     let src_region = src_heap_region.lock();
     heap_region.map = src_region.map;
@@ -796,7 +800,7 @@ pub fn heap_region_update(src_heap_region: &Mutex<HeapRegion>) {
     assert_eq!(heap_region.region, src_region.region);
 }
 
-pub fn vm_region_update(src_vm_region: &Mutex<VmRegion>) {
+fn vm_region_update(src_vm_region: &Mutex<VmRegion>) {
     let mut vm_region = VM_REGION.lock();
     assert_eq!(vm_region.region.len(), 0);
     vm_region.region.clear();
@@ -806,7 +810,7 @@ pub fn vm_region_update(src_vm_region: &Mutex<VmRegion>) {
     assert_eq!(vm_region.region, src_vm_region.lock().region);
 }
 
-pub fn interrupt_update(
+fn interrupt_update(
     src_hyper_bitmap: &Mutex<BitMap<BitAlloc256>>,
     src_glb_bitmap: &Mutex<BitMap<BitAlloc256>>,
     src_en_set: &Mutex<BTreeSet<usize>>,
@@ -841,7 +845,7 @@ pub fn interrupt_update(
     info!("Update INTERRUPT_GLB_BITMAP / INTERRUPT_HYPER_BITMAP / INTERRUPT_EN_SET / INTERRUPT_HANDLERS");
 }
 
-pub fn emu_dev_list_update(src_emu_dev_list: &Mutex<Vec<EmuDevEntry>>) {
+fn emu_dev_list_update(src_emu_dev_list: &Mutex<Vec<EmuDevEntry>>) {
     let mut emu_dev_list = EMU_DEVS_LIST.lock();
     assert_eq!(emu_dev_list.len(), 0);
     emu_dev_list.clear();
@@ -869,7 +873,7 @@ pub fn emu_dev_list_update(src_emu_dev_list: &Mutex<Vec<EmuDevEntry>>) {
     info!("Update {} emu dev for EMU_DEVS_LIST", emu_dev_list.len());
 }
 
-pub fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
+fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
     let mut vm_config_table = DEF_VM_CONFIG_TABLE.lock();
     let src_config_table = src_vm_config_table.lock();
     vm_config_table.name = src_config_table.name;
@@ -951,7 +955,7 @@ pub fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
                 addr_region: dtb_config.addr_region,
             });
         }
-
+        let fdt_overlay = entry.fdt_overlay.lock();
         vm_config_table.entries.push(VmConfigEntry {
             id: entry.id,
             name: Some(String::from(entry.name.as_ref().unwrap())),
@@ -963,7 +967,7 @@ pub fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
             vm_emu_dev_confg: Arc::new(Mutex::new(vm_emu_dev_confg)),
             vm_pt_dev_confg: Arc::new(Mutex::new(vm_pt_dev_confg)),
             vm_dtb_devs: Arc::new(Mutex::new(vm_dtb_devs)),
-            ..Default::default()
+            fdt_overlay: Arc::new(Mutex::new(fdt_overlay.clone())),
         });
     }
     assert_eq!(vm_config_table.entries.len(), src_config_table.entries.len());
@@ -973,7 +977,7 @@ pub fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
     info!("Update {} VM to DEF_VM_CONFIG_TABLE", vm_config_table.vm_num);
 }
 
-pub fn vcpu_list_alloc(src_vcpu_list: &Mutex<Vec<Vcpu>>) {
+fn vcpu_list_alloc(src_vcpu_list: &Mutex<Vec<Vcpu>>) {
     let mut vcpu_list = VCPU_LIST.lock();
     for vcpu in src_vcpu_list.lock().iter() {
         let src_inner = vcpu.inner.lock();
@@ -999,7 +1003,7 @@ pub fn vcpu_list_alloc(src_vcpu_list: &Mutex<Vec<Vcpu>>) {
     info!("Alloc {} VCPU to VCPU_LIST", vcpu_list.len());
 }
 
-pub fn vcpu_update(src_vcpu_list: &Mutex<Vec<Vcpu>>, src_vm_list: &Mutex<Vec<Vm>>) {
+fn vcpu_update(src_vcpu_list: &Mutex<Vec<Vcpu>>, src_vm_list: &Mutex<Vec<Vm>>) {
     let vcpu_list = VCPU_LIST.lock();
     // assert_eq!(vcpu_list.len(), src_vcpu_list.lock().len());
     for (idx, vcpu) in src_vcpu_list.lock().iter().enumerate() {
@@ -1034,7 +1038,6 @@ pub fn vcpu_update(src_vcpu_list: &Mutex<Vec<Vcpu>>, src_vm_list: &Mutex<Vec<Vm>
             panic!("illegal vgic emu dev idx in vm.emu_devs");
         }
     }
-    // println!("Update {} Vcpu to VCPU_LIST", vcpu_list.len());
 }
 
 fn smmu_update(src_smmu_v2: &Mutex<SmmuV2>) {

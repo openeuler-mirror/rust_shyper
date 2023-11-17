@@ -66,6 +66,10 @@ impl HeapRegion {
 
     // base addr need to align to PAGE_SIZE
     pub fn reserve_pages(&mut self, base: usize, size: usize) {
+        debug!(
+            "reserve pages from {:x}, size {:x}, region from{:x}",
+            base, size, self.region.base
+        );
         let offset = (base - self.region.base) / PAGE_SIZE;
         for i in 0..size {
             if self.map.get(offset + i) != 0 {
@@ -119,6 +123,7 @@ impl HeapRegion {
 
         let addr = self.region.base + bit * PAGE_SIZE;
         memset_safe(addr as *mut u8, 0, size * PAGE_SIZE);
+        debug!("mem heap alloc alocate {:x}, size {:x}", addr, size * PAGE_SIZE);
         return Ok(addr);
     }
 

@@ -13,11 +13,11 @@ use core::ptr;
 
 use spin::Mutex;
 
-use crate::arch::{PAGE_SIZE, pt_map_banked_cpu, PTE_PER_PAGE};
+use crate::arch::{PAGE_SIZE, PTE_PER_PAGE, set_current_cpu, pt_map_banked_cpu};
 use crate::arch::ContextFrame;
 use crate::arch::ContextFrameTrait;
 // use core::ops::{Deref, DerefMut};
-use crate::arch::cpu_interrupt_unmask;
+use crate::arch::{cpu_interrupt_unmask, current_cpu_arch};
 use crate::board::{PLATFORM_CPU_NUM_MAX, Platform, PlatOperation};
 use crate::kernel::{SchedType, Vcpu, VcpuArray, VcpuState, Vm, Scheduler};
 use crate::kernel::IpiMessage;
@@ -240,19 +240,21 @@ impl Cpu {
     pub fn assigned(&self) -> bool {
         self.vcpu_array.vcpu_num() != 0
     }
+
+    pub fn stack_top(&self) -> usize {
+        self.stack.as_ptr_range().end as usize
+    }
 }
 
-#[no_mangle]
-#[link_section = ".cpu_private"]
-pub static mut CPU: Cpu = Cpu::default();
-
 pub fn current_cpu() -> &'static mut Cpu {
-    unsafe { &mut CPU }
+    unsafe { &mut *(current_cpu_arch() as *mut Cpu) }
 }
 
 pub fn active_vcpu_id() -> usize {
-    let active_vcpu = current_cpu().active_vcpu.clone().unwrap();
-    active_vcpu.id()
+    match current_cpu().active_vcpu.clone() {
+        Some(active_vcpu) => active_vcpu.id(),
+        None => 0xFFFFFFFF,
+    }
 }
 
 pub fn active_vm_id() -> usize {
@@ -262,12 +264,8 @@ pub fn active_vm_id() -> usize {
 
 pub fn active_vm() -> Option<Vm> {
     match current_cpu().active_vcpu.clone() {
-        None => {
-            return None;
-        }
-        Some(active_vcpu) => {
-            return active_vcpu.vm();
-        }
+        None => None,
+        Some(active_vcpu) => active_vcpu.vm(),
     }
 }
 
@@ -325,6 +323,7 @@ pub extern "C" fn cpu_map_self(mpidr: usize) -> usize {
     (*cpu).id = cpu_id;
 
     let lvl1_addr = pt_map_banked_cpu(cpu);
+    set_current_cpu(cpu as *const _ as u64);
 
     lvl1_addr
 }

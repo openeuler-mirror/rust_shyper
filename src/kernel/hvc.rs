@@ -18,17 +18,18 @@ use crate::arch::gicc_clear_current_irq;
 use crate::config::*;
 use crate::device::{mediated_blk_notify_handler, mediated_dev_append};
 use crate::kernel::{
-    active_vm, active_vm_id, current_cpu, DIRTY_MEM_THRESHOLD, interrupt_vm_inject, ipi_send_msg, IpiHvcMsg,
-    IpiInnerMsg, IpiMessage, IpiType, ivc_update_mq, map_migrate_vm_mem, mem_heap_region_reserve,
-    migrate_finish_ipi_handler, migrate_ready, Scheduler, send_migrate_memcpy_msg, unmap_migrate_vm_mem,
-    UPDATE_IMG_BASE_ADDR, update_request, vcpu_idle, vm, vm_if_copy_mem_map, vm_if_dirty_mem_map, vm_if_get_cpu_id,
-    vm_if_ivc_arg, vm_if_ivc_arg_ptr, vm_if_mem_map_dirty_sum, vm_if_mem_map_page_num, vm_if_set_ivc_arg_ptr,
-    VM_NUM_MAX, VMData,
+    active_vm, active_vm_id, current_cpu, interrupt_vm_inject, ipi_send_msg, IpiHvcMsg, IpiInnerMsg, IpiMessage,
+    IpiType, ivc_update_mq, mem_heap_region_reserve, Scheduler, vcpu_idle, vm, vm_if_get_cpu_id, vm_if_ivc_arg,
+    vm_if_ivc_arg_ptr, vm_if_set_ivc_arg_ptr, VM_NUM_MAX,
 };
-use crate::utils::{func_barrier, memcpy_safe, round_up, set_barrier_num, trace};
+use crate::utils::{func_barrier, memcpy_safe, trace};
 use crate::utils::unilib::*;
 use crate::vmm::{get_vm_id, vmm_boot_vm, vmm_list_vm, vmm_migrate_boot, vmm_reboot_vm, vmm_remove_vm};
-
+use crate::kernel::live_update::live_update::{update_request, UPDATE_IMG_BASE_ADDR};
+use crate::kernel::migrate::migrate::{
+    vmm_migrate_init_vm_hvc_handler, vmm_migrate_vm_boot_hvc_handler, vmm_migrate_finish_hvc_handler,
+    vmm_migrate_ready_hvc_handler, vmm_migrate_memcpy_hvc_handler, migrate_finish_ipi_handler,
+};
 pub static VM_STATE_FLAG: Mutex<usize> = Mutex::new(0);
 
 pub static SHARE_MEM_LIST: Mutex<BTreeMap<usize, usize>> = Mutex::new(BTreeMap::new());
@@ -58,6 +59,7 @@ pub const HVC_SYS_REBOOT: usize = 0;
 pub const HVC_SYS_SHUTDOWN: usize = 1;
 pub const HVC_SYS_UPDATE: usize = 3;
 pub const HVC_SYS_TEST: usize = 4;
+pub const HVC_SYS_UPDATE_MEM_MAP: usize = 5;
 
 // hvc_vmm_event
 pub const HVC_VMM_LIST_VM: usize = 0;
@@ -251,13 +253,34 @@ fn hvc_config_handler(
 fn hvc_sys_handler(event: usize, x0: usize) -> Result<usize, ()> {
     match event {
         HVC_SYS_UPDATE => {
+            info!("HVC_SYS_UPDATE");
             mem_heap_region_reserve(UPDATE_IMG_BASE_ADDR, x0);
+            info!("finish mem_heap_region_reserve");
             update_request();
             Ok(0)
         }
         HVC_SYS_TEST => {
+            println!("HVC SYS TEST");
+            Ok(0)
+        }
+        HVC_SYS_UPDATE_MEM_MAP => {
+            //  x1 should be 0x8000000
+            debug!("HVC_SYS_UPDATE_MEM_MAP");
             let vm = active_vm().unwrap();
-            crate::device::virtio_net_announce(vm);
+            vm.pt_unmap_range(get_share_mem(LIVE_UPDATE_IMG), 0x8000000, true);
+            vm.pt_map_range(
+                get_share_mem(LIVE_UPDATE_IMG),
+                0x8000000,
+                UPDATE_IMG_BASE_ADDR,
+                PTE_S2_NORMAL,
+                true,
+            );
+            // tlb_invalidate_guest_all();
+            debug!(
+                "map pa {:x} to ipa {:x}",
+                UPDATE_IMG_BASE_ADDR,
+                get_share_mem(LIVE_UPDATE_IMG)
+            );
             Ok(0)
         }
         _ => Err(()),
@@ -305,75 +328,23 @@ fn hvc_vmm_handler(event: usize, x0: usize, _x1: usize) -> Result<usize, ()> {
             Ok(HVC_FINISH)
         }
         HVC_VMM_MIGRATE_READY => {
-            // init gvm dirty memory bitmap
-            // let cpu_trgt = vm_if_get_cpu_id(x0);
-            // println!(
-            //     "core {} HVC_VMM_MIGRATE_READY, cpu trgt {}, vmid {}",
-            //     current_cpu().id,
-            //     cpu_trgt,
-            //     x0
-            // );
-            migrate_ready(x0);
-            mvm_migrate_memory(x0);
-            vm_if_dirty_mem_map(x0);
-
-            // send_hvc_ipi(0, x0, HVC_VMM, HVC_VMM_MIGRATE_READY, cpu_trgt);
+            vmm_migrate_ready_hvc_handler(x0);
             Ok(HVC_FINISH)
         }
         HVC_VMM_MIGRATE_MEMCPY => {
-            let dirty_mem_num = vm_if_mem_map_dirty_sum(x0);
-            // let cpu_trgt = vm_if_get_cpu_id(x0);
-            if dirty_mem_num < DIRTY_MEM_THRESHOLD {
-                // Idle live vm, copy dirty mem and vm register struct
-                let trgt_vm = vm(x0).unwrap();
-                set_barrier_num(trgt_vm.cpu_num());
-                for vcpu_id in 0..trgt_vm.cpu_num() {
-                    let pcpu_id = trgt_vm.vcpuid_to_pcpuid(vcpu_id).unwrap();
-                    send_hvc_ipi(0, x0, HVC_VMM, HVC_VMM_MIGRATE_FINISH, pcpu_id);
-                }
-            } else {
-                mvm_migrate_memory(x0);
-                // send_hvc_ipi(0, x0, HVC_VMM, HVC_VMM_MIGRATE_MEMCPY, cpu_trgt);
-            }
+            vmm_migrate_memcpy_hvc_handler(x0);
             Ok(HVC_FINISH)
         }
         HVC_VMM_MIGRATE_INIT_VM => {
-            info!("migrate init vm {}", x0);
-            // vmm_init_gvm(x0);
-            let vm = vm(x0).unwrap();
-            map_migrate_vm_mem(vm.clone(), get_share_mem(MIGRATE_RECEIVE));
-            vm.context_vm_migrate_init();
+            vmm_migrate_init_vm_hvc_handler(x0);
             Ok(HVC_FINISH)
         }
         HVC_VMM_MIGRATE_VM_BOOT => {
-            let mvm = vm(0).unwrap();
-            let vm = vm(x0).unwrap();
-
-            let size = size_of::<VMData>();
-            mvm.pt_unmap_range(get_share_mem(VM_CONTEXT_RECEIVE), round_up(size, PAGE_SIZE), true);
-            unmap_migrate_vm_mem(vm.clone(), get_share_mem(MIGRATE_RECEIVE));
-
-            vm.context_vm_migrate_restore();
-            for vcpu_id in 0..vm.cpu_num() {
-                let cpu_trgt = vm.vcpuid_to_pcpuid(vcpu_id).unwrap();
-                // send ipi to target vcpu, copy data and boot vm (in ipi copy gic data)
-                send_hvc_ipi(0, x0, HVC_VMM, HVC_VMM_MIGRATE_VM_BOOT, cpu_trgt);
-            }
+            vmm_migrate_vm_boot_hvc_handler(x0);
             Ok(HVC_FINISH)
         }
         HVC_VMM_MIGRATE_FINISH => {
-            let mvm = vm(0).unwrap();
-            let trgt_vm = vm(x0).unwrap();
-            let size = size_of::<VMData>();
-            mvm.pt_unmap_range(get_share_mem(VM_CONTEXT_SEND), round_up(size, PAGE_SIZE), true);
-            mvm.pt_unmap_range(
-                get_share_mem(MIGRATE_BITMAP),
-                PAGE_SIZE * vm_if_mem_map_page_num(x0),
-                true,
-            );
-            unmap_migrate_vm_mem(trgt_vm, get_share_mem(MIGRATE_SEND));
-            vmm_remove_vm(x0);
-            *VM_STATE_FLAG.lock() = 0;
+            vmm_migrate_finish_hvc_handler(x0);
             Ok(HVC_FINISH)
         }
         HVC_VMM_VM_REMOVE => {
@@ -400,10 +371,6 @@ fn hvc_ivc_handler(event: usize, x0: usize, x1: usize) -> Result<usize, ()> {
         HVC_IVC_SHARE_MEM => {
             let vm = active_vm().unwrap();
             let base = vm.share_mem_base();
-            if x0 == LIVE_UPDATE_IMG {
-                // hard code for pa 0x8a000000, x1 should be 0x8000000
-                vm.pt_map_range(base, x1, 0x8a000000, PTE_S2_NORMAL, true);
-            }
             vm.add_share_mem_base(x1);
             add_share_mem(x0, base);
             info!(
@@ -658,14 +625,6 @@ pub fn hvc_ipi_handler(msg: &IpiMessage) {
             return;
         }
     }
-}
-
-fn mvm_migrate_memory(trgt_vmid: usize) {
-    let vm = vm(trgt_vmid);
-    vm.as_ref().unwrap().pt_read_only();
-    // tlb_invalidate_guest_all();
-    vm_if_copy_mem_map(trgt_vmid);
-    send_migrate_memcpy_msg(trgt_vmid);
 }
 
 pub fn send_hvc_ipi(src_vmid: usize, trgt_vmid: usize, fid: usize, event: usize, trgt_cpuid: usize) {

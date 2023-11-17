@@ -9,32 +9,21 @@
 // See the Mulan PSL v2 for more details.
 
 use crate::arch::{
-    Aarch64ContextFrame, GIC_LIST_REGS_NUM, GIC_PRIVINT_NUM, GIC_SGIS_NUM, GIC_SPI_MAX, GicContext, IrqState,
-    PAGE_SIZE, PTE_S2_FIELD_AP_RW, PTE_S2_NORMAL, PTE_S2_RO, Sgis, VmContext,
+    GIC_LIST_REGS_NUM, GIC_PRIVINT_NUM, GIC_SGIS_NUM, GIC_SPI_MAX, IrqState, PAGE_SIZE, PTE_S2_FIELD_AP_RW,
+    PTE_S2_NORMAL, PTE_S2_RO, Sgis,
 };
 use crate::arch::tlb_invalidate_guest_all;
-use crate::board::PLATFORM_VCPU_NUM_MAX;
-use crate::device::{EMU_DEV_NUM_MAX, EmuContext, VirtioDeviceType, VirtMmioRegs};
+use crate::device::{EmuContext, VirtioDeviceType, VirtMmioRegs, VirtDevData, DevDescData, VirtioMmioData, VirtqData};
 use crate::kernel::{
     active_vm, get_share_mem, hvc_send_msg_to_vm, HVC_VMM, HVC_VMM_MIGRATE_START, HvcGuestMsg, HvcMigrateMsg,
     mem_pages_alloc, MIGRATE_BITMAP, MIGRATE_COPY, MIGRATE_FINISH, MIGRATE_SEND, vm, Vm, vm_if_copy_mem_map,
-    vm_if_mem_map_cache, vm_if_mem_map_page_num, vm_if_set_mem_map, vm_if_set_mem_map_cache,
+    vm_if_mem_map_cache, vm_if_mem_map_page_num, vm_if_set_mem_map, vm_if_set_mem_map_cache, VM_CONTEXT_RECEIVE,
+    HVC_VMM_MIGRATE_VM_BOOT, send_hvc_ipi, VMData, VM_STATE_FLAG, VM_CONTEXT_SEND, vm_if_dirty_mem_map,
+    vm_if_mem_map_dirty_sum, DIRTY_MEM_THRESHOLD, HVC_VMM_MIGRATE_FINISH, MIGRATE_RECEIVE,
 };
-
-pub struct VMData {
-    pub vm_ctx: [VmContext; PLATFORM_VCPU_NUM_MAX],
-    pub vcpu_ctx: [Aarch64ContextFrame; PLATFORM_VCPU_NUM_MAX],
-    pub gic_ctx: [GicContext; PLATFORM_VCPU_NUM_MAX],
-    pub vgic_ctx: VgicMigData,
-    pub emu_devs: [EmuDevData; EMU_DEV_NUM_MAX],
-}
-
-pub enum EmuDevData {
-    VirtioBlk(VirtioMmioData),
-    VirtioNet(VirtioMmioData),
-    VirtioConsole(VirtioMmioData),
-    None,
-}
+use crate::utils::{set_barrier_num, round_up};
+use core::mem::size_of;
+use crate::vmm::vmm_remove_vm;
 
 // virtio vgic migration data
 pub struct VgicMigData {
@@ -135,15 +124,6 @@ impl VgicIntData {
 }
 
 // virtio mmio migration data
-pub struct VirtioMmioData {
-    pub id: usize,
-    pub driver_features: usize,
-    pub driver_status: usize,
-    pub regs: VirtMmioRegs,
-    pub dev: VirtDevData,
-    pub oppo_dev: VirtDevData,
-    pub vq: [VirtqData; 4], // TODO: 4 is hard code for vq max len
-}
 
 impl VirtioMmioData {
     pub fn default() -> VirtioMmioData {
@@ -157,21 +137,6 @@ impl VirtioMmioData {
             vq: [VirtqData::default(); 4],
         }
     }
-}
-
-#[derive(Copy, Clone)]
-pub struct VirtqData {
-    pub ready: usize,
-    pub vq_index: usize,
-    pub num: usize,
-
-    pub last_avail_idx: u16,
-    pub last_used_idx: u16,
-    pub used_flags: u16,
-
-    pub desc_table_ipa: usize,
-    pub avail_ipa: usize,
-    pub used_ipa: usize,
 }
 
 impl VirtqData {
@@ -190,18 +155,6 @@ impl VirtqData {
     }
 }
 
-pub struct VirtDevData {
-    pub activated: bool,
-    pub dev_type: VirtioDeviceType,
-    pub features: usize,
-    pub generation: usize,
-    pub int_id: usize,
-    pub desc: DevDescData,
-    // req: reserve; we used nfs, no need to mig blk req data
-    // cache: reserve
-    // stat: reserve
-}
-
 impl VirtDevData {
     pub fn default() -> VirtDevData {
         VirtDevData {
@@ -213,31 +166,6 @@ impl VirtDevData {
             desc: DevDescData::None,
         }
     }
-}
-
-pub enum DevDescData {
-    // reserve blk desc
-    BlkDesc(BlkDescData),
-    NetDesc(NetDescData),
-    ConsoleDesc(ConsoleDescData),
-    None,
-}
-
-pub struct BlkDescData {}
-
-pub struct NetDescData {
-    pub mac: [u8; 6],
-    pub status: u16,
-}
-
-pub struct ConsoleDescData {
-    pub oppo_end_vmid: u16,
-    pub oppo_end_ipa: u64,
-    // vm access
-    pub cols: u16,
-    pub rows: u16,
-    pub max_nr_ports: u32,
-    pub emerg_wr: u32,
 }
 
 pub fn migrate_ready(vmid: usize) {
@@ -356,5 +284,85 @@ pub fn migrate_data_abort_handler(emu_ctx: &EmuContext) {
         tlb_invalidate_guest_all();
     } else {
         panic!("migrate_data_abort_handler: permission should be read only");
+    }
+}
+
+fn mvm_migrate_memory(trgt_vmid: usize) {
+    let vm = vm(trgt_vmid);
+    vm.as_ref().unwrap().pt_read_only();
+    // tlb_invalidate_guest_all();
+    vm_if_copy_mem_map(trgt_vmid);
+    send_migrate_memcpy_msg(trgt_vmid);
+}
+
+pub fn vmm_migrate_init_vm_hvc_handler(vm_id: usize) {
+    info!("migrate init vm {}", vm_id);
+    // vmm_init_gvm(x0);
+    let vm = vm(vm_id).unwrap();
+    map_migrate_vm_mem(vm.clone(), get_share_mem(MIGRATE_RECEIVE));
+    vm.context_vm_migrate_init();
+}
+
+pub fn vmm_migrate_vm_boot_hvc_handler(vm_id: usize) {
+    let mvm = vm(0).unwrap();
+    let vm = vm(vm_id).unwrap();
+
+    let size = size_of::<VMData>();
+    mvm.pt_unmap_range(get_share_mem(VM_CONTEXT_RECEIVE), round_up(size, PAGE_SIZE), true);
+    unmap_migrate_vm_mem(vm.clone(), get_share_mem(MIGRATE_RECEIVE));
+
+    vm.context_vm_migrate_restore();
+    for vcpu_id in 0..vm.cpu_num() {
+        let cpu_trgt = vm.vcpuid_to_pcpuid(vcpu_id).unwrap();
+        // send ipi to target vcpu, copy data and boot vm (in ipi copy gic data)
+        send_hvc_ipi(0, vm_id, HVC_VMM, HVC_VMM_MIGRATE_VM_BOOT, cpu_trgt);
+    }
+}
+
+pub fn vmm_migrate_finish_hvc_handler(vm_id: usize) {
+    let mvm = vm(0).unwrap();
+    let trgt_vm = vm(vm_id).unwrap();
+    let size = size_of::<VMData>();
+    mvm.pt_unmap_range(get_share_mem(VM_CONTEXT_SEND), round_up(size, PAGE_SIZE), true);
+    mvm.pt_unmap_range(
+        get_share_mem(MIGRATE_BITMAP),
+        PAGE_SIZE * vm_if_mem_map_page_num(vm_id),
+        true,
+    );
+    unmap_migrate_vm_mem(trgt_vm, get_share_mem(MIGRATE_SEND));
+    vmm_remove_vm(vm_id);
+    *VM_STATE_FLAG.lock() = 0;
+}
+
+pub fn vmm_migrate_ready_hvc_handler(vm_id: usize) {
+    // init gvm dirty memory bitmap
+    // let cpu_trgt = vm_if_get_cpu_id(x0);
+    // println!(
+    //     "core {} HVC_VMM_MIGRATE_READY, cpu trgt {}, vmid {}",
+    //     current_cpu().id,
+    //     cpu_trgt,
+    //     x0
+    // );
+    migrate_ready(vm_id);
+    mvm_migrate_memory(vm_id);
+    vm_if_dirty_mem_map(vm_id);
+
+    // send_hvc_ipi(0, x0, HVC_VMM, HVC_VMM_MIGRATE_READY, cpu_trgt);
+}
+
+pub fn vmm_migrate_memcpy_hvc_handler(vm_id: usize) {
+    let dirty_mem_num = vm_if_mem_map_dirty_sum(vm_id);
+    // let cpu_trgt = vm_if_get_cpu_id(vm_id);
+    if dirty_mem_num < DIRTY_MEM_THRESHOLD {
+        // Idle live vm, copy dirty mem and vm register struct
+        let trgt_vm = vm(vm_id).unwrap();
+        set_barrier_num(trgt_vm.cpu_num());
+        for vcpu_id in 0..trgt_vm.cpu_num() {
+            let pcpu_id = trgt_vm.vcpuid_to_pcpuid(vcpu_id).unwrap();
+            send_hvc_ipi(0, vm_id, HVC_VMM, HVC_VMM_MIGRATE_FINISH, pcpu_id);
+        }
+    } else {
+        mvm_migrate_memory(vm_id);
+        // send_hvc_ipi(0, vm_id, HVC_VMM, HVC_VMM_MIGRATE_MEMCPY, cpu_trgt);
     }
 }

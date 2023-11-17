@@ -20,7 +20,6 @@ pub use self::interrupt::*;
 pub use self::mmu::*;
 pub use self::page_table::*;
 pub use self::psci::*;
-pub use self::regs::*;
 pub use self::smc::*;
 pub use self::cache::*;
 pub use self::smmu::*;

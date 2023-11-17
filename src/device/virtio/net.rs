@@ -19,8 +19,8 @@ use crate::device::{DevDesc, VirtioMmio, Virtq, VIRTQ_DESC_F_NEXT, VIRTQ_DESC_F_
 use crate::device::EmuDevs;
 use crate::device::VirtioIov;
 use crate::kernel::{
-    active_vm, active_vm_id, current_cpu, NetDescData, vm_if_cmp_mac, vm_if_get_cpu_id, vm_if_set_mem_map_bit,
-    vm_ipa2pa, VM_LIST, VM_STATE_FLAG,
+    active_vm, active_vm_id, current_cpu, vm_if_cmp_mac, vm_if_get_cpu_id, vm_if_set_mem_map_bit, vm_ipa2pa, VM_LIST,
+    VM_STATE_FLAG,
 };
 use crate::kernel::{ipi_send_msg, IpiEthernetMsg, IpiInnerMsg, IpiType};
 use crate::kernel::IpiMessage;
@@ -83,6 +83,11 @@ struct VirtioNetHdr {
 #[derive(Clone)]
 pub struct NetDesc {
     inner: Arc<Mutex<NetDescInner>>,
+}
+
+pub struct NetDescData {
+    pub mac: [u8; 6],
+    pub status: u16,
 }
 
 impl NetDesc {

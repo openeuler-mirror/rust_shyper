@@ -39,7 +39,7 @@ log = { version = "0.4", features = [
     "release_max_level_info",
 ] }
 spin = { version = "0.9.4", features = ["use_ticket_mutex"] }
-cortex-a = "7.4.0"
+cortex-a = { package = "aarch64-cpu", version = "9.3.1" }
 buddy_system_allocator = "0.8.0"
 memoffset = { version = "0.8", default-features = false, features = [
     "unstable_const",
@@ -47,7 +47,7 @@ memoffset = { version = "0.8", default-features = false, features = [
 smccc = "0.1.1"
 
 [dependencies.tock-registers]
-version = "0.7.0"
+version = "0.8.0"
 default-features = false
 features = ["register_types"]
 
@@ -66,5 +66,5 @@ ramdisk = []
 static-config = []
 lvl4 = []
 secondary_start = []
-
+update_low = []
 rk3588-noeth = ["rk3588"]

@@ -24,8 +24,11 @@ static mut HEAP_REGION: HeapRegion = HeapRegion([0; HEAP_SIZE]);
 pub static HEAP_ALLOCATOR: LockedHeap<32> = LockedHeap::empty();
 
 pub fn heap_init() {
-    println!("init buddy system");
     unsafe {
+        println!(
+            "init buddy system, heap start from {:x}",
+            HEAP_REGION.0.as_mut_ptr() as usize
+        );
         HEAP_ALLOCATOR
             .lock()
             .init(HEAP_REGION.0.as_mut_ptr() as usize, HEAP_SIZE);

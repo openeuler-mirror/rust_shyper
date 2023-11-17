@@ -37,9 +37,4 @@ SECTIONS
 
     _image_end = ABSOLUTE(.);
     
-    . = 0x400000000;
-
-    .cpu_private (NOLOAD) : ALIGN(4096) {
-        *(.cpu_private)
-    }
 }

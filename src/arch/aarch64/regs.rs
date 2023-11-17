@@ -11,6 +11,15 @@
 // Move to ARM register from system coprocessor register.
 // MRS Xd, sysreg "Xd = sysreg"
 macro_rules! mrs {
+    ($reg: expr) => {
+        {
+            let r: u64;
+            unsafe {
+                core::arch::asm!(concat!("mrs {0}, ", stringify!($reg)), out(reg) r, options(nomem, nostack));
+            }
+            r
+        }
+    };
     ($val: expr, $reg: expr, $asm_width:tt) => {
         unsafe {
             core::arch::asm!(concat!("mrs {0:", $asm_width, "}, ", stringify!($reg)), out(reg) $val, options(nomem, nostack));
@@ -63,6 +72,7 @@ pub const fn sysreg_enc_addr(op0: usize, op1: usize, crn: usize, crm: usize, op2
     (((op0) & 0x3) << 20) | (((op2) & 0x7) << 17) | (((op1) & 0x7) << 14) | (((crn) & 0xf) << 10) | (((crm) & 0xf) << 1)
 }
 
+#[macro_export]
 macro_rules! arm_at {
     ($at_op:expr, $addr:expr) => {
         unsafe {

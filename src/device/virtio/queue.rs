@@ -16,7 +16,7 @@ use spin::Mutex;
 
 use crate::device::VirtioDeviceType;
 use crate::device::VirtioMmio;
-use crate::kernel::{active_vm, ipa2pa, VirtqData, Vm, vm_ipa2pa, VmPa};
+use crate::kernel::{active_vm, ipa2pa, Vm, vm_ipa2pa, VmPa};
 use crate::utils::trace;
 
 pub const VIRTQ_READY: usize = 1;
@@ -53,6 +53,20 @@ struct VringAvail {
 struct VringUsedElem {
     pub id: u32,
     pub len: u32,
+}
+#[derive(Copy, Clone)]
+pub struct VirtqData {
+    pub ready: usize,
+    pub vq_index: usize,
+    pub num: usize,
+
+    pub last_avail_idx: u16,
+    pub last_used_idx: u16,
+    pub used_flags: u16,
+
+    pub desc_table_ipa: usize,
+    pub avail_ipa: usize,
+    pub used_ipa: usize,
 }
 
 #[repr(C)]

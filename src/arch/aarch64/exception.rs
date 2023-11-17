@@ -15,9 +15,10 @@ use tock_registers::interfaces::*;
 use crate::arch::{ContextFrameTrait, data_abort_handler, hvc_handler, smc_handler, sysreg_handler};
 use crate::arch::{gicc_clear_current_irq, gicc_get_current_irq};
 use crate::arch::ContextFrame;
-use crate::kernel::{active_vm_id, current_cpu, FRESH_IRQ_LOGIC_LOCK, FRESH_LOGIC_LOCK, fresh_status, FreshStatus};
+use crate::kernel::{active_vm_id, current_cpu};
 use crate::kernel::interrupt_handler;
 use crate::utils::time_current_us;
+use crate::kernel::live_update::live_update::{FRESH_IRQ_LOGIC_LOCK, FRESH_LOGIC_LOCK, fresh_status, FreshStatus};
 
 // use crate::lib::time_current_us;
 
@@ -253,15 +254,8 @@ extern "C" fn lower_aarch64_irq(ctx: *mut ContextFrame) {
     // }
     match fresh_status() {
         FreshStatus::FreshVM | FreshStatus::Start => {
-            // if active_vm().unwrap().has_interrupt(id) {
-            // println!("lower_aarch64_irq: wait for fresh vm and vcpu");
-            // let time0 = time_current_us();
+            println!("lower_aarch64_irq: wait for fresh vm and vcpu");
             FRESH_IRQ_LOGIC_LOCK.lock();
-            // let time1 = time_current_us();
-            // println!("lower_aarch64_irq: wait {} us", time1 - time0);
-            // } else {
-            //     FRESH_LOGIC_LOCK.lock();
-            // }
         }
         // FreshStatus::FreshVCPU => {
         //     if !active_vm().unwrap().has_interrupt(id) {

@@ -4,6 +4,7 @@ use core::arch::asm;
 use crate::arch::PAGE_SIZE;
 use crate::kernel::{cpu_map_self, CPU_STACK_OFFSET, CPU_STACK_SIZE};
 use crate::board::{PlatOperation, Platform};
+use crate::kernel::live_update::live_update::{HypervisorAddr, rust_shyper_update};
 
 // XXX: Fixed boot stack size limits the maximum number of cpus, see '_start'.
 const MAX_CPU: usize = 8;
@@ -109,7 +110,7 @@ pub unsafe extern "C" fn _start() -> ! {
         // set real sp pointer
         mov x1, 1
         msr spsel, x1
-        ldr x1, ={CPU}
+        mrs x1, tpidr_el2
         add x1, x1, #({CPU_STACK_OFFSET} + {CPU_STACK_SIZE})
         sub	sp, x1, #{CONTEXT_SIZE}
 
@@ -131,7 +132,6 @@ pub unsafe extern "C" fn _start() -> ! {
         pt_populate = sym super::mmu::pt_populate,
         mmu_init = sym super::mmu::mmu_init,
         cpu_map_self = sym cpu_map_self,
-        CPU = sym crate::kernel::CPU,
         CPU_STACK_OFFSET = const CPU_STACK_OFFSET,
         CPU_STACK_SIZE = const CPU_STACK_SIZE,
         CONTEXT_SIZE = const core::mem::size_of::<crate::arch::ContextFrame>(),
@@ -180,7 +180,7 @@ pub unsafe extern "C" fn _secondary_start() -> ! {
         // set real sp pointer
         mov x1, 1
         msr spsel, x1
-        ldr x1, ={CPU}
+        mrs x1, tpidr_el2
         add x1, x1, #({CPU_STACK_OFFSET} + {CPU_STACK_SIZE})
         sub	sp, x1, #{CONTEXT_SIZE}
 
@@ -197,7 +197,6 @@ pub unsafe extern "C" fn _secondary_start() -> ! {
         lvl1_page_table = sym super::mmu::LVL1_PAGE_TABLE,
         mmu_init = sym super::mmu::mmu_init,
         cpu_map_self = sym cpu_map_self,
-        CPU = sym crate::kernel::CPU,
         CPU_STACK_OFFSET = const CPU_STACK_OFFSET,
         CPU_STACK_SIZE = const CPU_STACK_SIZE,
         CONTEXT_SIZE = const core::mem::size_of::<crate::arch::ContextFrame>(),
@@ -261,9 +260,13 @@ unsafe extern "C" fn cache_invalidate(cache_level: usize) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn update_request() {
+#[cfg(not(feature = "update"))]
+#[inline(never)]
+#[link_section = ".text.boot"]
+pub unsafe extern "C" fn update_request_asm(address_list: &HypervisorAddr, alloc: bool) {
     asm!(
         r#"
+        /* Unused arguments: {0} {1} */
         sub sp, sp, #40
         stp x0, x1, [sp, #0]
         stp x2, x3, [sp, #16]
@@ -273,37 +276,109 @@ unsafe extern "C" fn update_request() {
         mov x3, #0x8a000000
         cmp x2, x3
         bgt 1f
-        bl  {live_update}
+        bl  {live_update_asm}
     1:
         ldr x30, [sp, #32]
         ldp x2, x3, [sp, #16]
         ldp x0, x1, [sp, #0]
         add sp, sp, #40
-        ret
         "#,
-        live_update = sym live_update,
+        in(reg) address_list as *const _ as usize,
+        in(reg) alloc as usize,
+        live_update_asm = sym live_update_asm,
     )
 }
 
-unsafe extern "C" fn live_update() {
+#[cfg(not(feature = "update"))]
+#[no_mangle]
+#[link_section = ".text.boot"]
+unsafe extern "C" fn live_update_asm(address_list: &HypervisorAddr, alloc: bool) {
     asm!(
         r#"
+        /* Unused arguments: {0} {1} */
         sub sp, sp, #40
         stp x0, x1, [sp, #0]
         stp x2, x3, [sp, #16]
         str x30, [sp, #32]
     
         adr x2, .   // read pc to x0
-        sub x2, x2, #16 // sub str instruction
         mov x3, #0x7000000  // 0x83000000 + 0x7000000
         add x2, x2, x3
+        add x2, x2, #20
         blr  x2
+
+        bl  {rust_shyper_update}
     
         ldr x30, [sp, #32]
         ldp x2, x3, [sp, #16]
         ldp x0, x1, [sp, #0]
         add sp, sp, #40
-        ret
+        // ret
         "#,
+        in(reg) address_list as *const _ as usize,
+        in(reg) alloc as usize,
+        rust_shyper_update = sym rust_shyper_update,
+    )
+}
+
+#[no_mangle]
+#[cfg(feature = "update")]
+#[inline(never)]
+#[link_section = ".text.boot"]
+pub unsafe extern "C" fn update_request_asm(address_list: &HypervisorAddr, alloc: bool) {
+    asm!(
+        r#"
+        /* Unused arguments: {0} {1} */
+        sub sp, sp, #40
+        stp x0, x1, [sp, #0]
+        stp x2, x3, [sp, #16]
+        str x30, [sp, #32]
+    
+        adr x2, .   // read pc to x2
+        mov x3, #0x8a000000
+        cmp x2, x3
+        blt 1f
+        bl  {live_update_asm}
+    1:
+        ldr x30, [sp, #32]
+        ldp x2, x3, [sp, #16]
+        ldp x0, x1, [sp, #0]
+        add sp, sp, #40
+        "#,
+        in(reg) address_list as *const _ as usize,
+        in(reg) alloc as usize,
+        live_update_asm = sym live_update_asm,
+    )
+}
+
+#[cfg(feature = "update")]
+#[no_mangle]
+#[link_section = ".text.boot"]
+unsafe extern "C" fn live_update_asm(address_list: &HypervisorAddr, alloc: bool) {
+    asm!(
+        r#"
+        /* Unused arguments: {0} {1} */
+        sub sp, sp, #40
+        stp x0, x1, [sp, #0]
+        stp x2, x3, [sp, #16]
+        str x30, [sp, #32]
+    
+        adr x2, .   // read pc to x0
+        mov x3, #0x7000000  // 0x83000000 + 0x7000000
+        sub x2, x2, x3
+        add x2, x2, #20
+        blr  x2
+
+        bl  {rust_shyper_update}
+    
+        ldr x30, [sp, #32]
+        ldp x2, x3, [sp, #16]
+        ldp x0, x1, [sp, #0]
+        add sp, sp, #40
+        // ret
+        "#,
+        in(reg) address_list as *const _ as usize,
+        in(reg) alloc as usize,
+        rust_shyper_update = sym rust_shyper_update,
     )
 }

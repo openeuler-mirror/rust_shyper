@@ -16,8 +16,9 @@ use crate::arch::{
 use crate::arch::{exception_esr, exception_fault_addr};
 use crate::arch::exception_next_instruction_step;
 use crate::arch::smc_guest_handler;
-use crate::device::{emu_handler, EmuContext, emu_reg_handler};
-use crate::kernel::{active_vm, current_cpu, hvc_guest_handler, migrate_data_abort_handler, active_vm_id};
+use crate::device::{emu_handler, emu_reg_handler, EmuContext};
+use crate::kernel::{active_vm, current_cpu, hvc_guest_handler, active_vm_id};
+use crate::kernel::migrate::migrate::migrate_data_abort_handler;
 
 pub const HVC_RETURN_REG: usize = 0;
 
