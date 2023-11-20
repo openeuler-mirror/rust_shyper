@@ -32,6 +32,8 @@ pub use self::vgic::*;
 #[cfg(feature = "gicv3")]
 pub use self::vgicv3::*;
 pub use self::start::*;
+#[cfg(feature = "gicv3")]
+pub use self::regs::sysreg_enc_addr;
 
 #[macro_use]
 mod regs;

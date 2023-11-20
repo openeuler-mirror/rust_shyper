@@ -788,39 +788,8 @@ impl GicRedistributor {
         self[gicr_id].IPRIORITYR[index].get()
     }
 }
-
-register_structs! {
-  #[allow(non_snake_case)]
-  pub GicCpuInterfaceBlock {
-    (0x0000 => CTLR: ReadWrite<u32>),   // CPU Interface Control Register
-    (0x0004 => PMR: ReadWrite<u32>),    // Interrupt Priority Mask Register
-    (0x0008 => BPR: ReadWrite<u32>),    // Binary Point Register
-    (0x000c => IAR: ReadOnly<u32>),     // Interrupt Acknowledge Register
-    (0x0010 => EOIR: WriteOnly<u32>),   // End of Interrupt Register
-    (0x0014 => RPR: ReadOnly<u32>),     // Running Priority Register
-    (0x0018 => HPPIR: ReadOnly<u32>),   // Highest Priority Pending Interrupt Register
-    (0x001c => ABPR: ReadWrite<u32>),   // Aliased Binary Point Register
-    (0x0020 => AIAR: ReadOnly<u32>),    // Aliased Interrupt Acknowledge Register
-    (0x0024 => AEOIR: WriteOnly<u32>),  // Aliased End of Interrupt Register
-    (0x0028 => AHPPIR: ReadOnly<u32>),  // Aliased Highest Priority Pending Interrupt Register
-    (0x002c => STATUSR: ReadWrite<u32>),  // Aliased Highest Priority Pending Interrupt Register
-    (0x00d0 => APR: [ReadWrite<u32>; 4]),    // Active Priorities Register
-    (0x00e0 => NSAPR: [ReadWrite<u32>; 4]),  // Non-secure Active Priorities Register
-    (0x00fc => IIDR: ReadOnly<u32>),    // CPU Interface Identification Register
-    (0x1000 => DIR: WriteOnly<u32>),    // Deactivate Interrupt Register
-    (0x2000 => @END),
-  }
-}
-
 pub struct GicCpuInterface {
     base_addr: usize,
-}
-
-impl core::ops::Deref for GicCpuInterface {
-    type Target = GicCpuInterfaceBlock;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr() }
-    }
 }
 
 impl core::fmt::Display for GicCpuInterface {
@@ -838,10 +807,6 @@ impl core::fmt::Display for GicCpuInterface {
 impl GicCpuInterface {
     pub const fn new(base_addr: usize) -> GicCpuInterface {
         GicCpuInterface { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const GicCpuInterfaceBlock {
-        self.base_addr as *const GicCpuInterfaceBlock
     }
 
     fn init(&self) {
@@ -882,65 +847,15 @@ impl GicCpuInterface {
     pub fn set_dir(&self, dir: u32) {
         msr!(ICC_DIR_EL1, dir, "x");
     }
-
-    pub fn hppir(&self) -> u32 {
-        self.HPPIR.get()
-    }
-
-    pub fn rpr(&self) -> u32 {
-        self.RPR.get()
-    }
-
-    pub fn bpr(&self) -> u32 {
-        self.BPR.get()
-    }
-
-    pub fn abpr(&self) -> u32 {
-        self.ABPR.get()
-    }
-
-    pub fn apr(&self, idx: usize) -> u32 {
-        self.APR[idx].get()
-    }
-
-    pub fn nsapr(&self, idx: usize) -> u32 {
-        self.NSAPR[idx].get()
-    }
-}
-
-register_structs! {
-    #[allow(non_snake_case)]
-    pub GicHypervisorInterfaceBlock {
-        (0x0000 => HCR: ReadWrite<u32>), //Hypervisor Control Register
-        (0x0004 => VTR: ReadOnly<u32>), //VGIC Type Register
-        (0x0008 => VMCR: ReadWrite<u32>), //Virtual Machine Control Register
-        (0x0010 => MISR: ReadOnly<u32>), //Maintenance Interrupt Status Register
-        (0x0020 => EISR: ReadOnly<u32>), //End of Interrupt Status Register
-        (0x0030 => ELRSR: ReadOnly<u32>), //Empty List Register Status Register
-        (0x00f0 => APR: [ReadWrite<u32>; GIC_LIST_REGS_NUM / 16]), //Active Priorities Register
-        (0x0100 => LR: [ReadWrite<u32>; GIC_LIST_REGS_NUM / 4]), //List Registers 0-15 lower bits
-        (0x1000 => @END),
-    }
 }
 
 pub struct GicHypervisorInterface {
     base_addr: usize,
 }
 
-impl core::ops::Deref for GicHypervisorInterface {
-    type Target = GicHypervisorInterfaceBlock;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr() }
-    }
-}
-
 impl GicHypervisorInterface {
     const fn new(base_addr: usize) -> GicHypervisorInterface {
         GicHypervisorInterface { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const GicHypervisorInterfaceBlock {
-        self.base_addr as *const GicHypervisorInterfaceBlock
     }
 
     pub fn hcr(&self) -> usize {
@@ -995,10 +910,6 @@ impl GicHypervisorInterface {
         let misrc: u32;
         mrs!(misrc, ICH_MISR_EL2, "x");
         misrc
-    }
-
-    pub fn apr(&self, apr_idx: usize) -> u32 {
-        self.APR[apr_idx].get()
     }
 
     pub fn set_lr(&self, lr_idx: usize, val: usize) {

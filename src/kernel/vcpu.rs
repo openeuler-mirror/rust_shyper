@@ -14,8 +14,7 @@ use core::mem::size_of;
 use spin::Mutex;
 
 use crate::arch::{
-    ContextFrame, ContextFrameTrait, cpu_interrupt_unmask, GIC_INTS_MAX, GIC_SGI_REGS_NUM, GICC, GicContext, GICD,
-    GICH, VmContext, timer_arch_get_counter,
+    ContextFrame, ContextFrameTrait, cpu_interrupt_unmask, GicContext, GICD, VmContext, timer_arch_get_counter,
 };
 use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
@@ -580,107 +579,4 @@ pub fn vcpu_run(announce: bool) -> ! {
     unsafe {
         context_vm_entry(current_cpu().ctx as usize);
     }
-}
-
-pub fn show_vcpu_reg_context() {
-    print!("#### GICD ISENABLER ####");
-    for i in 0..GIC_INTS_MAX / 32 {
-        if i % 8 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.is_enabler(i));
-    }
-    println!("");
-    print!("#### GICD ISACTIVER ####");
-    for i in 0..GIC_INTS_MAX / 32 {
-        if i % 8 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.is_activer(i));
-    }
-    println!("");
-    print!("#### GICD ISPENDER ####");
-    for i in 0..GIC_INTS_MAX / 32 {
-        if i % 8 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.is_pender(i));
-    }
-    println!("");
-    print!("#### GICD IGROUP ####");
-    for i in 0..GIC_INTS_MAX / 32 {
-        if i % 8 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.igroup(i));
-    }
-    println!("");
-    print!("#### GICD ICFGR ####");
-    for i in 0..GIC_INTS_MAX * 2 / 32 {
-        if i % 8 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.icfgr(i));
-    }
-    println!("");
-    print!("#### GICD CPENDSGIR ####");
-    for i in 0..GIC_SGI_REGS_NUM {
-        if i % 8 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.cpendsgir(i));
-    }
-    println!("");
-    println!("GICH_APR {:x}", GICH.misr());
-
-    println!("GICD_CTLR {:x}", GICD.ctlr());
-    print!("#### GICD ITARGETSR ####");
-    for i in 0..GIC_INTS_MAX * 8 / 32 {
-        if i % 8 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.itargetsr(i));
-    }
-    println!("");
-
-    print!("#### GICD IPRIORITYR ####");
-    for i in 0..GIC_INTS_MAX * 8 / 32 {
-        if i % 16 == 0 {
-            println!("");
-        }
-        print!("{:x} ", GICD.ipriorityr(i));
-    }
-    println!("");
-
-    println!("GICC_RPR {:x}", GICC.rpr());
-    println!("GICC_HPPIR {:x}", GICC.hppir());
-    println!("GICC_BPR {:x}", GICC.bpr());
-    println!("GICC_ABPR {:x}", GICC.abpr());
-    println!("#### GICC APR ####");
-    for i in 0..4 {
-        print!("{:x} ", GICC.apr(i));
-    }
-    println!("");
-    println!("#### GICC NSAPR ####");
-    for i in 0..4 {
-        print!("{:x} ", GICC.nsapr(i));
-    }
-
-    println!("GICH_MISR {:x}", GICH.misr());
-    println!("GICV_CTLR {:x}", unsafe { *(Platform::GICV_BASE as *const u32) });
-    println!("GICV_PMR {:x}", unsafe { *((Platform::GICV_BASE + 0x4) as *const u32) });
-    println!("GICV_BPR {:x}", unsafe { *((Platform::GICV_BASE + 0x8) as *const u32) });
-    println!("GICV_ABPR {:x}", unsafe {
-        *((Platform::GICV_BASE + 0x1c) as *const u32)
-    });
-    println!("GICV_STATUSR {:x}", unsafe {
-        *((Platform::GICV_BASE + 0x2c) as *const u32)
-    });
-    println!(
-        "GICV_APR[0] {:x}, GICV_APR[1] {:x}, GICV_APR[2] {:x}, GICV_APR[3] {:x}",
-        unsafe { *((Platform::GICV_BASE + 0xd0) as *const u32) },
-        unsafe { *((Platform::GICV_BASE + 0xd4) as *const u32) },
-        unsafe { *((Platform::GICV_BASE + 0xd8) as *const u32) },
-        unsafe { *((Platform::GICV_BASE + 0xdc) as *const u32) },
-    );
 }
