@@ -17,6 +17,14 @@ OBJDUMP = ${TOOLCHAIN}-objdump
 OBJCOPY = ${TOOLCHAIN}-objcopy
 LD = ${TOOLCHAIN}-ld
 
+GIC_VERSION ?= 2
+
+ifeq ($(GIC_VERSION),3)
+	FEATURES += gicv3,
+else ifneq ($(GIC_VERSION),2)
+	$(error Bad gic version)
+endif
+
 TEXT_START ?= 0x83000000
 VM0_IMAGE_PATH ?= "./image/L4T"
 
@@ -37,7 +45,7 @@ export CFLAGS := -mgeneral-regs-only
 
 CARGO_ACTION ?= build
 
-.PHONY: build qemu qemu_gicv3 tx2 pi4 tx2_update tx2_ramdisk rk3588_release gdb clean
+.PHONY: build qemu tx2 pi4 tx2_update tx2_ramdisk rk3588_release gdb clean
 
 build:
 	cargo ${CARGO_ACTION} ${CARGO_FLAGS}
@@ -47,10 +55,6 @@ build:
 
 qemu:
 	$(MAKE) build BOARD=qemu TEXT_START=0x40080000 VM0_IMAGE_PATH="./image/Image_vanilla"
-	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
-
-qemu_gicv3:
-	$(MAKE) build BOARD=qemu FEATURES=gicv3 TEXT_START=0x40080000 VM0_IMAGE_PATH="./image/Image_vanilla"
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
 
 tx2:
@@ -73,12 +77,8 @@ pi4:
 	$(MAKE) build BOARD=pi4 TEXT_START=0xf0080000 VM0_IMAGE_PATH="./image/Image_pi4_5.4.83_tlb"
 	# bash pi4_upload_release
 
-QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=2\
+QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=$(GIC_VERSION)\
 	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
-	-kernel ${TARGET_DIR}/${IMAGE}.bin
-
-QEMU_COMMON_OPTIONS_GICV3 = -machine virt,virtualization=on,gic-version=3\
-	-m 8g -cpu cortex-a55 -smp 4 -display none -global virtio-mmio.force-legacy=false\
 	-kernel ${TARGET_DIR}/${IMAGE}.bin
 
 QEMU_SERIAL_OPTIONS = -serial mon:stdio #\
@@ -94,19 +94,12 @@ QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-
 run: qemu
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
 
-run_gicv3: qemu_gicv3
-	${QEMU} ${QEMU_COMMON_OPTIONS_GICV3} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
-
 debug: qemu
 	${QEMU} ${QEMU_COMMON_OPTIONS} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
 		-s -S
 
-debug_gicv3: qemu_gicv3
-	${QEMU} ${QEMU_COMMON_OPTIONS_GICV3} ${QEMU_SERIAL_OPTIONS} ${QEMU_NETWORK_OPTIONS} ${QEMU_DISK_OPTIONS} \
-		-s -S
-
 gdb:
-	${GDB} -x gdb/aarch64.gdb
+	${GDB} -x gdb/$(ARCH).gdb
 
 clean:
 	cargo clean
