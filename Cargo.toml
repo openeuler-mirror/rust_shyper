@@ -39,11 +39,13 @@ log = { version = "0.4", features = [
     "release_max_level_info",
 ] }
 spin = { version = "0.9.4", features = ["use_ticket_mutex"] }
-cortex-a = { package = "aarch64-cpu", version = "9.3.1" }
 buddy_system_allocator = "0.8.0"
 memoffset = { version = "0.8", default-features = false, features = [
     "unstable_const",
 ] }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+cortex-a = { package = "aarch64-cpu", version = "9.3.1" }
 smccc = "0.1.1"
 
 [dependencies.tock-registers]
@@ -56,10 +58,10 @@ version = "x"
 default-features = false
 
 [features]
-tx2 = []
-qemu = []
-pi4 = []
-rk3588 = ["gicv3"]
+tx2 = ["ns16550"]
+qemu = ["pl011"]
+pi4 = ["pl011"]
+rk3588 = ["ns16550", "gicv3"]
 gicv3 = []
 update = []
 ramdisk = []
@@ -68,3 +70,5 @@ lvl4 = []
 secondary_start = []
 update_low = []
 rk3588-noeth = ["rk3588"]
+ns16550 = []
+pl011 = []

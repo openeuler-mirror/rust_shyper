@@ -8,7 +8,7 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-pub use self::aarch64::*;
+pub use uart::putc;
 
 #[cfg(feature = "pi4")]
 pub use self::gpio::*;
@@ -16,7 +16,7 @@ pub use self::gpio::*;
 #[cfg(feature = "qemu")]
 pub use self::virtio::*;
 
-mod aarch64;
 mod gpio;
+mod uart;
 #[cfg(feature = "qemu")]
 mod virtio;
