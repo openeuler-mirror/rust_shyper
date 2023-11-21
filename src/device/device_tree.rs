@@ -10,7 +10,6 @@
 
 use alloc::vec::Vec;
 
-use fdt::binding::Fdt;
 use vm_fdt::{FdtWriter, FdtWriterResult};
 
 use crate::config::{DtbDevType, VmDtbDevConfig};
@@ -157,6 +156,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     }
     #[cfg(feature = "rk3588")]
     {
+        use fdt::binding::Fdt;
         use crate::alloc::borrow::ToOwned;
         let mut fdt = unsafe { Fdt::from_ptr(dtb as *const u8) }.to_owned();
         crate::config::patch_fdt(&mut fdt)?;

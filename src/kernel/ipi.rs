@@ -112,6 +112,8 @@ pub struct IpiIntInjectMsg {
 }
 
 declare_enum_with_handler! {
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    #[repr(usize)]
     pub enum IpiType [pub IPI_HANDLER_LIST => IpiHandlerFunc] {
         IpiTIntc => crate::arch::vgic_ipi_handler,
         IpiTPower => crate::arch::psci_ipi_handler,

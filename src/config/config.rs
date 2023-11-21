@@ -189,6 +189,29 @@ impl VmCpuConfig {
             master: 0,
         }
     }
+
+    fn new(num: usize, allocate_bitmap: usize, master: usize) -> Self {
+        let num = usize::min(num, allocate_bitmap.count_ones() as usize);
+        // make sure `allocate_bitmap` and `num` matches
+        let allocate_bitmap = {
+            // only accept the lower bitmap by given cpu num
+            let mut index = 1 << allocate_bitmap.trailing_zeros();
+            let mut remain = num;
+            while remain > 0 && index <= allocate_bitmap {
+                if allocate_bitmap & index != 0 {
+                    remain -= 1;
+                }
+                index <<= 1;
+            }
+            allocate_bitmap & (index - 1)
+        } as u32;
+        let master = master as i32;
+        Self {
+            num,
+            allocate_bitmap,
+            master,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -365,9 +388,7 @@ impl VmConfigEntry {
 
     pub fn set_cpu_cfg(&self, num: usize, allocate_bitmap: usize, master: usize) {
         let mut cpu_cfg = self.cpu.lock();
-        cpu_cfg.num = usize::min(num, allocate_bitmap.count_ones() as usize);
-        cpu_cfg.allocate_bitmap = allocate_bitmap as u32;
-        cpu_cfg.master = master as i32;
+        *cpu_cfg = VmCpuConfig::new(num, allocate_bitmap, master);
     }
 
     pub fn emulated_device_list(&self) -> Vec<VmEmulatedDeviceConfig> {
