@@ -208,13 +208,12 @@ pub unsafe extern "C" fn _secondary_start() -> ! {
 
 fn init_sysregs() {
     use cortex_a::registers::{HCR_EL2, VBAR_EL2, SCTLR_EL2};
-    HCR_EL2.set(
-        (HCR_EL2::VM::Enable
+    HCR_EL2.write(
+        HCR_EL2::VM::Enable
             + HCR_EL2::RW::EL1IsAarch64
             + HCR_EL2::IMO::EnableVirtualIRQ
-            + HCR_EL2::FMO::EnableVirtualFIQ)
-            .value
-            | 1 << 19, /* TSC */
+            + HCR_EL2::FMO::EnableVirtualFIQ
+            + HCR_EL2::TSC::EnableTrapEl1SmcToEl2,
     );
     VBAR_EL2.set(vectors as usize as u64);
     SCTLR_EL2.modify(SCTLR_EL2::M::Enable + SCTLR_EL2::C::Cacheable + SCTLR_EL2::I::Cacheable);
