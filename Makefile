@@ -30,7 +30,7 @@ GIC_VERSION ?= 2
 ifeq ($(GIC_VERSION),3)
 	FEATURES += gicv3,
 else ifneq ($(GIC_VERSION),2)
-	$(error Bad gic version)
+$(error Bad gic version)
 endif
 
 TEXT_START ?= 0x83000000
@@ -66,37 +66,45 @@ endif
 
 CARGO_ACTION ?= build
 
-.PHONY: build qemu tx2 pi4 tx2_update tx2_ramdisk rk3588_release gdb clean
+TFTP_SERVER ?= root@192.168.106.153:/tftp
+
+UBOOT_IMAGE ?= Image$(USER)_$(ARCH)_$(BOARD)
+
+.PHONY: build upload qemu rk3588 tx2 pi4 tx2_update tx2_ramdisk gdb clean
 
 build:
 	cargo ${CARGO_ACTION} ${CARGO_FLAGS}
 	bash linkimg.sh -i ${TARGET_DIR}/${RELOCATE_IMAGE} -m ${VM0_IMAGE_PATH} \
 		-t ${LD} -f linkers/${ARCH}.ld -s ${TEXT_START} -o ${TARGET_DIR}/${IMAGE}
 	${OBJDUMP} --demangle -d ${TARGET_DIR}/${IMAGE} > ${TARGET_DIR}/t.txt
+	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
+
+# TODO: fix the mkimage ARCH because it only accept "arm64" and "AArch64" for aarch64
+upload: build
+	@mkimage -n ${IMAGE} -A arm64 -O linux -T kernel -C none -a $(TEXT_START) -e $(TEXT_START) -d ${TARGET_DIR}/${IMAGE}.bin ${TARGET_DIR}/${UBOOT_IMAGE}
+	@echo "*** Upload Image ${UBOOT_IMAGE} ***"
+	@scp ${TARGET_DIR}/${UBOOT_IMAGE} ${TFTP_SERVER}/${UBOOT_IMAGE}
 
 qemu:
 	$(MAKE) build BOARD=qemu TEXT_START=0x40080000 VM0_IMAGE_PATH="./image/Image_vanilla"
-	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
+
+rk3588:
+	$(MAKE) upload BOARD=rk3588 TEXT_START=0x00480000 VM0_IMAGE_PATH="./image/L4T"
 
 tx2:
-	$(MAKE) build BOARD=tx2 TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
-	bash upload_release
+	$(MAKE) upload BOARD=tx2 TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
 
 tx2_ramdisk:
-	$(MAKE) build BOARD=tx2 FEATURES=ramdisk TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
-	# bash upload_release
+	$(MAKE) upload BOARD=tx2 FEATURES=ramdisk TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
 
 tx2_update:
-	$(MAKE) build BOARD=tx2 FEATURES=update TEXT_START=0x8a000000 VM0_IMAGE_PATH="./image/L4T"
-	bash upload_update
-
+	$(MAKE) upload BOARD=tx2 FEATURES=update TEXT_START=0x8a000000 VM0_IMAGE_PATH="./image/L4T"
+	
 tx2_update_low:
-	$(MAKE) build BOARD=tx2 FEATURES=update_low TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
-	bash upload_update_low
+	$(MAKE) upload BOARD=tx2 FEATURES=update_low TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
 
 pi4:
-	$(MAKE) build BOARD=pi4 TEXT_START=0xf0080000 VM0_IMAGE_PATH="./image/Image_pi4_5.4.83_tlb"
-	# bash pi4_upload_release
+	$(MAKE) upload BOARD=pi4 TEXT_START=0xf0080000 VM0_IMAGE_PATH="./image/Image_pi4_5.4.83_tlb"
 
 ifeq (${ARCH}, aarch64)
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=$(GIC_VERSION)\
