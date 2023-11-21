@@ -10,8 +10,8 @@ OUTPUT_FILE="a.out"
 
 function usage {
         cat << EOM
-Usage: ./${SCRIPT_NAME} [OPTIONS]
-This script uses to link Rust_Shyper and linux image.
+Usage: ./$(basename $BASH_SOURCE) [OPTIONS]
+This script is used to link Rust_Shyper and linux image.
 It supports following options.
 OPTIONS:
         -h | --help                             
