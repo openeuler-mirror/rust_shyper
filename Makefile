@@ -11,19 +11,19 @@ FEATURES ?=
 
 # Toolchain
 ifeq ($(ARCH), aarch64)
-	TOOLCHAIN := aarch64-none-elf
+	CROSS_COMPILE ?= aarch64-none-elf-
 else ifeq ($(ARCH), riscv64)
-	TOOLCHAIN := riscv64-linux-gnu
+	CROSS_COMPILE ?= riscv64-linux-gnu-
 else
 $(error bad arch: $(ARCH))
 endif
 
 QEMU := qemu-system-$(ARCH)
 
-GDB = ${TOOLCHAIN}-gdb
-OBJDUMP = ${TOOLCHAIN}-objdump
-OBJCOPY = ${TOOLCHAIN}-objcopy
-LD = ${TOOLCHAIN}-ld
+GDB = ${CROSS_COMPILE}gdb
+OBJDUMP = ${CROSS_COMPILE}objdump
+OBJCOPY = ${CROSS_COMPILE}objcopy
+LD = ${CROSS_COMPILE}ld
 
 GIC_VERSION ?= 2
 
@@ -51,7 +51,7 @@ CARGO_FLAGS := ${CARGO_FLAGS} --release
 endif
 
 # Make 'cc' crate in dependencies cross compiles properly.
-export CROSS_COMPILE := ${TOOLCHAIN}-
+export CROSS_COMPILE
 
 ifeq ($(ARCH), aarch64)
 	export CFLAGS += -mgeneral-regs-only
