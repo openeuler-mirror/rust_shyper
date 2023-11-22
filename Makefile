@@ -45,7 +45,7 @@ TARGET_DIR=target/${ARCH}/${PROFILE}
 TARGET_CFG := $(CURDIR)/cfg/${ARCH}.json
 
 # Combine board(tx2, qemu, pi4, ...) with previous features as cargo's features
-CARGO_FLAGS ?= -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --target ${TARGET_CFG} --no-default-features --features ${BOARD},${FEATURES}
+CARGO_FLAGS ?= -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --target ${TARGET_CFG} --no-default-features --features "${BOARD},${FEATURES}"
 ifeq (${PROFILE}, release)
 CARGO_FLAGS := ${CARGO_FLAGS} --release
 endif
@@ -99,7 +99,7 @@ tx2_ramdisk:
 
 tx2_update:
 	$(MAKE) upload BOARD=tx2 FEATURES=update TEXT_START=0x8a000000 VM0_IMAGE_PATH="./image/L4T"
-	
+
 tx2_update_low:
 	$(MAKE) upload BOARD=tx2 FEATURES=update_low TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
 
