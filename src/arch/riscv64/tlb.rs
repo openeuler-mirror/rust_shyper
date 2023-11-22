@@ -8,15 +8,11 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-#[cfg(target_arch = "aarch64")]
-pub use self::aarch64::*;
-#[cfg(target_arch = "aarch64")]
-mod aarch64;
+use core::arch::asm;
 
-#[cfg(target_arch = "riscv64")]
-pub use self::riscv64::*;
-#[cfg(target_arch = "riscv64")]
-mod riscv64;
+pub fn tlb_invalidate_guest_all() {
+    unsafe {
+        asm!("hfence.vvma", "hfence.gvma");
+    }
+}
 
-pub use self::traits::*;
-mod traits;

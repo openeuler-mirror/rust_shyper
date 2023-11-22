@@ -8,15 +8,11 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-#[cfg(target_arch = "aarch64")]
-pub use self::aarch64::*;
-#[cfg(target_arch = "aarch64")]
-mod aarch64;
+pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SHIFT: usize = 12;
+pub const ENTRY_PER_PAGE: usize = PAGE_SIZE / 8;
 
-#[cfg(target_arch = "riscv64")]
-pub use self::riscv64::*;
-#[cfg(target_arch = "riscv64")]
-mod riscv64;
+pub type ContextFrame = super::context_frame::Aarch64ContextFrame;
 
-pub use self::traits::*;
-mod traits;
+pub const WORD_SIZE: usize = 8;
+pub const PTE_PER_PAGE: usize = PAGE_SIZE / WORD_SIZE;

@@ -11,23 +11,37 @@
 use std::env::var;
 use std::process::Command;
 
+// get text_start by arch and platform
+fn get_text_start() -> u64 {
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+
+    if target_arch == "aarch64" {
+        if cfg!(feature = "tx2") {
+            if cfg!(feature = "update") {
+                0x8a000000_u64
+            } else {
+                0x83000000_u64
+            }
+        } else if cfg!(feature = "pi4") {
+            0xf0080000_u64
+        } else if cfg!(feature = "qemu") {
+            0x40080000_u64
+        } else if cfg!(feature = "rk3588") {
+            0x00400000_u64
+        } else {
+            panic!("Unsupported platform!");
+        }
+    } else if target_arch == "riscv64" {
+        0x80200000_u64
+    } else {
+        panic!("Unsupported arch {}!", target_arch);
+    }
+}
+
 fn main() {
     let arch = var("CARGO_CFG_TARGET_ARCH").unwrap();
-    let text_start = if cfg!(feature = "tx2") {
-        if cfg!(feature = "update") {
-            0x8a000000_u64
-        } else {
-            0x83000000_u64
-        }
-    } else if cfg!(feature = "pi4") {
-        0xf0080000_u64
-    } else if cfg!(feature = "qemu") {
-        0x40080000_u64
-    } else if cfg!(feature = "rk3588") {
-        0x00400000_u64
-    } else {
-        panic!("Unsupported platform!");
-    };
+
+    let text_start = get_text_start();
     println!("cargo:rustc-link-arg=-Tlinkers/{arch}.ld");
     println!("cargo:rustc-link-arg=--defsym=TEXT_START={text_start}");
 

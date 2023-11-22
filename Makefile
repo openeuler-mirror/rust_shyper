@@ -10,8 +10,16 @@ BOARD ?= tx2
 FEATURES ?=
 
 # Toolchain
-TOOLCHAIN=aarch64-none-elf
-QEMU = qemu-system-aarch64
+ifeq ($(ARCH), aarch64)
+	TOOLCHAIN := aarch64-none-elf
+else ifeq ($(ARCH), riscv64)
+	TOOLCHAIN := riscv64-linux-gnu
+else
+$(error bad arch: $(ARCH))
+endif
+
+QEMU := qemu-system-$(ARCH)
+
 GDB = ${TOOLCHAIN}-gdb
 OBJDUMP = ${TOOLCHAIN}-objdump
 OBJCOPY = ${TOOLCHAIN}-objcopy
@@ -33,15 +41,28 @@ IMAGE=rust_shyper
 
 TARGET_DIR=target/${ARCH}/${PROFILE}
 
-# Cargo flags.
-CARGO_FLAGS ?= -Z build-std=core,alloc --target ${ARCH}.json --no-default-features --features ${BOARD},${FEATURES}
+# Use target_cfg depending on ARCH
+TARGET_CFG := $(CURDIR)/cfg/${ARCH}.json
+
+# Combine board(tx2, qemu, pi4, ...) with previous features as cargo's features
+CARGO_FLAGS ?= -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --target ${TARGET_CFG} --no-default-features --features ${BOARD},${FEATURES}
 ifeq (${PROFILE}, release)
 CARGO_FLAGS := ${CARGO_FLAGS} --release
 endif
 
 # Make 'cc' crate in dependencies cross compiles properly.
 export CROSS_COMPILE := ${TOOLCHAIN}-
-export CFLAGS := -mgeneral-regs-only
+
+ifeq ($(ARCH), aarch64)
+	export CFLAGS += -mgeneral-regs-only
+endif
+
+ifeq ($(ARCH), riscv64)
+	export CRATE_CC_NO_DEFAULTS := true
+	export CFLAGS := -ffunction-sections -fdata-sections \
+		-fPIC -fno-omit-frame-pointer -mabi=lp64 -mcmodel=medany -march=rv64ima \
+		-ffreestanding
+endif
 
 CARGO_ACTION ?= build
 
@@ -68,7 +89,7 @@ tx2_ramdisk:
 tx2_update:
 	$(MAKE) build BOARD=tx2 FEATURES=update TEXT_START=0x8a000000 VM0_IMAGE_PATH="./image/L4T"
 	bash upload_update
-	
+
 tx2_update_low:
 	$(MAKE) build BOARD=tx2 FEATURES=update_low TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"
 	bash upload_update_low
@@ -77,9 +98,17 @@ pi4:
 	$(MAKE) build BOARD=pi4 TEXT_START=0xf0080000 VM0_IMAGE_PATH="./image/Image_pi4_5.4.83_tlb"
 	# bash pi4_upload_release
 
+ifeq (${ARCH}, aarch64)
 QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=$(GIC_VERSION)\
 	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
 	-kernel ${TARGET_DIR}/${IMAGE}.bin
+else ifeq (${ARCH}, riscv64)
+QEMU_COMMON_OPTIONS = -machine virt,virtualization=on\
+	-m 8g -cpu rv64 -smp 4 -display none -global virtio-mmio.force-legacy=false\
+	-kernel ${TARGET_DIR}/${IMAGE}.bin
+else
+$(error bad qemu arch: $(ARCH))
+endif
 
 QEMU_SERIAL_OPTIONS = -serial mon:stdio #\
 	-serial telnet:localhost:12345,server
