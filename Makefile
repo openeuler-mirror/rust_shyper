@@ -51,18 +51,18 @@ CARGO_FLAGS := ${CARGO_FLAGS} --release
 endif
 
 # Make 'cc' crate in dependencies cross compiles properly.
-export CROSS_COMPILE
+CFLAGS += -fno-stack-protector
 
 ifeq ($(ARCH), aarch64)
-	export CFLAGS += -mgeneral-regs-only
+	CFLAGS += -mgeneral-regs-only
+else ifeq ($(ARCH), riscv64)
+	export CRATE_CC_NO_DEFAULTS := true
+	CFLAGS += -ffunction-sections -fdata-sections \
+		  -fPIC -fno-omit-frame-pointer -mabi=lp64 -mcmodel=medany -march=rv64ima \
+		  -ffreestanding
 endif
 
-ifeq ($(ARCH), riscv64)
-	export CRATE_CC_NO_DEFAULTS := true
-	export CFLAGS := -ffunction-sections -fdata-sections \
-		-fPIC -fno-omit-frame-pointer -mabi=lp64 -mcmodel=medany -march=rv64ima \
-		-ffreestanding
-endif
+export CROSS_COMPILE CFLAGS
 
 CARGO_ACTION ?= build
 
