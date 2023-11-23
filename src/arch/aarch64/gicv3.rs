@@ -599,9 +599,7 @@ impl core::ops::Deref for GicRedistributor {
 impl core::ops::Index<usize> for GicRedistributor {
     type Output = GicRedistributorBlock;
     fn index(&self, index: usize) -> &Self::Output {
-        unsafe {
-            &*((self.ptr() as usize + index * size_of::<GicRedistributorBlock>()) as *const GicRedistributorBlock)
-        }
+        unsafe { &*self.ptr().offset(index as isize) }
     }
 }
 
@@ -788,9 +786,7 @@ impl GicRedistributor {
         self[gicr_id].IPRIORITYR[index].get()
     }
 }
-pub struct GicCpuInterface {
-    base_addr: usize,
-}
+pub struct GicCpuInterface;
 
 impl core::fmt::Display for GicCpuInterface {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -805,10 +801,6 @@ impl core::fmt::Display for GicCpuInterface {
 }
 
 impl GicCpuInterface {
-    pub const fn new(base_addr: usize) -> GicCpuInterface {
-        GicCpuInterface { base_addr }
-    }
-
     fn init(&self) {
         msr!(ICC_SRE_EL2, 0b1, "x");
 
@@ -849,15 +841,9 @@ impl GicCpuInterface {
     }
 }
 
-pub struct GicHypervisorInterface {
-    base_addr: usize,
-}
+pub struct GicHypervisorInterface;
 
 impl GicHypervisorInterface {
-    const fn new(base_addr: usize) -> GicHypervisorInterface {
-        GicHypervisorInterface { base_addr }
-    }
-
     pub fn hcr(&self) -> usize {
         let hcrc: usize;
         mrs!(hcrc, ICH_HCR_EL2);
@@ -1083,8 +1069,8 @@ impl GicState {
 }
 
 pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE);
-pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE);
-pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE);
+pub static GICC: GicCpuInterface = GicCpuInterface;
+pub static GICH: GicHypervisorInterface = GicHypervisorInterface;
 pub static GICR: GicRedistributor = GicRedistributor::new(Platform::GICR_BASE);
 
 #[inline(always)]
