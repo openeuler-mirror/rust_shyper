@@ -21,7 +21,6 @@ use crate::board::{
 };
 use crate::board::SchedRule::RoundRobin;
 use crate::device::ARM_CORTEX_A57;
-use crate::driver::{read, write};
 
 pub struct QemuPlatform;
 
@@ -75,19 +74,6 @@ impl PlatOperation for QemuPlatform {
             }
         }
         return usize::MAX;
-    }
-
-    fn blk_init() {
-        info!("Platform block driver init ok");
-        crate::driver::virtio_blk_init();
-    }
-
-    fn blk_read(sector: usize, count: usize, buf: usize) {
-        read(sector, count, buf);
-    }
-
-    fn blk_write(sector: usize, count: usize, buf: usize) {
-        write(sector, count, buf);
     }
 }
 

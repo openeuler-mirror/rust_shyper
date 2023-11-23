@@ -162,10 +162,4 @@ pub trait PlatOperation {
     fn vmpidr2vcpuid(vmpidr: usize) -> usize {
         vmpidr & 0xff
     }
-
-    fn blk_init();
-
-    fn blk_read(sector: usize, count: usize, buf: usize);
-
-    fn blk_write(sector: usize, count: usize, buf: usize);
 }

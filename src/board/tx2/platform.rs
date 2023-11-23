@@ -55,18 +55,6 @@ impl PlatOperation for Tx2Platform {
     fn cpuif_to_cpuid(cpuif: usize) -> usize {
         cpuif - PLAT_DESC.cpu_desc.num
     }
-
-    fn blk_init() {
-        todo!()
-    }
-
-    fn blk_read(_sector: usize, _count: usize, _buf: usize) {
-        todo!()
-    }
-
-    fn blk_write(_sector: usize, _count: usize, _buf: usize) {
-        todo!()
-    }
 }
 
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {

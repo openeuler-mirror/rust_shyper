@@ -70,18 +70,6 @@ impl PlatOperation for Rk3588Platform {
     fn vmpidr2vcpuid(vmpidr: usize) -> usize {
         (vmpidr >> 8) & 0xff
     }
-
-    fn blk_init() {
-        todo!()
-    }
-
-    fn blk_read(_sector: usize, _count: usize, _buf: usize) {
-        todo!()
-    }
-
-    fn blk_write(_sector: usize, _count: usize, _buf: usize) {
-        todo!()
-    }
 }
 
 pub static PLAT_DESC: PlatformConfig = PlatformConfig {

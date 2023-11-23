@@ -13,10 +13,5 @@ pub use uart::putc;
 #[cfg(feature = "pi4")]
 pub use self::gpio::*;
 
-#[cfg(feature = "qemu")]
-pub use self::virtio::*;
-
 mod gpio;
 mod uart;
-#[cfg(feature = "qemu")]
-mod virtio;
