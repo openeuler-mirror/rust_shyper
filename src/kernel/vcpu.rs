@@ -242,7 +242,7 @@ impl Vcpu {
 
     pub fn state(&self) -> VcpuState {
         let inner = self.inner.lock();
-        inner.state.clone()
+        inner.state
     }
 
     pub fn set_state(&self, state: VcpuState) {

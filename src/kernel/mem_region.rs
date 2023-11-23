@@ -124,7 +124,7 @@ impl HeapRegion {
         let addr = self.region.base + bit * PAGE_SIZE;
         memset_safe(addr as *mut u8, 0, size * PAGE_SIZE);
         debug!("mem heap alloc alocate {:x}, size {:x}", addr, size * PAGE_SIZE);
-        return Ok(addr);
+        Ok(addr)
     }
 
     pub fn free_pages(&mut self, base: usize, size: usize) -> bool {
@@ -146,7 +146,7 @@ impl HeapRegion {
         }
         self.region.free += size;
         self.region.last = page_idx;
-        return true;
+        true
     }
 }
 

@@ -151,12 +151,12 @@ pub trait PlatOperation {
                 return i;
             }
         }
-        return usize::MAX;
+        usize::MAX
     }
 
     fn cpuid2mpidr(cpuid: usize) -> usize {
         use crate::board::PLAT_DESC;
-        return PLAT_DESC.cpu_desc.core_list[cpuid].mpidr;
+        PLAT_DESC.cpu_desc.core_list[cpuid].mpidr
     }
 
     fn vmpidr2vcpuid(vmpidr: usize) -> usize {

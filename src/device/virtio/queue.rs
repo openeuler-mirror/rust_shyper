@@ -109,11 +109,11 @@ impl Virtq {
                 let idx = inner.last_avail_idx as usize % inner.num;
                 let avail_desc_idx = avail.ring[idx];
                 inner.last_avail_idx = inner.last_avail_idx.wrapping_add(1);
-                return Some(avail_desc_idx);
+                Some(avail_desc_idx)
             }
             None => {
                 error!("pop_avail_desc_idx: failed to avail table");
-                return None;
+                None
             }
         }
     }
@@ -153,13 +153,13 @@ impl Virtq {
 
     pub fn check_avail_idx(&self, avail_idx: u16) -> bool {
         let inner = self.inner.lock();
-        return inner.last_avail_idx == avail_idx;
+        inner.last_avail_idx == avail_idx
     }
 
     pub fn desc_is_writable(&self, idx: usize) -> bool {
         let inner = self.inner.lock();
         let desc_table = inner.desc_table.as_ref().unwrap();
-        desc_table[idx].flags & VIRTQ_DESC_F_WRITE as u16 != 0
+        desc_table[idx].flags & VIRTQ_DESC_F_WRITE != 0
     }
 
     pub fn desc_has_next(&self, idx: usize) -> bool {
@@ -178,11 +178,11 @@ impl Virtq {
                 used.ring[used.idx as usize % num].id = desc_chain_head_idx;
                 used.ring[used.idx as usize % num].len = len;
                 used.idx = used.idx.wrapping_add(1);
-                return true;
+                true
             }
             None => {
                 error!("update_used_ring: failed to used table");
-                return false;
+                false
             }
         }
     }
@@ -199,11 +199,11 @@ impl Virtq {
                 drop(inner);
                 // println!("call_notify_handler");
                 // println!("handler addr {:x}", unsafe { *(&handler as *const _ as *const usize) });
-                return handler(self.clone(), mmio, active_vm().unwrap());
+                handler(self.clone(), mmio, active_vm().unwrap())
             }
             None => {
                 error!("call_notify_handler: virtq notify handler is None");
-                return false;
+                false
             }
         }
     }

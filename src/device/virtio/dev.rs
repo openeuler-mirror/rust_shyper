@@ -272,10 +272,10 @@ impl VirtDev {
         inner.desc.copy_from(src_dev_inner.desc.clone());
         inner.req.copy_from(src_dev_inner.req.clone());
         // inner.cache is set by fn dev_init, no need to copy here
-        inner.cache = match &src_dev_inner.cache {
-            None => None,
-            Some(page) => Some(PageFrame::new(page.pa, page.page_num)),
-        };
+        inner.cache = src_dev_inner
+            .cache
+            .as_ref()
+            .map(|page| PageFrame::new(page.pa, page.page_num));
         inner.stat.copy_from(src_dev_inner.stat.clone());
     }
 }

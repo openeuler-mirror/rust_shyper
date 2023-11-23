@@ -189,7 +189,7 @@ pub fn mvm_config_init() {
 
     pt_dev_config.regions.extend(&[
         PassthroughRegion { ipa: 0xfe680000 + 0x100000, pa: 0xfe680000 + 0x100000, length: 0xfeb40000 - (0xfe680000 + 0x100000), dev_property: true },
-        PassthroughRegion { ipa: 0xfebc0000, pa: 0xfebc0000, length: 0x10000_0000 - 0xfebc0000, dev_property: true },
+        PassthroughRegion { ipa: 0xfebc0000, pa: 0xfebc0000, length: 0x0001_0000_0000 - 0xfebc0000, dev_property: true },
         // serial@feb5000——ttyFIQ
         PassthroughRegion { ipa: 0xfeb50000, pa: 0xfeb50000, length: 0x100, dev_property: true },
         // serial@feba000——ttyS7

@@ -135,8 +135,8 @@ impl NetDesc {
         if trace() && start_addr + offset < 0x1000 {
             debug!("value addr is {}", start_addr + offset);
         }
-        let value = unsafe { *((start_addr + offset) as *const u32) };
-        return value;
+
+        unsafe { *((start_addr + offset) as *const u32) }
     }
 
     // use for migration
@@ -395,7 +395,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         }
 
         trgt_vmid += 1;
-        vms_to_notify = vms_to_notify >> 1;
+        vms_to_notify >>= 1;
     }
     true
 }
@@ -483,12 +483,8 @@ fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     }
 
     match ethernet_mac_to_vm_id(frame) {
-        Ok(vm_id) => {
-            return (ethernet_send_to(vm_id, tx_iov.clone(), len), 1 << vm_id);
-        }
-        Err(_) => {
-            return (false, 0);
-        }
+        Ok(vm_id) => (ethernet_send_to(vm_id, tx_iov.clone(), len), 1 << vm_id),
+        Err(_) => (false, 0),
     }
 }
 
@@ -628,11 +624,11 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
         return false;
     }
 
-    return true;
+    true
 }
 
 fn ethernet_is_arp(frame: &[u8]) -> bool {
-    return frame[12] == 0x8 && frame[13] == 0x6;
+    frame[12] == 0x8 && frame[13] == 0x6
 }
 
 fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
@@ -642,7 +638,7 @@ fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
             return Ok(vm_id);
         }
     }
-    return Err(());
+    Err(())
 }
 
 pub fn virtio_net_announce(vm: Vm) {

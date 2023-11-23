@@ -73,7 +73,7 @@ impl PlatOperation for QemuPlatform {
                 return i;
             }
         }
-        return usize::MAX;
+        usize::MAX
     }
 }
 

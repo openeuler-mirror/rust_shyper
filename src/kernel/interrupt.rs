@@ -142,7 +142,7 @@ pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize, _source: usize) {
 pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
     if interrupt_is_reserved(int_id) {
         let irq_handler_list = INTERRUPT_HANDLERS.lock();
-        let irq_handler = irq_handler_list.get(&int_id).unwrap().clone();
+        let irq_handler = *irq_handler_list.get(&int_id).unwrap();
         drop(irq_handler_list);
         match irq_handler {
             InterruptHandler::IpiIrqHandler(ipi_handler) => {
@@ -162,7 +162,7 @@ pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
         return true;
     }
 
-    if int_id >= 16 && int_id < 32 {
+    if (16..32).contains(&int_id) {
         if let Some(vcpu) = &current_cpu().active_vcpu {
             if let Some(active_vm) = vcpu.vm() {
                 if active_vm.has_interrupt(int_id) {
@@ -219,7 +219,6 @@ pub fn interrupt_inject_ipi_handler(msg: &IpiMessage) {
         }
         _ => {
             error!("interrupt_inject_ipi_handler: illegal ipi type");
-            return;
         }
     }
 }

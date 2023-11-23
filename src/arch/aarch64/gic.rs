@@ -311,7 +311,7 @@ impl GicDistributor {
             }
         } else {
             let reg_ind = int_id / 32;
-            let mask = 1 << int_id % 32;
+            let mask = 1 << (int_id % 32);
             if pend {
                 self.ISPENDR[reg_ind].set(mask);
             } else {
@@ -324,7 +324,7 @@ impl GicDistributor {
 
     pub fn set_act(&self, int_id: usize, act: bool) {
         let reg_ind = int_id / 32;
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
 
         let lock = GICD_LOCK.lock();
         if act {
@@ -361,7 +361,7 @@ impl GicDistributor {
 
     pub fn state(&self, int_id: usize) -> usize {
         let reg_ind = int_id / 32;
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
 
         let lock = GICD_LOCK.lock();
         let pend = if (self.ISPENDR[reg_ind].get() & mask) != 0 {
@@ -375,7 +375,7 @@ impl GicDistributor {
             0
         };
         drop(lock);
-        return pend | act;
+        pend | act
     }
 }
 

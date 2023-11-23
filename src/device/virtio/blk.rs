@@ -119,8 +119,8 @@ impl BlkDesc {
         if trace() && start_addr + offset < 0x1000 {
             panic!("illegal addr {:x}", start_addr + offset);
         }
-        let value = unsafe { *((start_addr + offset) as *const u32) };
-        return value;
+
+        unsafe { *((start_addr + offset) as *const u32) }
     }
 }
 
@@ -508,8 +508,8 @@ pub fn virtio_mediated_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) ->
     let task = AsyncTask::new(
         AsyncTaskData::AsyncIpiTask(IpiMediatedMsg {
             src_id: vm.id(),
-            vq: vq,
-            blk: blk,
+            vq,
+            blk,
         }),
         vm.id(),
         async_ipi_req(),
@@ -670,5 +670,5 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
 
     // let end = time_current_us();
     // println!("init time {}us, while handle desc ring time {}us, finish task {}us", time0 - begin, time1 - time0, end - time1);
-    return true;
+    true
 }

@@ -218,7 +218,7 @@ pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
         current_cpu().id,
         ipa
     );
-    return false;
+    false
 }
 
 pub fn emu_register_dev(

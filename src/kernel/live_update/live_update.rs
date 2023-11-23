@@ -576,23 +576,20 @@ pub fn vm_if_list_update(src_vm_if_list: &[Mutex<VmInterface>; VM_NUM_MAX]) {
         cur_vm_if.mac = vm_if.mac;
         cur_vm_if.ivc_arg = vm_if.ivc_arg;
         cur_vm_if.ivc_arg_ptr = vm_if.ivc_arg_ptr;
-        cur_vm_if.mem_map = match &vm_if.mem_map {
-            None => None,
-            Some(mem_map) => Some(FlexBitmap {
-                len: mem_map.len,
-                map: {
-                    let mut map = vec![];
-                    for v in mem_map.map.iter() {
-                        map.push(*v);
-                    }
-                    map
-                },
-            }),
-        };
-        cur_vm_if.mem_map_cache = match &vm_if.mem_map_cache {
-            None => None,
-            Some(cache) => Some(Arc::new(PageFrame::new(cache.pa, cache.page_num))),
-        };
+        cur_vm_if.mem_map = vm_if.mem_map.as_ref().map(|mem_map| FlexBitmap {
+            len: mem_map.len,
+            map: {
+                let mut map = vec![];
+                for v in mem_map.map.iter() {
+                    map.push(*v);
+                }
+                map
+            },
+        });
+        cur_vm_if.mem_map_cache = vm_if
+            .mem_map_cache
+            .as_ref()
+            .map(|cache| Arc::new(PageFrame::new(cache.pa, cache.page_num)));
     }
 }
 
@@ -626,7 +623,7 @@ fn current_cpu_update(src_cpu: &Cpu, hva2pa_lvl2_base: usize) {
 
     memcpy_safe(lvl2_page_table as *mut u8, hva2pa_lvl2_base as *mut u8, PAGE_SIZE);
     dst_cpu.cpu_pt.lvl1[0] &= (1 << PAGE_SHIFT) - 1;
-    dst_cpu.cpu_pt.lvl1[0] |= (lvl2_page_table >> PAGE_SHIFT << PAGE_SHIFT) as usize;
+    dst_cpu.cpu_pt.lvl1[0] |= lvl2_page_table >> PAGE_SHIFT << PAGE_SHIFT;
     let sp = unsafe { &*(src_cpu.ctx as *mut ContextFrame) }.stack_pointer();
     let new_sp = sp + dst_stack_base - src_stack_base;
     unsafe { &mut *(dst_cpu.ctx as *mut ContextFrame) }.set_stack_pointer(new_sp);

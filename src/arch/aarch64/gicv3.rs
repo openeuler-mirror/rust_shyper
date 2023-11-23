@@ -441,7 +441,7 @@ impl GicDistributor {
 
     pub fn set_act(&self, int_id: usize, act: bool) {
         let reg_ind = int_id / 32;
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
 
         let lock = GICD_LOCK.lock();
         if act {
@@ -474,7 +474,7 @@ impl GicDistributor {
 
     pub fn state(&self, int_id: usize) -> usize {
         let reg_ind = int_id / 32;
-        let mask = 1 << int_id % 32;
+        let mask = 1 << (int_id % 32);
 
         let lock = GICD_LOCK.lock();
         let pend = if (self.ISPENDR[reg_ind].get() & mask) != 0 {
@@ -488,7 +488,7 @@ impl GicDistributor {
             0
         };
         drop(lock);
-        return pend | act;
+        pend | act
     }
 
     pub fn set_route(&self, int_id: usize, route: usize) {
@@ -498,7 +498,7 @@ impl GicDistributor {
 
         let lock = GICD_LOCK.lock();
 
-        self.IROUTER[int_id as usize].set((route & GICD_IROUTER_AFF_MSK) as u64);
+        self.IROUTER[int_id].set((route & GICD_IROUTER_AFF_MSK) as u64);
 
         drop(lock)
     }
@@ -622,7 +622,7 @@ impl GicRedistributor {
         self[current_cpu().id].ICPENDR0.set(u32::MAX);
         self[current_cpu().id].ICACTIVER0.set(u32::MAX);
 
-        for i in 0..gic_prio_reg(GIC_PRIVINT_NUM) as usize {
+        for i in 0..gic_prio_reg(GIC_PRIVINT_NUM) {
             self[current_cpu().id].IPRIORITYR[i].set(u32::MAX);
         }
     }
@@ -653,8 +653,8 @@ impl GicRedistributor {
     }
 
     pub fn set_icfgr(&self, int_id: usize, cfg: u8, gicr_id: u32) {
-        let reg_id = (int_id * GIC_CONFIG_BITS) / (size_of::<u32>() * 8);
-        let off = (int_id * GIC_CONFIG_BITS) % (size_of::<u32>() * 8);
+        let reg_id = (int_id * GIC_CONFIG_BITS) / u32::BITS as usize;
+        let off = (int_id * GIC_CONFIG_BITS) % u32::BITS as usize;
         let mask = ((1 << (GIC_CONFIG_BITS)) - 1) << (off);
 
         let lock = GICR_LOCK.lock();

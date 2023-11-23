@@ -191,7 +191,7 @@ pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     // todo: fix create_chosen_node size
     create_chosen_node(&mut fdt, &config.cmdline, config.ramdisk_load_ipa(), CPIO_RAMDISK.len())?;
     create_cpu_node(&mut fdt, config.clone())?;
-    if config.dtb_device_list().len() > 0 {
+    if !config.dtb_device_list().is_empty() {
         create_serial_node(&mut fdt, &config.dtb_device_list())?;
     }
     // match &config.vm_dtb_devs {
@@ -257,7 +257,7 @@ fn create_pinctrl_node(fdt: &mut FdtWriter) -> FdtWriterResult<()> {
 
 // hard code for tx2 vm1
 fn create_memory_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResult<()> {
-    if config.memory_region().len() == 0 {
+    if config.memory_region().is_empty() {
         panic!("create_memory_node memory region num 0");
     }
     let memory_name = format!("memory@{:x}", config.memory_region()[0].ipa_start);
@@ -310,7 +310,7 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
             fdt.property_string("compatible", "arm,cortex-a55")?;
             fdt.property_string("device_type", "cpu")?;
             fdt.property_string("enable-method", "psci")?;
-            fdt.property_array_u32("reg", &[0, (cpu_id as u32) << 8])?;
+            fdt.property_array_u32("reg", &[0, cpu_id << 8])?;
             fdt.end_node(cpu_node)?;
         } else {
             let cpu_name = format!("cpu@{:x}", cpu_id);
@@ -318,7 +318,7 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
             fdt.property_string("compatible", "arm,cortex-a57")?;
             fdt.property_string("device_type", "cpu")?;
             fdt.property_string("enable-method", "psci")?;
-            fdt.property_array_u32("reg", &[0, cpu_id as u32])?;
+            fdt.property_array_u32("reg", &[0, cpu_id])?;
             fdt.end_node(cpu_node)?;
         }
     }

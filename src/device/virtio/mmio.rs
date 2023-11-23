@@ -360,7 +360,7 @@ impl VirtioMmio {
         if idx >= inner.vq.len() {
             return Err(());
         }
-        return Ok(inner.vq[idx].clone());
+        Ok(inner.vq[idx].clone())
     }
 
     pub fn id(&self) -> usize {
@@ -375,7 +375,7 @@ impl VirtioMmio {
         }
         let vq = inner.vq[idx].clone();
         drop(inner);
-        return vq.call_notify_handler(self.clone());
+        vq.call_notify_handler(self.clone())
     }
 
     // use for migration restore
@@ -532,7 +532,6 @@ fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: u
             }
             _ => {
                 error!("virtio_mmio_prologue_access: wrong reg write 0x{:x}", emu_ctx.address);
-                return;
             }
         }
     }
@@ -794,7 +793,7 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
     //     println!("### emu_virtio_mmio_handler offset {:x} ###", offset);
     // }
     if offset == VIRTIO_MMIO_QUEUE_NOTIFY && write {
-        mmio.set_irt_stat(VIRTIO_MMIO_INT_VRING as u32);
+        mmio.set_irt_stat(VIRTIO_MMIO_INT_VRING);
         // let q_sel = mmio.q_sel();
         // if q_sel as usize != current_cpu().get_gpr(emu_ctx.reg) {
         // println!("{} {}", q_sel as usize, current_cpu().get_gpr(emu_ctx.reg));
@@ -814,15 +813,15 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
         let val = mmio.irt_stat();
         mmio.set_irt_stat(val & !(current_cpu().get_gpr(idx) as u32));
         mmio.set_irt_ack(current_cpu().get_gpr(idx) as u32);
-    } else if (VIRTIO_MMIO_MAGIC_VALUE <= offset && offset <= VIRTIO_MMIO_GUEST_FEATURES_SEL)
+    } else if (VIRTIO_MMIO_MAGIC_VALUE..=VIRTIO_MMIO_GUEST_FEATURES_SEL).contains(&offset)
         || offset == VIRTIO_MMIO_STATUS
     {
         // println!("in virtio_mmio_prologue_access");
         virtio_mmio_prologue_access(mmio, emu_ctx, offset, write);
-    } else if VIRTIO_MMIO_QUEUE_SEL <= offset && offset <= VIRTIO_MMIO_QUEUE_USED_HIGH {
+    } else if (VIRTIO_MMIO_QUEUE_SEL..=VIRTIO_MMIO_QUEUE_USED_HIGH).contains(&offset) {
         // println!("in virtio_mmio_queue_access");
         virtio_mmio_queue_access(mmio, emu_ctx, offset, write);
-    } else if VIRTIO_MMIO_CONFIG_GENERATION <= offset && offset <= VIRTIO_MMIO_REGS_END {
+    } else if (VIRTIO_MMIO_CONFIG_GENERATION..=VIRTIO_MMIO_REGS_END).contains(&offset) {
         // println!("in virtio_mmio_cfg_access");
         virtio_mmio_cfg_access(mmio, emu_ctx, offset, write);
     } else {
@@ -834,5 +833,5 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
         );
         return false;
     }
-    return true;
+    true
 }

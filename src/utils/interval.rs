@@ -76,7 +76,7 @@ impl Iterator for IntervalIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut last = MaybeUninit::<usize>::uninit();
-        while let Some((pos, delta)) = self.inner.next() {
+        for (pos, delta) in self.inner.by_ref() {
             let old = self.sum;
             self.sum += delta;
             if old <= 0 && self.sum > 0 {

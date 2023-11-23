@@ -412,10 +412,8 @@ impl SmmuV2 {
 
         if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_S2TS_BIT == 0 {
             panic!("smmuv2 does not support 2nd stage translation");
-        } else {
-            if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_NTS_BIT == 0 {
-                panic!("smmuv2 does not support Nested Translation (Stage 1 followed by stage 2 translation)");
-            }
+        } else if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_NTS_BIT == 0 {
+            panic!("smmuv2 does not support Nested Translation (Stage 1 followed by stage 2 translation)");
         }
 
         if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_SMS_BIT == 0 {
@@ -612,7 +610,7 @@ impl SmmuV2 {
             root_pt
         );
         let mut sctlr = self.context_bank[context_id].SCTLR.get() as usize;
-        sctlr = (sctlr) & (0xF << 28 | 0x1 << 20 | 0xF << 9 | 0x1 << 11);
+        sctlr &= 0xF << 28 | 0x1 << 20 | 0xF << 9 | 0x1 << 11;
         sctlr |= SMMUV2_SCTLR_CFRE | SMMUV2_SCTLR_CFIE | SMMUV2_SCTLR_M;
         self.context_bank[context_id].SCTLR.set(sctlr as u32);
     }
@@ -711,7 +709,7 @@ pub fn emu_smmu_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
             info!(
                 "emu_smmu_handler: vm {} is not allowed to access context[{}]",
                 active_vm_id(),
-                (address - smmu_v2.context_bank[0].base_addr as usize) / 0x10000,
+                (address - smmu_v2.context_bank[0].base_addr) / 0x10000,
             );
         }
     }

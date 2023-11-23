@@ -9,7 +9,7 @@ pub use meta::*;
 
 // TODO: dispatch via a derive macro and link-time symbols
 fn dispatch(vm: &Vm, dev_id: usize, arg: &str) -> Result<MetaDev> {
-    let p = arg.find(' ').unwrap_or_else(|| arg.len());
+    let p = arg.find(' ').unwrap_or(arg.len());
     Ok(Box::new(match &arg[..p] {
         "rk_cru" => rk_cru::RockchipGuestCru::new(vm, dev_id, arg),
         _ => {

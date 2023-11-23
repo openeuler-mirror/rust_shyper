@@ -8,8 +8,6 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use core::arch::global_asm;
-
 extern "C" {
     pub fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8;
     pub fn memcpy(s1: *const u8, s2: *const u8, n: usize) -> *mut u8;

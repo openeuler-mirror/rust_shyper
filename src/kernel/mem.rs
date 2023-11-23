@@ -48,7 +48,7 @@ pub fn mem_heap_region_init() {
 
     let base = round_up(_image_end as usize, PAGE_SIZE);
     let size = round_up(
-        PLAT_DESC.mem_desc.regions[0].size as usize - (base - PLAT_DESC.mem_desc.base as usize),
+        PLAT_DESC.mem_desc.regions[0].size - (base - PLAT_DESC.mem_desc.base),
         PAGE_SIZE,
     ) / PAGE_SIZE;
 

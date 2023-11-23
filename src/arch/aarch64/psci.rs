@@ -82,13 +82,12 @@ pub fn power_arch_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
 
     let cpu_idx = Platform::mpidr2cpuid(mpidr);
     let mut cpu_if_list = CPU_IF_LIST.lock();
-    if let Some(cpu_if) = cpu_if_list.get_mut(cpu_idx as usize) {
+    if let Some(cpu_if) = cpu_if_list.get_mut(cpu_idx) {
         cpu_if.state_for_start = CpuState::CpuIdle;
     }
     drop(cpu_if_list);
 
-    let r = smc_call(PSCI_CPU_ON_64, mpidr, entry, ctx).0;
-    r
+    smc_call(PSCI_CPU_ON_64, mpidr, entry, ctx).0
 }
 
 pub fn power_arch_cpu_shutdown() {
@@ -505,7 +504,7 @@ pub fn psci_vm_maincpu_on(vmpidr: usize, entry: usize, ctx: usize, vm_id: usize)
         }
     }
 
-    return r;
+    r
 }
 
 #[cfg(feature = "secondary_start")]

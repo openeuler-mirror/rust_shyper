@@ -22,18 +22,18 @@ pub fn iommu_init() {
 
 pub fn iommmu_vm_init(vm: Vm) -> bool {
     if cfg!(feature = "tx2") {
-        return smmu_vm_init(vm);
+        smmu_vm_init(vm)
     } else {
         warn!("Platform not support IOMMU");
-        return false;
+        false
     }
 }
 
 pub fn iommu_add_device(vm: Vm, stream_id: usize) -> bool {
     if cfg!(feature = "tx2") {
-        return smmu_add_device(vm.iommu_ctx_id(), stream_id);
+        smmu_add_device(vm.iommu_ctx_id(), stream_id)
     } else {
         warn!("Platform not support IOMMU");
-        return false;
+        false
     }
 }

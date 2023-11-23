@@ -96,8 +96,8 @@ impl ConsoleDesc {
         if trace() && start_addr + offset < 0x1000 {
             debug!("value addr is {}", start_addr + offset);
         }
-        let value = unsafe { *((start_addr + offset) as *const u32) };
-        return value;
+
+        unsafe { *((start_addr + offset) as *const u32) }
     }
 
     pub fn target_console(&self) -> (u16, u64) {

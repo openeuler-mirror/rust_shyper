@@ -40,9 +40,9 @@ use crate::error::Result;
 use fdt::binding::*;
 
 #[cfg(feature = "ramdisk")]
-pub static CPIO_RAMDISK: &'static [u8] = include_bytes!("../../image/net_rootfs.cpio");
+pub static CPIO_RAMDISK: &[u8] = include_bytes!("../../image/net_rootfs.cpio");
 #[cfg(not(feature = "ramdisk"))]
-pub static CPIO_RAMDISK: &'static [u8] = &[];
+pub static CPIO_RAMDISK: &[u8] = &[];
 
 fn vmm_init_memory(vm: Vm) -> bool {
     let result = mem_page_alloc();
@@ -220,7 +220,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                 let src = SYSTEM_FDT.get().unwrap();
                 let len = src.len();
                 let dst = core::slice::from_raw_parts_mut((vm.pa_start(0) + offset) as *mut u8, len);
-                dst.clone_from_slice(&src);
+                dst.clone_from_slice(src);
                 vmm_setup_fdt(vm.clone());
             }
         } else {
@@ -494,7 +494,7 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             #[cfg(feature = "rk3588")]
             fdt_set_stdout_path(dtb, "/serial@feba0000\0".as_ptr());
 
-            if config.emulated_device_list().len() > 0 {
+            if !config.emulated_device_list().is_empty() {
                 for emu_cfg in config.emulated_device_list() {
                     match emu_cfg.emu_type {
                         EmuDeviceTGicd | EmuDeviceTGPPT => {

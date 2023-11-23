@@ -168,7 +168,7 @@ pub fn ipi_irq_handler() {
     let mut msg: Option<IpiMessage> = cpu_if_list[cpu_id].pop();
     drop(cpu_if_list);
 
-    while !msg.is_none() {
+    while msg.is_some() {
         let ipi_msg = msg.unwrap();
         let ipi_type = ipi_msg.ipi_type as usize;
 

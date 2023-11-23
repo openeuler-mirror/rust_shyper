@@ -36,7 +36,7 @@ impl fmt::Display for Aarch64ContextFrame {
         for i in 0..31 {
             write!(f, "x{:02}: {:016x}   ", i, self.gpr[i])?;
             if (i + 1) % 2 == 0 {
-                write!(f, "\n")?;
+                writeln!(f)?;
             }
         }
         writeln!(f, "spsr:{:016x}", self.spsr)?;
@@ -61,7 +61,7 @@ impl crate::arch::ContextFrameTrait for Aarch64ContextFrame {
                 + SPSR_EL1::F::Masked
                 + SPSR_EL1::A::Masked
                 + SPSR_EL1::D::Masked)
-                .value as u64,
+                .value,
             elr: pc as u64,
             sp: sp as u64,
         };
@@ -107,7 +107,7 @@ impl Aarch64ContextFrame {
                 + SPSR_EL1::F::Masked
                 + SPSR_EL1::A::Masked
                 + SPSR_EL1::D::Masked)
-                .value as u64,
+                .value,
             elr: 0,
             sp: 0,
         }

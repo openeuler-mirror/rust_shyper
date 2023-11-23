@@ -254,7 +254,7 @@ impl AsyncTask {
         let waker = Arc::new(self.clone()).into();
         let mut context = Context::from_waker(&waker);
         let _ = self.task.lock().as_mut().poll(&mut context);
-        return false;
+        false
     }
 
     pub fn set_state(&self, state: AsyncTaskState) {

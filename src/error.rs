@@ -57,9 +57,9 @@ impl From<ErrorKind> for Error {
     }
 }
 
-impl<T> Into<Result<T>> for ErrorKind {
-    fn into(self) -> Result<T> {
-        Err(self.into())
+impl<T> From<ErrorKind> for Result<T> {
+    fn from(val: ErrorKind) -> Self {
+        Err(val.into())
     }
 }
 

@@ -150,18 +150,16 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
                 if target_cpu_id == cfg_master && target_cpu_id == current_cpu().id {
                     current_cpu().vcpu_array.append_vcpu(vcpu);
                 }
-            } else {
-                if target_cpu_id != current_cpu().id {
-                    let m = IpiVmmMsg {
-                        vmid: vm_id,
-                        event: VmmEvent::VmmAssignCpu,
-                    };
-                    if !ipi_send_msg(target_cpu_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
-                        error!("vmm_set_up_cpu: failed to send ipi to Core {}", target_cpu_id);
-                    }
-                } else {
-                    vmm_cpu_assign_vcpu(vm_id);
+            } else if target_cpu_id != current_cpu().id {
+                let m = IpiVmmMsg {
+                    vmid: vm_id,
+                    event: VmmEvent::VmmAssignCpu,
+                };
+                if !ipi_send_msg(target_cpu_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
+                    error!("vmm_set_up_cpu: failed to send ipi to Core {}", target_cpu_id);
                 }
+            } else {
+                vmm_cpu_assign_vcpu(vm_id);
             }
         }
         cpu_allocate_bitmap >>= 1;
@@ -467,7 +465,6 @@ pub fn vmm_ipi_handler(msg: &IpiMessage) {
         },
         _ => {
             error!("vmm_ipi_handler: illegal ipi type");
-            return;
         }
     }
 }
