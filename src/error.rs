@@ -3,6 +3,7 @@ use core::error::Error as CoreError;
 use core::result::Result as CoreResult;
 use alloc::boxed::Box;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ErrorKind {
     Library,

@@ -210,18 +210,14 @@ pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
             EmuDeviceType::EmuDeviceTVirtioBlk
             | EmuDeviceType::EmuDeviceTVirtioNet
             | EmuDeviceType::EmuDeviceTVirtioConsole => {
-                info!(
-                    "virtio fdt node init {} {:x}",
-                    emu_cfg.name.as_ref().unwrap(),
-                    emu_cfg.base_ipa
-                );
-                create_virtio_node(&mut fdt, &emu_cfg.name.unwrap(), emu_cfg.irq_id, emu_cfg.base_ipa)?;
+                info!("virtio fdt node init {} {:x}", emu_cfg.name, emu_cfg.base_ipa);
+                create_virtio_node(&mut fdt, &emu_cfg.name, emu_cfg.irq_id, emu_cfg.base_ipa)?;
             }
             EmuDeviceType::EmuDeviceTShyper => {
                 info!("shyper fdt node init {:x}", emu_cfg.base_ipa);
                 create_shyper_node(
                     &mut fdt,
-                    &emu_cfg.name.unwrap(),
+                    &emu_cfg.name,
                     emu_cfg.irq_id,
                     emu_cfg.base_ipa,
                     emu_cfg.length,
@@ -328,7 +324,7 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
     Ok(())
 }
 
-fn create_serial_node(fdt: &mut FdtWriter, devs_config: &Vec<VmDtbDevConfig>) -> FdtWriterResult<()> {
+fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> FdtWriterResult<()> {
     for dev in devs_config {
         match dev.dev_type {
             DtbDevType::DevSerial => {

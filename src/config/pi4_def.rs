@@ -33,7 +33,7 @@ pub fn mvm_config_init() {
     // vm0 emu
     let emu_dev_config = vec![
         VmEmulatedDeviceConfig {
-            name: Some(String::from("interrupt-controller@fff841000")),
+            name: String::from("interrupt-controller@fff841000"),
             base_ipa: 0xFFF841000,
             length: 0x1000,
             irq_id: 0,
@@ -42,7 +42,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_net@fa000800")),
+            name: String::from("virtio_net@fa000800"),
             base_ipa: 0xfa000800,
             length: 0x400,
             irq_id: 32 + 0x17,
@@ -51,7 +51,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@fa000c00")),
+            name: String::from("virtio_console@fa000c00"),
             base_ipa: 0xfa000c00,
             length: 0x1000,
             irq_id: 32 + 0x20,
@@ -60,7 +60,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@fa002000")),
+            name: String::from("virtio_console@fa002000"),
             base_ipa: 0xfa002000,
             length: 0x1000,
             irq_id: 32 + 0x18,
@@ -69,7 +69,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("vm_service")),
+            name: String::from("vm_service"),
             base_ipa: 0,
             length: 0,
             irq_id: 32 + 0x10,
@@ -171,7 +171,7 @@ pub fn mvm_config_init() {
     let mvm_config_entry = VmConfigEntry {
         id: 0,
         // name: Some("privileged"),
-        name: Some(String::from("Raspi4")),
+        name: String::from("Raspi4"),
         os_type: VmType::VmTOs,
         cmdline:
         // String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/nvme0n1p2 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),

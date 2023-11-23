@@ -36,7 +36,7 @@ pub fn emu_meta_handler(dev_id: usize, ctx: &EmuContext) -> bool {
 }
 
 pub fn register(dev_id: usize, vm: &Vm, cfg: &VmEmulatedDeviceConfig) -> Result<()> {
-    let dev = dispatch(vm, dev_id, cfg.name.as_ref().ok_or(ErrorKind::InvalidParam)?)?;
+    let dev = dispatch(vm, dev_id, &cfg.name)?;
     let mut devs = META_DEVICES.write();
     if devs.contains_key(&dev_id) {
         return ErrorKind::AlreadyExists.into();

@@ -11,6 +11,7 @@
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ffi::CStr;
 
 use spin::Mutex;
 
@@ -48,7 +49,7 @@ impl DtbDevType {
 
 #[derive(Clone)]
 pub struct VmEmulatedDeviceConfig {
-    pub name: Option<String>,
+    pub name: String,
     pub base_ipa: usize,
     pub length: usize,
     pub irq_id: usize,
@@ -132,7 +133,7 @@ impl VmMemoryConfig {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct VmImageConfig {
     pub kernel_img_name: Option<&'static str>,
     pub kernel_load_ipa: usize,
@@ -146,19 +147,6 @@ pub struct VmImageConfig {
 }
 
 impl VmImageConfig {
-    pub const fn default() -> VmImageConfig {
-        VmImageConfig {
-            kernel_img_name: None,
-            kernel_load_ipa: 0,
-            kernel_load_pa: 0,
-            kernel_entry_point: 0,
-            // device_tree_filename: None,
-            device_tree_load_ipa: 0,
-            // ramdisk_filename: None,
-            ramdisk_load_ipa: 0,
-            mediated_block_index: None,
-        }
-    }
     pub fn new(kernel_load_ipa: usize, device_tree_load_ipa: usize, ramdisk_load_ipa: usize) -> VmImageConfig {
         VmImageConfig {
             kernel_img_name: None,
@@ -246,7 +234,7 @@ pub struct VmConfigEntry {
     // VM id, generate inside hypervisor.
     pub id: usize,
     // Following configs are not intended to be modified during configuration.
-    pub name: Option<String>,
+    pub name: String,
     pub os_type: VmType,
     pub cmdline: String,
     // Following config can be modified during configuration.
@@ -263,7 +251,7 @@ impl Default for VmConfigEntry {
     fn default() -> VmConfigEntry {
         VmConfigEntry {
             id: 0,
-            name: Some(String::from("unknown")),
+            name: String::from("unknown"),
             os_type: VmType::VmTBma,
             cmdline: String::from("root=/dev/vda rw audit=0"),
             image: Arc::new(Mutex::new(VmImageConfig::default())),
@@ -287,7 +275,7 @@ impl VmConfigEntry {
         ramdisk_load_ipa: usize,
     ) -> VmConfigEntry {
         VmConfigEntry {
-            name: Some(name),
+            name,
             os_type: VmType::from_usize(vm_type),
             cmdline,
             image: Arc::new(Mutex::new(VmImageConfig::new(
@@ -308,10 +296,7 @@ impl VmConfigEntry {
     }
 
     pub fn vm_name(&self) -> String {
-        match &self.name {
-            Some(name) => name.to_string(),
-            None => String::from("unknown"),
-        }
+        self.name.clone()
     }
 
     pub fn mediated_block_index(&self) -> Option<usize> {
@@ -496,7 +481,7 @@ pub struct VmConfigTable {
 }
 
 impl VmConfigTable {
-    pub const fn default() -> VmConfigTable {
+    const fn new() -> VmConfigTable {
         VmConfigTable {
             name: None,
             vm_bitmap: BitAlloc16::default(),
@@ -523,9 +508,7 @@ impl VmConfigTable {
     }
 }
 
-// lazy_static! {
-pub static DEF_VM_CONFIG_TABLE: Mutex<VmConfigTable> = Mutex::new(VmConfigTable::default());
-// }
+pub static DEF_VM_CONFIG_TABLE: Mutex<VmConfigTable> = Mutex::new(VmConfigTable::new());
 
 pub fn vm_cfg_set_config_name(name: &'static str) {
     let mut vm_config = DEF_VM_CONFIG_TABLE.lock();
@@ -583,7 +566,7 @@ pub fn vm_cfg_add_vm_entry(mut vm_cfg_entry: VmConfigEntry) -> Result<usize, ()>
                 "\nSuccessfully add {}[{}] name {:?}, currently vm_num {}",
                 if vm_id == 0 { "MVM" } else { "GVM" },
                 vm_cfg_entry.id(),
-                vm_cfg_entry.clone().name.unwrap(),
+                vm_cfg_entry.name,
                 vm_config.vm_num
             );
 
@@ -619,16 +602,8 @@ pub fn vm_cfg_remove_vm_entry(vm_id: usize) {
 /* Generate a new VM Config Entry, set basic value */
 pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
     let config_pa = vm_ipa2pa(active_vm().unwrap(), config_ipa);
-    let (
-        vm_name_ipa,
-        vm_name_length,
-        vm_type,
-        cmdline_ipa,
-        cmdline_length,
-        kernel_load_ipa,
-        device_tree_load_ipa,
-        ramdisk_load_ipa,
-    ) = unsafe { *(config_pa as *const _) };
+    let [vm_name_ipa, _vm_name_length, vm_type, cmdline_ipa, _cmdline_length, kernel_load_ipa, device_tree_load_ipa, ramdisk_load_ipa] =
+        unsafe { *(config_pa as *const _) };
     info!("\n\nStart to prepare configuration for new VM");
 
     // Copy VM name from user ipa.
@@ -637,22 +612,9 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
         error!("illegal vm_name_ipa {:x}", vm_name_ipa);
         return Err(());
     }
-    let vm_name_u8 = vec![0_u8; vm_name_length];
-    if vm_name_length > 0 {
-        memcpy_safe(
-            &vm_name_u8[0] as *const _ as *const u8,
-            vm_name_pa as *mut u8,
-            vm_name_length,
-        );
-    }
-
-    let vm_name_str = match String::from_utf8(vm_name_u8.clone()) {
-        Ok(_str) => _str,
-        Err(error) => {
-            error!("error: {:?} in parsing the vm_name {:?}", error, vm_name_u8);
-            String::from("unknown")
-        }
-    };
+    let vm_name_str = unsafe { CStr::from_ptr(vm_name_pa as *const _) }
+        .to_string_lossy()
+        .to_string();
 
     // Copy VM cmdline from user ipa.
     let cmdline_pa = vm_ipa2pa(active_vm().unwrap(), cmdline_ipa);
@@ -660,21 +622,9 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
         error!("illegal cmdline_ipa {:x}", cmdline_ipa);
         return Err(());
     }
-    let cmdline_u8 = vec![0_u8; cmdline_length];
-    if cmdline_length > 0 {
-        memcpy_safe(
-            &cmdline_u8[0] as *const _ as *const u8,
-            cmdline_pa as *mut u8,
-            cmdline_length,
-        );
-    }
-    let cmdline_str = match String::from_utf8(cmdline_u8.clone()) {
-        Ok(_str) => _str,
-        Err(error) => {
-            error!("error: {:?} in parsing the cmdline {:?}", error, cmdline_u8);
-            String::from("unknown")
-        }
-    };
+    let cmdline_str = unsafe { CStr::from_ptr(cmdline_pa as *const _) }
+        .to_string_lossy()
+        .to_string();
 
     // Generate a new VM config entry.
     let new_vm_cfg = VmConfigEntry::new(
@@ -686,7 +636,7 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
         ramdisk_load_ipa,
     );
 
-    debug!("      VM name is [{:?}]", new_vm_cfg.name.clone().unwrap());
+    debug!("      VM name is [{:?}]", new_vm_cfg.name);
     debug!("      cmdline is [{:?}]", new_vm_cfg.cmdline);
     debug!("      ramdisk is [0x{:x}]", new_vm_cfg.ramdisk_load_ipa());
     vm_cfg_add_vm_entry(new_vm_cfg)
@@ -755,15 +705,9 @@ pub fn vm_cfg_add_emu_dev(
         error!("illegal emulated device name_ipa {:x}", name_ipa);
         return Err(());
     }
-    let name_u8 = vec![0_u8; NAME_MAX_LEN];
-    memcpy_safe(&name_u8[0] as *const _ as *const u8, name_pa as *mut u8, NAME_MAX_LEN);
-    let name_str = match String::from_utf8(name_u8.clone()) {
-        Ok(str) => str,
-        Err(error) => {
-            error!("error: {:?} in parsing the emulated device name {:?}", error, name_u8);
-            String::from("unknown")
-        }
-    };
+    let name_str = unsafe { CStr::from_ptr(name_pa as *const _) }
+        .to_string_lossy()
+        .to_string();
     // Copy emu device cfg list from user ipa.
     let cfg_list_pa = vm_ipa2pa(active_vm().unwrap(), cfg_list_ipa);
     if cfg_list_pa == 0 {
@@ -786,7 +730,7 @@ pub fn vm_cfg_add_emu_dev(
         ),
         vmid,
         emu_cfg_list.len(),
-        name_str.trim_end_matches(char::from(0)),
+        name_str,
         cfg_list,
         base_ipa,
         length,
@@ -796,7 +740,7 @@ pub fn vm_cfg_add_emu_dev(
 
     let emu_dev_type = EmuDeviceType::from_usize(emu_type);
     let emu_dev_cfg = VmEmulatedDeviceConfig {
-        name: Some(name_str.trim_end_matches(char::from(0)).to_string()),
+        name: name_str,
         base_ipa,
         length,
         irq_id,
@@ -945,26 +889,10 @@ pub fn vm_cfg_add_dtb_dev(
         error!("illegal dtb_dev name ipa {:x}", name_ipa);
         return Err(());
     }
-    let dtb_dev_name_u8 = vec![0_u8; NAME_MAX_LEN];
-    memcpy_safe(
-        &dtb_dev_name_u8[0] as *const _ as *const u8,
-        name_pa as *mut u8,
-        NAME_MAX_LEN,
-    );
-    let dtb_dev_name_str = match String::from_utf8(dtb_dev_name_u8.clone()) {
-        Ok(str) => str,
-        Err(error) => {
-            error!(
-                "error: {:?} in parsing the DTB device name {:?}",
-                error, dtb_dev_name_u8
-            );
-            String::from("unknown")
-        }
-    };
-    debug!(
-        "      get dtb dev name {:?}",
-        dtb_dev_name_str.trim_end_matches(char::from(0))
-    );
+    let dtb_dev_name_str = unsafe { CStr::from_ptr(name_pa as *const _) }
+        .to_string_lossy()
+        .to_string();
+    debug!("      get dtb dev name {:?}", dtb_dev_name_str);
 
     // Copy DTB device irq list from user ipa.
     let irq_list_pa = vm_ipa2pa(active_vm().unwrap(), irq_list_ipa);
@@ -994,7 +922,7 @@ pub fn vm_cfg_add_dtb_dev(
     };
     // Get DTB device config list.
     let vm_dtb_dev = VmDtbDevConfig {
-        name: dtb_dev_name_str.trim_end_matches(char::from(0)).to_string(),
+        name: dtb_dev_name_str,
         dev_type: DtbDevType::from_usize(dev_type),
         irqs: dtb_irq_list,
         addr_region: AddrRegions {

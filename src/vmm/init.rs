@@ -505,21 +505,21 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 dtb,
                                 Platform::GICD_BASE as u64,
                                 Platform::GICC_BASE as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
+                                emu_cfg.name.as_ptr(),
                             );
                             #[cfg(feature = "pi4")]
                             let _r = fdt_setup_gic(
                                 dtb,
                                 (Platform::GICD_BASE | 0xF_0000_0000) as u64,
                                 (Platform::GICC_BASE | 0xF_0000_0000) as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
+                                emu_cfg.name.as_ptr(),
                             );
                         }
                         EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
                             #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_virtio(
                                 dtb,
-                                emu_cfg.name.unwrap().as_ptr(),
+                                emu_cfg.name.as_ptr(),
                                 emu_cfg.irq_id as u32 - 0x20,
                                 emu_cfg.base_ipa as u64,
                             );
@@ -569,7 +569,7 @@ pub fn vmm_setup_config(vm_id: usize) {
     debug!(
         "vmm_setup_config VM[{}] name {:?} current core {}",
         vm_id,
-        config.name.unwrap(),
+        config.name,
         current_cpu().id
     );
 
@@ -595,7 +595,7 @@ pub fn vmm_setup_config(vm_id: usize) {
     }
 
     add_async_used_info(vm_id);
-    info!("VM {} id {} init ok", vm.id(), vm.config().name.unwrap());
+    info!("VM {} id {} init ok", vm.id(), vm.config().name);
 }
 
 pub fn vmm_cpu_assign_vcpu(vm_id: usize) {

@@ -31,7 +31,7 @@ pub fn mvm_config_init() {
     // vm0 emu
     let emu_dev_config = vec![
         VmEmulatedDeviceConfig {
-            name: Some(String::from("vgicd")),
+            name: String::from("vgicd"),
             base_ipa: Platform::GICD_BASE,
             #[cfg(not(feature="gicv3"))]
             length: 0x1000,
@@ -44,7 +44,7 @@ pub fn mvm_config_init() {
         },
         #[cfg(feature="gicv3")]
         VmEmulatedDeviceConfig {
-            name: Some(String::from("vgicr")),
+            name: String::from("vgicr"),
             base_ipa: Platform::GICR_BASE,
             length: 0xf60000,
             irq_id: 25,
@@ -54,7 +54,7 @@ pub fn mvm_config_init() {
         },
         #[cfg(feature="gicv3")]
         VmEmulatedDeviceConfig {
-            name: Some(String::from("icc_sre")),
+            name: String::from("icc_sre"),
             base_ipa: Platform::ICC_SRE_ADDR,
             length: 2,
             irq_id: 0,
@@ -64,7 +64,7 @@ pub fn mvm_config_init() {
         },
         #[cfg(feature="gicv3")]
         VmEmulatedDeviceConfig {
-            name: Some(String::from("icc_sgir")),
+            name: String::from("icc_sgir"),
             base_ipa: Platform::ICC_SGIR_ADDR,
             length: 2,
             irq_id: 0,
@@ -73,7 +73,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         // VmEmulatedDeviceConfig {
-        //     name: Some(String::from("virtio-blk0")),
+        //     name: String::from("virtio-blk0"),
         //     base_ipa: 0xa000000,
         //     length: 0x1000,
         //     irq_id: 32 + 0x10,
@@ -82,7 +82,7 @@ pub fn mvm_config_init() {
         //     mediated: false,
         // },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio-nic0")),
+            name: String::from("virtio-nic0"),
             base_ipa: 0xa001000,
             length: 0x1000,
             irq_id: 32 + 0x11,
@@ -91,7 +91,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("shyper")),
+            name: String::from("shyper"),
             base_ipa: 0,
             length: 0,
             irq_id: HVC_IRQ,
@@ -115,7 +115,7 @@ pub fn mvm_config_init() {
     pt_dev_config.irqs = vec![33,27, 72, 73,74,75,76,77,78,79];
     pt_dev_config.streams_ids = vec![];
     // pt_dev_config.push(VmPassthroughDeviceConfig {
-    //     name: Some(String::from("serial0")),
+    //     name: String::from("serial0"),
     //     base_pa: UART_1_ADDR,
     //     base_ipa: 0x9000000,
     //     length: 0x1000,
@@ -123,7 +123,7 @@ pub fn mvm_config_init() {
     //     irq_list: vec![UART_1_INT, 27],
     // });
     // pt_dev_config.push(VmPassthroughDeviceConfig {
-    //     name: Some(String::from("gicc")),
+    //     name: String::from("gicc"),
     //     base_pa: PLATFORM_GICV_BASE,
     //     base_ipa: 0x8010000,
     //     length: 0x2000,
@@ -131,7 +131,7 @@ pub fn mvm_config_init() {
     //     irq_list: Vec::new(),
     // });
     // pt_dev_config.push(VmPassthroughDeviceConfig {
-    //     name: Some(String::from("nic")),
+    //     name: String::from("nic"),
     //     base_pa: 0x0a003000,
     //     base_ipa: 0x0a003000,
     //     length: 0x1000,
@@ -149,7 +149,7 @@ pub fn mvm_config_init() {
     // vm0 config
     let mvm_config_entry =VmConfigEntry {
         id: 0,
-        name: Some(String::from("supervisor")),
+        name: String::from("supervisor"),
         os_type: VmType::VmTOs,
         cmdline: String::from("earlycon console=ttyAMA0 root=/dev/vda rw audit=0 default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),
         image: Arc::new(Mutex::new(VmImageConfig {
@@ -185,7 +185,7 @@ pub fn mvm_config_init() {
 //     // vm1 emu
 //     let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
 //     emu_dev_config.push(VmEmulatedDeviceConfig {
-//         name: Some(String::from("vgicd")),
+//         name: String::from("vgicd"),
 //         base_ipa: 0x8000000,
 //         length: 0x1000,
 //         irq_id: 0,
@@ -194,7 +194,7 @@ pub fn mvm_config_init() {
 //         mediated: false,
 //     });
 //     emu_dev_config.push(VmEmulatedDeviceConfig {
-//         name: Some(String::from("virtio-blk1")),
+//         name: String::from("virtio-blk1"),
 //         base_ipa: 0xa000000,
 //         length: 0x1000,
 //         irq_id: 32 + 0x10,
@@ -206,7 +206,7 @@ pub fn mvm_config_init() {
 //     // vm1 passthrough
 //     let mut pt_dev_config: Vec<VmPassthroughDeviceConfig> = Vec::new();
 //     // pt_dev_config.push(VmPassthroughDeviceConfig {
-//     //     name: Some(String::from("serial1")),
+//     //     name: String::from("serial1"),
 //     //     base_pa: UART_2_ADDR,
 //     //     base_ipa: 0x9000000,
 //     //     length: 0x1000,
@@ -214,7 +214,7 @@ pub fn mvm_config_init() {
 //     //     irq_list: vec![UART_2_INT, 27],
 //     // });
 //     // pt_dev_config.push(VmPassthroughDeviceConfig {
-//     //     name: Some(String::from("gicc")),
+//     //     name: String::from("gicc"),
 //     //     base_pa: PLATFORM_GICV_BASE,
 //     //     base_ipa: 0x8010000,
 //     //     length: 0x2000,
@@ -231,7 +231,7 @@ pub fn mvm_config_init() {
 //     // vm1 config
 //     vm_config.entries.push(Arc::new(VmConfigEntry {
 //         id: 1,
-//         name: Some(String::from("guest-os-0")),
+//         name: String::from("guest-os-0"),
 //         os_type: VmType::VmTOs,
 //         memory: VmMemoryConfig {
 //             num: 1,
@@ -258,7 +258,7 @@ pub fn mvm_config_init() {
 //     // vm2 BMA emu
 //     let mut emu_dev_config: Vec<VmEmulatedDeviceConfig> = Vec::new();
 //     emu_dev_config.push(VmEmulatedDeviceConfig {
-//         name: Some(String::from("vgicd")),
+//         name: String::from("vgicd"),
 //         base_ipa: 0x8000000,
 //         length: 0x1000,
 //         irq_id: 0,
@@ -267,7 +267,7 @@ pub fn mvm_config_init() {
 //         mediated: false,
 //     });
 //     emu_dev_config.push(VmEmulatedDeviceConfig {
-//         name: Some(String::from("virtio-blk0")),
+//         name: String::from("virtio-blk0"),
 //         base_ipa: 0xa000000,
 //         length: 0x1000,
 //         irq_id: 32 + 0x10,
@@ -279,7 +279,7 @@ pub fn mvm_config_init() {
 //     // vm2 BMA passthrough
 //     let mut pt_dev_config: Vec<VmPassthroughDeviceConfig> = Vec::new();
 //     pt_dev_config.push(VmPassthroughDeviceConfig {
-//         name: Some(String::from("serial1")),
+//         name: String::from("serial1"),
 //         base_pa: UART_2_ADDR,
 //         base_ipa: 0x9000000,
 //         length: 0x1000,
@@ -287,7 +287,7 @@ pub fn mvm_config_init() {
 //         irq_list: vec![27],
 //     });
 //     pt_dev_config.push(VmPassthroughDeviceConfig {
-//         name: Some(String::from("gicc")),
+//         name: String::from("gicc"),
 //         base_pa: PLATFORM_GICV_BASE,
 //         base_ipa: 0x8010000,
 //         length: 0x2000,
@@ -305,7 +305,7 @@ pub fn mvm_config_init() {
 //     // vm2 BMA config
 //     vm_config.entries.push(Arc::new(VmConfigEntry {
 //         id: 2,
-//         name: Some(String::from("guest-bma-0")),
+//         name: String::from("guest-bma-0"),
 //         os_type: VmType::VmTBma,
 //         memory: VmMemoryConfig {
 //             num: 1,

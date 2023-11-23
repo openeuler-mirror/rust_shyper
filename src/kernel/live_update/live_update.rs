@@ -896,7 +896,7 @@ fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
         let src_emu_dev_confg_list = entry.vm_emu_dev_confg.lock();
         for emu_config in &src_emu_dev_confg_list.emu_dev_list {
             vm_emu_dev_confg.emu_dev_list.push(VmEmulatedDeviceConfig {
-                name: Some(String::from(emu_config.name.as_ref().unwrap())),
+                name: emu_config.name.clone(),
                 base_ipa: emu_config.base_ipa,
                 length: emu_config.length,
                 irq_id: emu_config.irq_id,
@@ -955,7 +955,7 @@ fn vm_config_table_update(src_vm_config_table: &Mutex<VmConfigTable>) {
         let fdt_overlay = entry.fdt_overlay.lock();
         vm_config_table.entries.push(VmConfigEntry {
             id: entry.id,
-            name: Some(String::from(entry.name.as_ref().unwrap())),
+            name: entry.name.clone(),
             os_type: entry.os_type,
             cmdline: String::from(&entry.cmdline),
             image: Arc::new(Mutex::new(image)),

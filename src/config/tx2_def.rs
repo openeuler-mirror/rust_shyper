@@ -33,7 +33,7 @@ pub fn mvm_config_init() {
     // vm0 emu
     let emu_dev_config = vec![
         VmEmulatedDeviceConfig {
-            name: Some(String::from("interrupt-controller@3881000")),
+            name: String::from("interrupt-controller@3881000"),
             base_ipa: Platform::GICD_BASE,
             length: 0x1000,
             irq_id: 25,
@@ -42,7 +42,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_net@a001000")),
+            name: String::from("virtio_net@a001000"),
             base_ipa: 0xa001000,
             length: 0x1000,
             irq_id: 32 + 0x100,
@@ -51,7 +51,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@a002000")),
+            name: String::from("virtio_console@a002000"),
             base_ipa: 0xa002000,
             length: 0x1000,
             irq_id: 32 + 0x101,
@@ -60,7 +60,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@a003000")),
+            name: String::from("virtio_console@a003000"),
             base_ipa: 0xa003000,
             length: 0x1000,
             irq_id: 32 + 0x102,
@@ -69,7 +69,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("iommu")),
+            name: String::from("iommu"),
             base_ipa: 0x12000000,
             length: 0x1000000,
             irq_id: 0,
@@ -78,7 +78,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("vm_service")),
+            name: String::from("vm_service"),
             base_ipa: 0,
             length: 0,
             irq_id: HVC_IRQ,
@@ -232,7 +232,7 @@ pub fn mvm_config_init() {
     // vm0 config
     let mvm_config_entry = VmConfigEntry {
         id: 0,
-        name: Some(String::from("privileged")),
+        name: String::from("privileged"),
         os_type: VmType::VmTOs,
         cmdline:
         // String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/nvme0n1p1 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),

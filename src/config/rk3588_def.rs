@@ -82,7 +82,7 @@ pub fn mvm_config_init() {
     // vm0 emu
     let emu_dev_config = vec![
         VmEmulatedDeviceConfig {
-            name: Some(String::from("interrupt-controller@fe600000")),
+            name: String::from("interrupt-controller@fe600000"),
             base_ipa: Platform::GICD_BASE,
             length: 0x10000,
             irq_id: 25,
@@ -91,7 +91,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("GICR@0xfe680000")),
+            name: String::from("GICR@0xfe680000"),
             base_ipa: Platform::GICR_BASE,
             length: 0x100000,
             irq_id: 25,
@@ -100,7 +100,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("ICC_SRE_ADDR")),
+            name: String::from("ICC_SRE_ADDR"),
             base_ipa: Platform::ICC_SRE_ADDR,
             length: 0,
             irq_id: 25,
@@ -109,7 +109,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("ICC_SGIR_ADDR")),
+            name: String::from("ICC_SGIR_ADDR"),
             base_ipa: Platform::ICC_SGIR_ADDR,
             length: 0 ,
             irq_id: 25,
@@ -118,7 +118,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         // VmEmulatedDeviceConfig {
-        //     name: Some(String::from("virtio-blk@feb60000")),
+        //     name: String::from("virtio-blk@feb60000"),
         //     base_ipa: 0xfeb60000,
         //     length: 0x1000,
         //     irq_id: 48,
@@ -127,7 +127,7 @@ pub fn mvm_config_init() {
         //     mediated: false,
         // },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_net@f0000000")),
+            name: String::from("virtio_net@f0000000"),
             base_ipa: 0xf000_0000,
             length: 0x1000,
             irq_id: 45,
@@ -136,7 +136,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@f0001000")),
+            name: String::from("virtio_console@f0001000"),
             base_ipa: 0xf000_1000,
             length: 0x1000,
             irq_id: 46,
@@ -145,7 +145,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@f0002000")),
+            name: String::from("virtio_console@f0002000"),
             base_ipa: 0xf000_2000,
             length: 0x1000,
             irq_id: 47,
@@ -154,7 +154,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         // VmEmulatedDeviceConfig {
-        //     name: Some(String::from("iommu")),
+        //     name: String::from("iommu"),
         //     base_ipa: 0x12000000,
         //     length: 0x1000000,
         //     irq_id: 0,
@@ -163,7 +163,7 @@ pub fn mvm_config_init() {
         //     mediated: false,
         // },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("vm_service")),
+            name: String::from("vm_service"),
             base_ipa: 0,
             length: 0,
             irq_id: HVC_IRQ,
@@ -324,7 +324,7 @@ pub fn mvm_config_init() {
     // vm0 config
     let mvm_config_entry = VmConfigEntry {
         id: 0,
-        name: Some(String::from("RK3588")),
+        name: String::from("RK3588"),
         os_type: VmType::VmTOs,
         cmdline:
         //String::from("storagemedia=emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 androidboot.verifiedbootstate=orange ro rootwait earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0"),
