@@ -89,7 +89,7 @@ qemu:
 	$(MAKE) build BOARD=qemu TEXT_START=0x40080000 VM0_IMAGE_PATH="./image/Image_vanilla"
 
 rk3588:
-	$(MAKE) upload BOARD=rk3588 TEXT_START=0x00480000 VM0_IMAGE_PATH="./image/L4T"
+	$(MAKE) upload BOARD=rk3588 TEXT_START=0x00480000 VM0_IMAGE_PATH="./image/Image-5.10.160"
 
 tx2:
 	$(MAKE) upload BOARD=tx2 TEXT_START=0x83000000 VM0_IMAGE_PATH="./image/L4T"

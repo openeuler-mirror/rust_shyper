@@ -20,5 +20,4 @@ build/
 /kvm
 /rk3588_devcie_tree
 /vm1*
-/image/Image*
 *.patch
