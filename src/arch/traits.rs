@@ -30,3 +30,8 @@ pub trait ArchPageTableEntryTrait {
     fn set_entry(&self, index: usize, value: Self);
     fn make_table(frame_pa: usize) -> Self;
 }
+
+pub trait InterruptContextTriat: Default {
+    fn save_state(&mut self);
+    fn restore_state(&self);
+}

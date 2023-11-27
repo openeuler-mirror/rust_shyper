@@ -564,8 +564,8 @@ pub struct GicState {
     pub ctlr: u32,
 }
 
-impl GicState {
-    pub fn default() -> GicState {
+impl Default for GicState {
+    fn default() -> Self {
         GicState {
             hcr: 0,
             eisr: [0; GIC_LIST_REGS_NUM / 32],
@@ -575,8 +575,10 @@ impl GicState {
             ctlr: 0,
         }
     }
+}
 
-    pub fn save_state(&mut self) {
+impl crate::arch::InterruptContextTriat for GicState {
+    fn save_state(&mut self) {
         self.hcr = GICH.hcr();
         self.apr = GICH.APR.get();
         for i in 0..(GIC_LIST_REGS_NUM / 32) {
@@ -599,7 +601,7 @@ impl GicState {
         self.ctlr = GICC.CTLR.get();
     }
 
-    pub fn restore_state(&self) {
+    fn restore_state(&self) {
         // println!("before restore");
         // println!("GICH hcr {:x}", GICH.hcr());
         // println!("GICC ctlr {:x}", GICC.CTLR.get());

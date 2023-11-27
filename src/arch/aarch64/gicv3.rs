@@ -790,12 +790,12 @@ pub struct GicCpuInterface;
 
 impl core::fmt::Display for GicCpuInterface {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "ICC_SRE_EL2:{:016x}", mrsr!(ICC_SRE_EL2, "x"))?;
-        writeln!(f, "ICC_PMR_EL1:{:016x}", mrsr!(ICC_PMR_EL1, "x"))?;
-        writeln!(f, "ICC_BPR1_EL1:{:016x}", mrsr!(ICC_BPR1_EL1, "x"))?;
-        writeln!(f, "ICC_CTLR_EL1:{:016x}", mrsr!(ICC_CTLR_EL1, "x"))?;
-        writeln!(f, "ICH_HCR_EL2:{:016x}", mrsr!(ICH_HCR_EL2, "x"))?;
-        writeln!(f, "ICC_IGRPEN1_EL1:{:016x}", mrsr!(ICC_IGRPEN1_EL1, "x"))?;
+        writeln!(f, "ICC_SRE_EL2:{:016x}", mrs!(ICC_SRE_EL2, "x"))?;
+        writeln!(f, "ICC_PMR_EL1:{:016x}", mrs!(ICC_PMR_EL1, "x"))?;
+        writeln!(f, "ICC_BPR1_EL1:{:016x}", mrs!(ICC_BPR1_EL1, "x"))?;
+        writeln!(f, "ICC_CTLR_EL1:{:016x}", mrs!(ICC_CTLR_EL1, "x"))?;
+        writeln!(f, "ICH_HCR_EL2:{:016x}", mrs!(ICH_HCR_EL2, "x"))?;
+        writeln!(f, "ICC_IGRPEN1_EL1:{:016x}", mrs!(ICC_IGRPEN1_EL1, "x"))?;
         Ok(())
     }
 }
@@ -812,11 +812,11 @@ impl GicCpuInterface {
             GICH.set_lr(i, 0);
         }
 
-        let pmr = mrsr!(ICC_PMR_EL1, "x");
+        let pmr = mrs!(ICC_PMR_EL1, "x");
         msr!(ICC_PMR_EL1, 0xff, "x");
         msr!(ICC_BPR1_EL1, 0x0, "x");
         msr!(ICC_CTLR_EL1, ICC_CTLR_EOIMODE_BIT, "x");
-        let hcr = mrsr!(ICH_HCR_EL2);
+        let hcr = mrs!(ICH_HCR_EL2) as usize;
         msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
         msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
 
@@ -942,10 +942,10 @@ pub struct GicState {
     sre_el1: u32,
 }
 
-impl GicState {
-    pub fn default() -> GicState {
-        let nr_prio = (((mrsr!(ICH_VTR_EL2) >> GICH_VTR_PRIBITS_OFF) & ((1 << GICH_VTR_PRIBITS_LEN) - 1)) + 1) as u32;
-        let mut r = GicState {
+impl Default for GicState {
+    fn default() -> Self {
+        let nr_prio = (((mrs!(ICH_VTR_EL2) >> GICH_VTR_PRIBITS_OFF) & ((1 << GICH_VTR_PRIBITS_LEN) - 1)) + 1) as u32;
+        let r: GicState = GicState {
             ctlr: GICC_CTLR_EOIMODE_BIT as u32,
             igrpen1: GICC_IGRPEN_EL1_ENB_BIT,
             pmr: 0xff,
@@ -963,11 +963,12 @@ impl GicState {
             apr1: [0; 4],
             sre_el1: 0,
         };
-        r.save_state();
         r
     }
+}
 
-    pub fn save_state(&mut self) {
+impl crate::arch::InterruptContextTriat for GicState {
+    fn save_state(&mut self) {
         mrs!(self.hcr, ICH_HCR_EL2, "x");
         // save VMCR_EL2: save and restore the virtual machine view of the GIC state.
         mrs!(self.vmcr, ICH_VMCR_EL2, "x");
@@ -980,11 +981,11 @@ impl GicState {
         }
         // save ICC_SRE_EL1: EL1`s systregister use
         mrs!(self.sre_el1, ICC_SRE_EL1, "x");
-        let icc_sre_el2_enable = mrsr!(ICC_SRE_EL2, "x");
+        let icc_sre_el2_enable = mrs!(ICC_SRE_EL2, "x");
         msr!(ICC_SRE_EL2, icc_sre_el2_enable & !GICC_SRE_EL2_ENABLE as u32, "x");
     }
 
-    pub fn restore_state(&self) {
+    fn restore_state(&self) {
         // make EL2 can use sysrem register
         msr!(ICC_SRE_EL2, 0b1001, "x");
         // restore ICC_SRE_EL1 for EL1
@@ -1003,7 +1004,9 @@ impl GicState {
             GICH.set_lr(i, self.lr[i]);
         }
     }
+}
 
+impl GicState {
     fn save_apr2(&mut self) {
         mrs!(self.apr0[2], ICH_AP0R2_EL2, "x");
         mrs!(self.apr1[2], ICH_AP1R2_EL2, "x");
