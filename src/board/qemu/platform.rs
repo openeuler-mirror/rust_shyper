@@ -11,13 +11,12 @@
 extern crate fdt_rs;
 
 // TODO: move these core name to device
-use crate::arch::GicDesc;
-use crate::arch::SmmuDesc;
+use crate::arch::ArchDesc;
 #[cfg(feature = "gicv3")]
 use crate::arch::sysreg_enc_addr;
 use crate::board::{
-    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
-    PlatMemRegion,
+    PlatOperation, Platform, PlatCpuCoreConfig, PlatCpuConfig, PlatformConfig, PlatMemoryConfig, PlatMemRegion,
+    ClusterDesc,
 };
 use crate::board::SchedRule::RoundRobin;
 use crate::device::ARM_CORTEX_A57;
@@ -102,6 +101,7 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
                 sched: RoundRobin,
             },
         ],
+        cluster_desc: ClusterDesc { num: 1, core_num: &[4] },
     },
     mem_desc: PlatMemoryConfig {
         regions: &[
@@ -118,7 +118,7 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
         base: 0x40000000,
     },
     arch_desc: ArchDesc {
-        gic_desc: GicDesc {
+        gic_desc: crate::arch::GicDesc {
             gicd_addr: Platform::GICD_BASE,
             gicc_addr: Platform::GICC_BASE,
             gich_addr: Platform::GICH_BASE,
@@ -127,12 +127,11 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             gicr_addr: Platform::GICR_BASE,
             maintenance_int_id: 25,
         },
-        smmu_desc: SmmuDesc {
+        smmu_desc: crate::arch::SmmuDesc {
             base: 0,
             interrupt_id: 0,
             global_mask: 0,
         },
-        cluster_desc: ClusterDesc { num: 1, core_num: &[4] },
     },
 };
 

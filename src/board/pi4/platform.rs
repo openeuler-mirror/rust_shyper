@@ -8,10 +8,9 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::GicDesc;
-use crate::arch::SmmuDesc;
+use crate::arch::ArchDesc;
 use crate::board::{
-    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
+    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
     PlatMemRegion,
 };
 use crate::board::SchedRule::RoundRobin;
@@ -85,6 +84,7 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
                 sched: RoundRobin,
             },
         ],
+        cluster_desc: ClusterDesc { num: 1, core_num: &[4] },
     },
     mem_desc: PlatMemoryConfig {
         regions: &[
@@ -108,18 +108,17 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
         base: 0xf0000000,
     },
     arch_desc: ArchDesc {
-        gic_desc: GicDesc {
+        gic_desc: crate::arch::GicDesc {
             gicd_addr: Platform::GICD_BASE,
             gicc_addr: Platform::GICC_BASE,
             gich_addr: Platform::GICH_BASE,
             gicv_addr: Platform::GICV_BASE,
             maintenance_int_id: 25,
         },
-        smmu_desc: SmmuDesc {
+        smmu_desc: crate::arch::SmmuDesc {
             base: 0,
             interrupt_id: 0,
             global_mask: 0,
         },
-        cluster_desc: ClusterDesc { num: 1, core_num: &[4] },
     },
 };

@@ -8,8 +8,7 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::GicDesc;
-use crate::arch::SmmuDesc;
+use crate::arch::ArchDesc;
 
 pub const PLATFORM_CPU_NUM_MAX: usize = 8;
 pub const PLATFORM_VCPU_NUM_MAX: usize = 8;
@@ -42,12 +41,6 @@ pub struct PlatCpuCoreConfig {
 pub struct PlatCpuConfig {
     pub num: usize,
     pub core_list: &'static [PlatCpuCoreConfig],
-}
-
-#[repr(C)]
-pub struct ArchDesc {
-    pub gic_desc: GicDesc,
-    pub smmu_desc: SmmuDesc,
     pub cluster_desc: ClusterDesc,
 }
 

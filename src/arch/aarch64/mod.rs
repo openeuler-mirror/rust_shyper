@@ -62,3 +62,9 @@ mod vcpu;
 mod vgic;
 #[cfg(feature = "gicv3")]
 mod vgicv3;
+
+#[repr(C)]
+pub struct ArchDesc {
+    pub gic_desc: GicDesc,
+    pub smmu_desc: SmmuDesc,
+}

@@ -8,11 +8,10 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::GicDesc;
-use crate::arch::SmmuDesc;
+use crate::arch::ArchDesc;
 use crate::arch::sysreg_enc_addr;
 use crate::board::{
-    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, ArchDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
+    PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
     PlatMemRegion,
 };
 use crate::board::SchedRule::RoundRobin;
@@ -125,6 +124,10 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
                 sched: RoundRobin,
             },
         ],
+        cluster_desc: ClusterDesc {
+            num: 3,
+            core_num: &[4, 2, 2],
+        },
     },
     mem_desc: PlatMemoryConfig {
         regions: &[
@@ -152,7 +155,7 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
         base: 0x200000,
     },
     arch_desc: ArchDesc {
-        gic_desc: GicDesc {
+        gic_desc: crate::arch::GicDesc {
             gicd_addr: Platform::GICD_BASE,
             gicc_addr: Platform::GICC_BASE,
             gich_addr: Platform::GICH_BASE,
@@ -160,14 +163,10 @@ pub static PLAT_DESC: PlatformConfig = PlatformConfig {
             gicr_addr: Platform::GICR_BASE,
             maintenance_int_id: 25,
         },
-        smmu_desc: SmmuDesc {
+        smmu_desc: crate::arch::SmmuDesc {
             base: 0xfcb00000,
             interrupt_id: 0x17d,
             global_mask: 0, //0x200000
-        },
-        cluster_desc: ClusterDesc {
-            num: 3,
-            core_num: &[4, 2, 2],
         },
     },
 };
