@@ -17,6 +17,7 @@ pub use self::util::*;
 
 mod barrier;
 mod bitmap;
+pub mod device_ref;
 pub mod interval;
 mod print;
 mod string;

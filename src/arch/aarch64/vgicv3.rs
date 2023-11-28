@@ -1912,7 +1912,7 @@ fn vgic_broadcast(interrupt: VgicInt) -> bool {
 
 #[inline(always)]
 fn vgicr_get_id(emu_ctx: &EmuContext) -> u32 {
-    ((emu_ctx.address - PLAT_DESC.arch_desc.gic_desc.gicr_addr) / size_of::<GicRedistributorBlock>()) as u32
+    ((emu_ctx.address - PLAT_DESC.arch_desc.gic_desc.gicr_addr) / size_of::<GicRedistributor>()) as u32
 }
 
 fn vgicr_emul_ctrl_access(emu_ctx: &EmuContext) {

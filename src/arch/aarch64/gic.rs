@@ -18,7 +18,8 @@ use tock_registers::registers::*;
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::current_cpu;
 use crate::kernel::INTERRUPT_NUM_MAX;
-use crate::utils::{bit_extract, trace};
+use crate::utils::bit_extract;
+use crate::utils::device_ref::DeviceRef;
 
 // GICD BITS
 const GICD_CTLR_EN_BIT: usize = 0x1;
@@ -115,7 +116,7 @@ pub struct GicDesc {
 
 register_structs! {
     #[allow(non_snake_case)]
-    pub GicDistributorBlock {
+    pub GicDistributor {
         (0x0000 => CTLR: ReadWrite<u32>),
         (0x0004 => TYPER: ReadOnly<u32>),
         (0x0008 => IIDR: ReadOnly<u32>),
@@ -141,29 +142,9 @@ register_structs! {
     }
 }
 
-pub struct GicDistributor {
-    base_addr: usize,
-}
-
-impl core::ops::Deref for GicDistributor {
-    type Target = GicDistributorBlock;
-    fn deref(&self) -> &Self::Target {
-        if self.base_addr < 0x1000 {
-            panic!("illegal gicd addr {}", self.base_addr);
-        }
-        unsafe { &*self.ptr() }
-    }
-}
+unsafe impl Sync for GicDistributor {}
 
 impl GicDistributor {
-    const fn new(base_addr: usize) -> GicDistributor {
-        GicDistributor { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const GicDistributorBlock {
-        self.base_addr as *const GicDistributorBlock
-    }
-
     pub fn is_enabler(&self, idx: usize) -> u32 {
         self.ISENABLER[idx].get()
     }
@@ -280,7 +261,6 @@ impl GicDistributor {
         let lock = GICD_LOCK.lock();
         let prev = self.ITARGETSR[idx].get();
         let value = (prev & !mask) | (((trgt as u32) << off) & mask);
-        // println!("idx {}, val {:x}", idx, value);
         self.ITARGETSR[idx].set(value);
         drop(lock);
     }
@@ -381,7 +361,7 @@ impl GicDistributor {
 
 register_structs! {
   #[allow(non_snake_case)]
-  pub GicCpuInterfaceBlock {
+  pub GicCpuInterface {
     (0x0000 => CTLR: ReadWrite<u32>),   // CPU Interface Control Register
     (0x0004 => PMR: ReadWrite<u32>),    // Interrupt Priority Mask Register
     (0x0008 => BPR: ReadWrite<u32>),    // Binary Point Register
@@ -405,29 +385,9 @@ register_structs! {
   }
 }
 
-pub struct GicCpuInterface {
-    base_addr: usize,
-}
-
-impl core::ops::Deref for GicCpuInterface {
-    type Target = GicCpuInterfaceBlock;
-    fn deref(&self) -> &Self::Target {
-        if self.base_addr < 0x1000 {
-            panic!("illegal gicc addr {}", self.base_addr);
-        }
-        unsafe { &*self.ptr() }
-    }
-}
+unsafe impl Sync for GicCpuInterface {}
 
 impl GicCpuInterface {
-    pub const fn new(base_addr: usize) -> GicCpuInterface {
-        GicCpuInterface { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const GicCpuInterfaceBlock {
-        self.base_addr as *const GicCpuInterfaceBlock
-    }
-
     fn init(&self) {
         for i in 0..gich_lrs_num() {
             GICH.LR[i].set(0);
@@ -435,11 +395,6 @@ impl GicCpuInterface {
 
         self.PMR.set(u32::MAX);
         let ctlr_prev = self.CTLR.get();
-        // println!(
-        //     "ctlr: {:x}, gich_lrs_num {}",
-        //     ctlr_prev | GICC_CTLR_EN_BIT as u32 | GICC_CTLR_EOImodeNS_BIT as u32,
-        //     gich_lrs_num()
-        // );
         self.CTLR
             .set(ctlr_prev | GICC_CTLR_EN_BIT as u32 | GICC_CTLR_EOIMODENS_BIT as u32);
 
@@ -478,7 +433,7 @@ impl GicCpuInterface {
 
 register_structs! {
     #[allow(non_snake_case)]
-    pub GicHypervisorInterfaceBlock {
+    pub GicHypervisorInterface {
         (0x0000 => HCR: ReadWrite<u32>),
         (0x0004 => VTR: ReadOnly<u32>),
         (0x0008 => VMCR: ReadWrite<u32>),
@@ -497,29 +452,9 @@ register_structs! {
     }
 }
 
-pub struct GicHypervisorInterface {
-    base_addr: usize,
-}
-
-impl core::ops::Deref for GicHypervisorInterface {
-    type Target = GicHypervisorInterfaceBlock;
-    fn deref(&self) -> &Self::Target {
-        if trace() && self.base_addr < 0x1000 {
-            panic!("");
-        }
-        unsafe { &*self.ptr() }
-    }
-}
+unsafe impl Sync for GicHypervisorInterface {}
 
 impl GicHypervisorInterface {
-    const fn new(base_addr: usize) -> GicHypervisorInterface {
-        GicHypervisorInterface { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const GicHypervisorInterfaceBlock {
-        self.base_addr as *const GicHypervisorInterfaceBlock
-    }
-
     pub fn hcr(&self) -> u32 {
         self.HCR.get()
     }
@@ -585,48 +520,31 @@ impl crate::arch::InterruptContextTriat for GicState {
             self.eisr[i] = GICH.eisr(i);
             self.elrsr[i] = GICH.elrsr(i);
         }
-        // println!("save state");
-        // println!("GICH hcr {:x}", self.hcr);
-        // println!("GICH apr {:x}", self.apr);
-        // println!("GICH eisr {:x}", self.eisr[0]);
-        // println!("GICH elrsr {:x}", self.elrsr[0]);
         for i in 0..gich_lrs_num() {
             if self.elrsr[0] & 1 << i == 0 {
                 self.lr[i] = GICH.lr(i);
             } else {
                 self.lr[i] = 0;
             }
-            // println!("GICH_LR[{}] {:x}", i, GICH.lr(i));
         }
         self.ctlr = GICC.CTLR.get();
     }
 
     fn restore_state(&self) {
-        // println!("before restore");
-        // println!("GICH hcr {:x}", GICH.hcr());
-        // println!("GICC ctlr {:x}", GICC.CTLR.get());
-        // for i in 0..gich_lrs_num() {
-        //     println!("lr[{}] {:x}", i, GICH.lr(i));
-        // }
-
-        // println!("after restore state");
         GICH.set_hcr(self.hcr);
         GICH.APR.set(self.apr);
-        // println!("GICH hcr {:x}", self.hcr);
-        // println!("GICH apr {:x}", self.apr);
 
         for i in 0..gich_lrs_num() {
-            // println!("lr[{}] {:x}", i, self.lr[i]);
             GICH.set_lr(i, self.lr[i]);
         }
         GICC.CTLR.set(self.ctlr);
-        // println!("GICC ctlr {:x}", self.ctlr);
     }
 }
 
-pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE);
-pub static GICC: GicCpuInterface = GicCpuInterface::new(Platform::GICC_BASE);
-pub static GICH: GicHypervisorInterface = GicHypervisorInterface::new(Platform::GICH_BASE);
+pub static GICD: DeviceRef<GicDistributor> = unsafe { DeviceRef::new(Platform::GICD_BASE as *const GicDistributor) };
+pub static GICC: DeviceRef<GicCpuInterface> = unsafe { DeviceRef::new(Platform::GICC_BASE as *const GicCpuInterface) };
+pub static GICH: DeviceRef<GicHypervisorInterface> =
+    unsafe { DeviceRef::new(Platform::GICH_BASE as *const GicHypervisorInterface) };
 
 #[inline(always)]
 pub fn gich_lrs_num() -> usize {
@@ -671,11 +589,6 @@ pub fn gicc_clear_current_irq(for_hypervisor: bool) {
     let gicc = &GICC;
     gicc.EOIR.set(irq);
     if for_hypervisor {
-        // let addr = 0x08010000 + 0x1000;
-        // unsafe {
-        //     let gicc_dir = addr as *mut u32;
-        //     *gicc_dir = irq;
-        // }
         gicc.DIR.set(irq);
     }
     let irq = 0;

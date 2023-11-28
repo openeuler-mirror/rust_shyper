@@ -22,6 +22,7 @@ use crate::board::{Platform, PlatOperation};
 use crate::utils::bit_extract;
 use crate::kernel::current_cpu;
 use crate::kernel::INTERRUPT_NUM_MAX;
+use crate::utils::device_ref::DeviceRef;
 
 pub const MPIDR_AFF_MSK: usize = 0xffff; //we are only supporting 2 affinity levels
 
@@ -210,7 +211,7 @@ pub struct GicDesc {
 
 register_structs! {
     #[allow(non_snake_case)]
-    pub GicDistributorBlock {
+    pub GicDistributor {
         (0x0000 => CTLR: ReadWrite<u32>), //Distributor Control Register
         (0x0004 => TYPER: ReadOnly<u32>), //Interrupt Controller Type Register
         (0x0008 => IIDR: ReadOnly<u32>),  //Distributor Implementer Identification Register
@@ -249,7 +250,7 @@ register_structs! {
     }
 }
 
-impl core::fmt::Debug for GicDistributorBlock {
+impl core::fmt::Debug for GicDistributor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GicDistributorBlock")
             .field("CTLR", &format_args!("{:x}", self.CTLR.get()))
@@ -260,26 +261,10 @@ impl core::fmt::Debug for GicDistributorBlock {
             .finish()
     }
 }
-pub struct GicDistributor {
-    base_addr: usize,
-}
 
-impl core::ops::Deref for GicDistributor {
-    type Target = GicDistributorBlock;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr() }
-    }
-}
+unsafe impl Sync for GicDistributor {}
 
 impl GicDistributor {
-    const fn new(base_addr: usize) -> GicDistributor {
-        GicDistributor { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const GicDistributorBlock {
-        self.base_addr as *const GicDistributorBlock
-    }
-
     pub fn is_enabler(&self, idx: usize) -> u32 {
         self.ISENABLER[idx].get()
     }
@@ -383,18 +368,6 @@ impl GicDistributor {
         let idx = (int_id * 8) / 32;
         let off = (int_id * 8) % 32;
         ((self.ITARGETSR[idx].get() >> off) & 0xff) as usize
-    }
-
-    pub fn set_trgt(&self, int_id: usize, trgt: u8) {
-        let idx = (int_id * 8) / 32;
-        let off = (int_id * 8) % 32;
-        let mask: u32 = 0b11111111 << off;
-
-        let lock = GICD_LOCK.lock();
-        let prev = self.ITARGETSR[idx].get();
-        let value = (prev & !mask) | (((trgt as u32) << off) & mask);
-        self.ITARGETSR[idx].set(value);
-        drop(lock);
     }
 
     pub fn set_enable(&self, int_id: usize, en: bool) {
@@ -506,7 +479,7 @@ impl GicDistributor {
 
 register_structs! {
     #[allow(non_snake_case)]
-    pub GicRedistributorBlock {
+    pub GicRedistributor {
         (0x0000 => CTLR: ReadWrite<u32>),   // Redistributor Control Register
         (0x0004 => IIDR: ReadOnly<u32>),    // Implementer Identification Register
         (0x0008 => TYPER: ReadOnly<u64>),   // Redistributor Type Register
@@ -556,7 +529,7 @@ register_structs! {
   }
 }
 
-impl core::fmt::Debug for GicRedistributorBlock {
+impl core::fmt::Debug for GicRedistributor {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("GicRedistributorBlock")
             .field("Current_cpu", &current_cpu().id)
@@ -585,33 +558,21 @@ impl core::fmt::Debug for GicRedistributorBlock {
     }
 }
 
-pub struct GicRedistributor {
-    base_addr: usize,
-}
-
-impl core::ops::Deref for GicRedistributor {
-    type Target = GicRedistributorBlock;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr() }
-    }
-}
+unsafe impl Sync for GicRedistributor {}
 
 impl core::ops::Index<usize> for GicRedistributor {
-    type Output = GicRedistributorBlock;
+    type Output = GicRedistributor;
+
     fn index(&self, index: usize) -> &Self::Output {
-        unsafe { &*self.ptr().offset(index as isize) }
+        if index >= crate::board::PLAT_DESC.cpu_desc.num {
+            panic!("GicRedistributor index out of range");
+        }
+        // SAFRTY: GicRedistributor has constructed with correct address,and we have checked the index
+        unsafe { &*(self as *const GicRedistributor).add(index) }
     }
 }
 
 impl GicRedistributor {
-    pub const fn new(base_addr: usize) -> GicRedistributor {
-        GicRedistributor { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const GicRedistributorBlock {
-        self.base_addr as *const GicRedistributorBlock
-    }
-
     fn init(&self) {
         let waker = self[current_cpu().id].WAKER.get();
         self[current_cpu().id].WAKER.set(waker & !GICR_WAKER_PSLEEP_BIT as u32);
@@ -945,7 +906,7 @@ pub struct GicState {
 impl Default for GicState {
     fn default() -> Self {
         let nr_prio = (((mrs!(ICH_VTR_EL2) >> GICH_VTR_PRIBITS_OFF) & ((1 << GICH_VTR_PRIBITS_LEN) - 1)) + 1) as u32;
-        let r: GicState = GicState {
+        let r = GicState {
             ctlr: GICC_CTLR_EOIMODE_BIT as u32,
             igrpen1: GICC_IGRPEN_EL1_ENB_BIT,
             pmr: 0xff,
@@ -1071,10 +1032,11 @@ impl GicState {
     }
 }
 
-pub static GICD: GicDistributor = GicDistributor::new(Platform::GICD_BASE);
+pub static GICD: DeviceRef<GicDistributor> = unsafe { DeviceRef::new(Platform::GICD_BASE as *const GicDistributor) };
 pub static GICC: GicCpuInterface = GicCpuInterface;
 pub static GICH: GicHypervisorInterface = GicHypervisorInterface;
-pub static GICR: GicRedistributor = GicRedistributor::new(Platform::GICR_BASE);
+pub static GICR: DeviceRef<GicRedistributor> =
+    unsafe { DeviceRef::new((Platform::GICR_BASE) as *const GicRedistributor) };
 
 #[inline(always)]
 pub fn gich_lrs_num() -> usize {
