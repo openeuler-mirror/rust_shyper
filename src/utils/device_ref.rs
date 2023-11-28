@@ -2,7 +2,7 @@ use core::ops::Deref;
 use core::ptr::NonNull;
 use core::marker::PhantomData;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct DeviceRef<'a, T> {
     ptr: NonNull<T>,
     _maker: PhantomData<&'a T>,
@@ -24,8 +24,15 @@ impl<T> DeviceRef<'_, T> {
     }
 }
 
-// SAFETY: T provides the necessary guarantees for Sync & Send.
-unsafe impl<T: Sync> Send for DeviceRef<'_, T> {}
+impl<T> Clone for DeviceRef<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for DeviceRef<'_, T> {}
+
+// SAFETY: T provides the necessary guarantees for Sync.
 unsafe impl<T: Sync> Sync for DeviceRef<'_, T> {}
 
 impl<T> Deref for DeviceRef<'_, T> {

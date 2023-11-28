@@ -28,7 +28,7 @@ LD = ${CROSS_COMPILE}ld
 GIC_VERSION ?= 2
 
 ifeq ($(GIC_VERSION),3)
-	FEATURES += gicv3,
+override FEATURES += ,gicv3,
 else ifneq ($(GIC_VERSION),2)
 $(error Bad gic version)
 endif

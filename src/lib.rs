@@ -131,7 +131,6 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     }
 }
 
-#[no_mangle]
 pub fn secondary_init(mpidr: usize) {
     cpu_init();
     interrupt_init();
@@ -139,5 +138,7 @@ pub fn secondary_init(mpidr: usize) {
     cpu_sched_init();
     use crate::arch::guest_cpu_on;
     guest_cpu_on(mpidr);
-    loop {}
+    loop {
+        core::hint::spin_loop();
+    }
 }

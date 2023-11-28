@@ -13,19 +13,16 @@ use crate::arch::ArchDesc;
 pub const PLATFORM_CPU_NUM_MAX: usize = 8;
 pub const PLATFORM_VCPU_NUM_MAX: usize = 8;
 
-#[repr(C)]
 pub enum SchedRule {
     RoundRobin,
     None,
 }
 
-#[repr(C)]
 pub struct PlatMemRegion {
     pub base: usize,
     pub size: usize,
 }
 
-#[repr(C)]
 pub struct PlatMemoryConfig {
     pub base: usize,
     pub regions: &'static [PlatMemRegion],
@@ -37,20 +34,17 @@ pub struct PlatCpuCoreConfig {
     pub sched: SchedRule,
 }
 
-#[repr(C)]
 pub struct PlatCpuConfig {
     pub num: usize,
     pub core_list: &'static [PlatCpuCoreConfig],
     pub cluster_desc: ClusterDesc,
 }
 
-#[repr(C)]
 pub struct ClusterDesc {
     pub num: usize,
     pub core_num: &'static [usize],
 }
 
-#[repr(C)]
 pub struct PlatformConfig {
     pub cpu_desc: PlatCpuConfig,
     pub mem_desc: PlatMemoryConfig,
