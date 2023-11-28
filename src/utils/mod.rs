@@ -21,5 +21,6 @@ pub mod interval;
 mod print;
 mod string;
 mod time;
+#[cfg(feature = "unilib")]
 pub mod unilib;
 mod util;

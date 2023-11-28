@@ -55,6 +55,7 @@ pub fn vmm_remove_vm(vm_id: usize) {
     // remove vm cfg
     vm_cfg_remove_vm_entry(vm_id);
     // remove vm unilib
+    #[cfg(feature = "unilib")]
     crate::utils::unilib::unilib_fs_remove(vm_id);
     info!("remove vm[{}] successfully", vm_id);
 }

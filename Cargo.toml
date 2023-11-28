@@ -43,6 +43,7 @@ buddy_system_allocator = "0.8.0"
 memoffset = { version = "0.8", default-features = false, features = [
     "unstable_const",
 ] }
+cfg-if = "1.0.0"
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 cortex-a = { package = "aarch64-cpu", version = "9.3.1" }
@@ -72,3 +73,4 @@ update_low = []
 rk3588-noeth = ["rk3588"]
 ns16550 = []
 pl011 = []
+unilib = []

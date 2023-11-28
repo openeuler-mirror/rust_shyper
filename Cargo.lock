@@ -520,6 +520,7 @@ dependencies = [
  "aarch64-cpu",
  "buddy_system_allocator",
  "built",
+ "cfg-if",
  "chrono",
  "fdt",
  "fdt-rs",
