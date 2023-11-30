@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
+
 use core::slice;
 
 use spin::Mutex;
@@ -411,7 +411,7 @@ impl Virtq {
     }
 
     // use for migration
-    pub fn restore_vq_data(&self, data: &VirtqData, pa_region: &Vec<VmPa>) {
+    pub fn restore_vq_data(&self, data: &VirtqData, pa_region: &[VmPa]) {
         let mut inner = self.inner.lock();
         inner.ready = data.ready;
         inner.vq_index = data.vq_index;
@@ -442,7 +442,7 @@ impl Virtq {
     }
 
     // use for migration
-    pub fn save_vq_data(&self, data: &mut VirtqData, _pa_region: &Vec<VmPa>) {
+    pub fn save_vq_data(&self, data: &mut VirtqData, _pa_region: &[VmPa]) {
         let inner = self.inner.lock();
         data.ready = inner.ready;
         data.vq_index = inner.vq_index;

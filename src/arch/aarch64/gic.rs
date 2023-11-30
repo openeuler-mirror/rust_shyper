@@ -96,7 +96,7 @@ impl IrqState {
         }
     }
 
-    pub fn to_num(&self) -> usize {
+    pub fn to_num(self) -> usize {
         match self {
             IrqState::IrqSInactive => 0,
             IrqState::IrqSPend => 1,

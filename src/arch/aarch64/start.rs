@@ -20,7 +20,7 @@ extern "C" {
     fn vectors();
 }
 
-#[cfg(any(feature = "tx2"))]
+#[cfg(feature = "tx2")]
 macro_rules! test_cpuid {
     () => {
         r#"
@@ -51,7 +51,7 @@ pub unsafe extern "C" fn _start() -> ! {
     asm!(
         r#"
         // save fdt pointer to x20
-        mov x20, x0 
+        mov x20, x0
 
         // get mpidr2cpu_id
         mrs x0, mpidr_el1
@@ -59,7 +59,7 @@ pub unsafe extern "C" fn _start() -> ! {
         "#,
         test_cpuid!(),
         r#"
-        mov x19, x0 
+        mov x19, x0
 
         // disable cache and MMU
         mrs x1, sctlr_el2
@@ -75,25 +75,25 @@ pub unsafe extern "C" fn _start() -> ! {
         mov x0, #2
         bl  {cache_invalidate}
 
-    3:  
+    3:
         // clear icache
-        mov x0, x19 
-        ic  iallu 
+        mov x0, x19
+        ic  iallu
 
         // setup stack sp per core
         ldr x1, ={boot_stack}
         mov x2, (4096 * 2)
         mul x3, x0, x2
         add x1, x1, x2
-        add sp, x1, x3        
-        
+        add sp, x1, x3
+
         // if core_id is not zero, skip bss clearing and pt_populate
         cbnz x0, 4f
         bl {clear_bss}
         adrp x0, {lvl1_page_table}
         adrp x1, {lvl2_page_table}
         bl  {pt_populate}
-    4: 
+    4:
         // Trap nothing from EL1 to El2
         mov x3, xzr
         msr cptr_el2, x3
@@ -102,11 +102,11 @@ pub unsafe extern "C" fn _start() -> ! {
         adrp x0, {lvl1_page_table}
         bl  {mmu_init}
 
-        // map cpu page table 
+        // map cpu page table
         mrs x0, mpidr_el1
         bl  {cpu_map_self}
         msr ttbr0_el2, x0
-        
+
         // set real sp pointer
         mov x1, 1
         msr spsel, x1
@@ -148,7 +148,7 @@ pub unsafe extern "C" fn _secondary_start() -> ! {
     asm!(
         r#"
         // save sp to x20
-        mov x20, x0 
+        mov x20, x0
 
         // disable cache and MMU
         mrs x1, sctlr_el2
@@ -160,8 +160,8 @@ pub unsafe extern "C" fn _secondary_start() -> ! {
         bl  {cache_invalidate}
 
         mrs x0, mpidr_el1
-        ic  iallu    
-        
+        ic  iallu
+
         mov sp, x20
 
         // Trap nothing from EL1 to El2
@@ -172,11 +172,11 @@ pub unsafe extern "C" fn _secondary_start() -> ! {
         adrp x0, {lvl1_page_table}
         bl  {mmu_init}
 
-        // map cpu page table 
+        // map cpu page table
         mrs x0, mpidr_el1
         bl  {cpu_map_self}
         msr ttbr0_el2, x0
-        
+
         // set real sp pointer
         mov x1, 1
         msr spsel, x1
@@ -270,7 +270,7 @@ pub unsafe extern "C" fn update_request_asm(address_list: &HypervisorAddr, alloc
         stp x0, x1, [sp, #0]
         stp x2, x3, [sp, #16]
         str x30, [sp, #32]
-    
+
         adr x2, .   // read pc to x2
         mov x3, #0x8a000000
         cmp x2, x3
@@ -299,7 +299,7 @@ unsafe extern "C" fn live_update_asm(address_list: &HypervisorAddr, alloc: bool)
         stp x0, x1, [sp, #0]
         stp x2, x3, [sp, #16]
         str x30, [sp, #32]
-    
+
         adr x2, .   // read pc to x0
         mov x3, #0x7000000  // 0x83000000 + 0x7000000
         add x2, x2, x3
@@ -307,7 +307,7 @@ unsafe extern "C" fn live_update_asm(address_list: &HypervisorAddr, alloc: bool)
         blr  x2
 
         bl  {rust_shyper_update}
-    
+
         ldr x30, [sp, #32]
         ldp x2, x3, [sp, #16]
         ldp x0, x1, [sp, #0]
@@ -332,7 +332,7 @@ pub unsafe extern "C" fn update_request_asm(address_list: &HypervisorAddr, alloc
         stp x0, x1, [sp, #0]
         stp x2, x3, [sp, #16]
         str x30, [sp, #32]
-    
+
         adr x2, .   // read pc to x2
         mov x3, #0x8a000000
         cmp x2, x3
@@ -361,7 +361,7 @@ unsafe extern "C" fn live_update_asm(address_list: &HypervisorAddr, alloc: bool)
         stp x0, x1, [sp, #0]
         stp x2, x3, [sp, #16]
         str x30, [sp, #32]
-    
+
         adr x2, .   // read pc to x0
         mov x3, #0x7000000  // 0x83000000 + 0x7000000
         sub x2, x2, x3
@@ -369,7 +369,7 @@ unsafe extern "C" fn live_update_asm(address_list: &HypervisorAddr, alloc: bool)
         blr  x2
 
         bl  {rust_shyper_update}
-    
+
         ldr x30, [sp, #32]
         ldp x2, x3, [sp, #16]
         ldp x0, x1, [sp, #0]

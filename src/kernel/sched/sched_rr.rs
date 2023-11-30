@@ -77,18 +77,19 @@ impl Scheduler for SchedulerRR {
         let mut need_schedule = false;
         {
             let queue = &mut self.queue;
-            match queue.iter().position(|x| x.vm_id() == vcpu.vm_id()) {
-                Some(idx) => {
-                    queue.remove(idx);
-                    if idx < self.active_idx {
+            if let Some(idx) = queue.iter().position(|x| x.vm_id() == vcpu.vm_id()) {
+                queue.remove(idx);
+                match idx.cmp(&self.active_idx) {
+                    core::cmp::Ordering::Less => {
                         self.active_idx -= 1;
-                    } else if idx == self.active_idx {
+                    }
+                    core::cmp::Ordering::Equal => {
                         // cpu.active_vcpu need remove
                         current_cpu().set_active_vcpu(None);
                         need_schedule = true;
                     }
+                    _ => {}
                 }
-                None => {}
             }
         }
         vcpu.set_state(VcpuState::Sleep);

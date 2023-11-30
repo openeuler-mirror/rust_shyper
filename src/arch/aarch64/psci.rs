@@ -115,11 +115,8 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
         "smc_guest_handler: fid 0x{:x}, x1 0x{:x}, x2 0x{:x}, x3 0x{:x}",
         fid, x1, x2, x3
     );
-    let r;
-    match fid {
-        PSCI_VERSION => {
-            r = smccc::psci::version::<Smc>() as usize;
-        }
+    let r = match fid {
+        PSCI_VERSION => smccc::psci::version::<Smc>() as usize,
         PSCI_CPU_SUSPEND_64 => {
             // save the vcpu contex for resume
             current_cpu().active_vcpu.clone().unwrap().reset_context();
@@ -128,17 +125,13 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             current_cpu()
                 .scheduler()
                 .sleep(current_cpu().active_vcpu.clone().unwrap());
-            r = PSCI_E_SUCCESS;
+            PSCI_E_SUCCESS
         }
-        PSCI_CPU_OFF => {
-            r = match smccc::psci::cpu_off::<Smc>() {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            };
-        }
-        PSCI_CPU_ON_64 => {
-            r = psci_guest_cpu_on(x1, x2, x3);
-        }
+        PSCI_CPU_OFF => match smccc::psci::cpu_off::<Smc>() {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_CPU_ON_64 => psci_guest_cpu_on(x1, x2, x3),
         PSCI_AFFINITY_INFO_64 => {
             let lowest = match x2 {
                 0 => LowestAffinityLevel::All,
@@ -146,61 +139,46 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
                 2 => LowestAffinityLevel::Aff0Aff1Ignored,
                 _ => LowestAffinityLevel::Aff0Aff1Aff2Ignored,
             };
-            r = match smccc::psci::affinity_info::<Smc>(x1 as u64, lowest) {
+            match smccc::psci::affinity_info::<Smc>(x1 as u64, lowest) {
                 Ok(affinity_state) => affinity_state as usize,
                 _ => PSCI_E_NOT_SUPPORTED,
-            };
-        }
-        PSCI_MIGRATE_64 => {
-            r = match smccc::psci::migrate::<Smc>(x1 as u64) {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
             }
         }
-        PSCI_MIGRATE_INFO_TYPE => {
-            r = match smccc::psci::migrate_info_type::<Smc>() {
-                Ok(migrate_type) => migrate_type as usize,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
-        PSCI_MIGRATE_INFO_UP_CPU_64 => {
-            r = smccc::psci::migrate_info_up_cpu::<Smc>() as usize;
-        }
-        PSCI_SYSTEM_OFF => {
-            r = match smccc::psci::system_off::<Smc>() {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
+        PSCI_MIGRATE_64 => match smccc::psci::migrate::<Smc>(x1 as u64) {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_MIGRATE_INFO_TYPE => match smccc::psci::migrate_info_type::<Smc>() {
+            Ok(migrate_type) => migrate_type as usize,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_MIGRATE_INFO_UP_CPU_64 => smccc::psci::migrate_info_up_cpu::<Smc>() as usize,
+        PSCI_SYSTEM_OFF => match smccc::psci::system_off::<Smc>() {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
         PSCI_SYSTEM_RESET => {
             psci_guest_sys_reset();
-            r = match smccc::psci::system_reset::<Smc>() {
+            match smccc::psci::system_reset::<Smc>() {
                 Ok(()) => PSCI_E_SUCCESS,
                 _ => PSCI_E_NOT_SUPPORTED,
             }
         }
-        PSCI_SYSTEM_RESET2_64 => {
-            r = match smccc::psci::system_reset2::<Smc>(x1 as u32, x2 as u64) {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
-        PSCI_MEM_PROTECT => {
-            r = match smccc::psci::mem_protect::<Smc>(x1 != 0) {
-                Ok(res) => res as usize,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
-        PSCI_MEM_PROTECT_CHECK_RANGE_64 => {
-            r = match smccc::psci::mem_protect_check_range::<Smc>(x1 as u64, x2 as u64) {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
+        PSCI_SYSTEM_RESET2_64 => match smccc::psci::system_reset2::<Smc>(x1 as u32, x2 as u64) {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_MEM_PROTECT => match smccc::psci::mem_protect::<Smc>(x1 != 0) {
+            Ok(res) => res as usize,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_MEM_PROTECT_CHECK_RANGE_64 => match smccc::psci::mem_protect_check_range::<Smc>(x1 as u64, x2 as u64) {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
         #[cfg(feature = "tx2")]
         TEGRA_SIP_GET_ACTMON_CLK_COUNTERS => {
             let result = smc_call(fid, x1, x2, x3);
-            r = result.0;
             // println!("x1 0x{:x}, x2 0x{:x}, x3 0x{:x}", x1, x2, x3);
             // println!(
             //     "result.0 0x{:x}, result.1 0x{:x}, result.2 0x{:x}",
@@ -208,58 +186,45 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             // );
             current_cpu().set_gpr(1, result.1);
             current_cpu().set_gpr(2, result.2);
+            result.0
         }
-        PSCI_FEATURES => {
-            r = match x1 {
-                PSCI_VERSION | PSCI_CPU_ON_64 | PSCI_FEATURES => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
-        PSCI_CPU_FREEZE => {
-            r = match smccc::psci::cpu_freeze::<Smc>() {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
-        PSCI_CPU_DEFAULT_SUSPEND_64 => {
-            r = match smccc::psci::cpu_default_suspend::<Smc>(x1 as u64, x2 as u64) {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
-        PSCI_NODE_HW_STATE_64 => {
-            r = match smccc::psci::node_hw_state::<Smc>(x1 as u64, x2 as u32) {
-                Ok(res) => res as usize,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
-        PSCI_SYSTEM_SUSPEND_64 => {
-            r = match smccc::psci::system_suspend::<Smc>(x1 as u64, x2 as u64) {
-                Ok(()) => PSCI_E_SUCCESS,
-                _ => PSCI_E_NOT_SUPPORTED,
-            }
-        }
+        PSCI_FEATURES => match x1 {
+            PSCI_VERSION | PSCI_CPU_ON_64 | PSCI_FEATURES => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_CPU_FREEZE => match smccc::psci::cpu_freeze::<Smc>() {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_CPU_DEFAULT_SUSPEND_64 => match smccc::psci::cpu_default_suspend::<Smc>(x1 as u64, x2 as u64) {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_NODE_HW_STATE_64 => match smccc::psci::node_hw_state::<Smc>(x1 as u64, x2 as u32) {
+            Ok(res) => res as usize,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
+        PSCI_SYSTEM_SUSPEND_64 => match smccc::psci::system_suspend::<Smc>(x1 as u64, x2 as u64) {
+            Ok(()) => PSCI_E_SUCCESS,
+            _ => PSCI_E_NOT_SUPPORTED,
+        },
         PSCI_SET_SUSPEND_MODE => {
             let mode = match x1 {
                 0 => SuspendMode::PlatformCoordinated,
                 _ => SuspendMode::OsInitiated,
             };
-            r = match smccc::psci::set_suspend_mode::<Smc>(mode) {
+            match smccc::psci::set_suspend_mode::<Smc>(mode) {
                 Ok(()) => PSCI_E_SUCCESS,
                 _ => PSCI_E_NOT_SUPPORTED,
             }
         }
-        PSCI_STAT_RESIDENCY_64 => {
-            r = smccc::psci::stat_residency::<Smc>(x1 as u64, x2 as u32) as usize;
-        }
-        PSCI_STAT_COUNT_64 => {
-            r = smccc::psci::stat_count::<Smc>(x1 as u64, x2 as u32) as usize;
-        }
+        PSCI_STAT_RESIDENCY_64 => smccc::psci::stat_residency::<Smc>(x1 as u64, x2 as u32) as usize,
+        PSCI_STAT_COUNT_64 => smccc::psci::stat_count::<Smc>(x1 as u64, x2 as u32) as usize,
         _ => {
             // unimplemented!();
             return false;
         }
-    }
+    };
 
     let idx = 0;
     let val = r;
@@ -300,14 +265,11 @@ fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
 pub fn psci_ipi_handler(msg: &IpiMessage) {
     match msg.ipi_message {
         IpiInnerMsg::Power(power_msg) => {
-            match power_msg.event {
-                PowerEvent::PsciIpiVcpuAssignAndCpuOn => {
-                    trace!("receive PsciIpiVcpuAssignAndCpuOn msg");
-                    let vm = vm(power_msg.src).unwrap();
-                    let vcpu = vm.vcpuid_to_vcpu(power_msg.vcpuid).unwrap();
-                    current_cpu().vcpu_array.append_vcpu(vcpu);
-                }
-                _ => {}
+            if let PowerEvent::PsciIpiVcpuAssignAndCpuOn = power_msg.event {
+                trace!("receive PsciIpiVcpuAssignAndCpuOn msg");
+                let vm = vm(power_msg.src).unwrap();
+                let vcpu = vm.vcpuid_to_vcpu(power_msg.vcpuid).unwrap();
+                current_cpu().vcpu_array.append_vcpu(vcpu);
             }
             let trgt_vcpu = match current_cpu().vcpu_array.pop_vcpu_through_vmid(power_msg.src) {
                 None => {
@@ -413,8 +375,7 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
             return usize::MAX - 1;
         }
     }
-
-    return r;
+    r
 }
 
 #[cfg(not(feature = "secondary_start"))]
@@ -513,7 +474,7 @@ pub fn guest_cpu_on(mpidr: usize) {
 
     use crate::kernel::{CPU_IF_LIST, StartReason};
     let cpu_if_list = CPU_IF_LIST.lock();
-    let cpu_if = &cpu_if_list[cpu_id as usize];
+    let cpu_if = &cpu_if_list[cpu_id];
 
     let vm_id = cpu_if.vm_id;
     let entry = cpu_if.entry;
@@ -540,7 +501,6 @@ pub fn guest_cpu_on(mpidr: usize) {
                 psci_vcpu_on(trgt_vcpu, entry as usize, ctx as usize);
             } else {
                 error!("pop_vcpu_through_vmid error!");
-                return;
             }
         }
         _ => {

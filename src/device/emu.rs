@@ -159,17 +159,17 @@ impl Display for EmuDeviceType {
 
 impl EmuDeviceType {
     pub fn removable(&self) -> bool {
-        match *self {
+        matches!(
+            *self,
             EmuDeviceType::EmuDeviceTGicd
-            | EmuDeviceType::EmuDeviceTSGIR
-            | EmuDeviceType::EmuDeviceTICCSRE
-            | EmuDeviceType::EmuDeviceTGPPT
-            | EmuDeviceType::EmuDeviceTVirtioBlk
-            | EmuDeviceType::EmuDeviceTVirtioNet
-            | EmuDeviceType::EmuDeviceTGICR
-            | EmuDeviceType::EmuDeviceTVirtioConsole => true,
-            _ => false,
-        }
+                | EmuDeviceType::EmuDeviceTSGIR
+                | EmuDeviceType::EmuDeviceTICCSRE
+                | EmuDeviceType::EmuDeviceTGPPT
+                | EmuDeviceType::EmuDeviceTVirtioBlk
+                | EmuDeviceType::EmuDeviceTVirtioNet
+                | EmuDeviceType::EmuDeviceTGICR
+                | EmuDeviceType::EmuDeviceTVirtioConsole
+        )
     }
 }
 

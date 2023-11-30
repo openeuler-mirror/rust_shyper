@@ -129,7 +129,6 @@ impl Vcpu {
     pub fn context_gic_irqs_store(&self) {
         let mut inner = self.inner.lock();
         let vm = inner.vm.clone().unwrap();
-        inner.gic_ctx;
         for irq in vm.config().passthrough_device_irqs() {
             inner.gic_ctx.add_irq(irq as u64);
         }
@@ -473,13 +472,10 @@ impl VcpuInner {
         self.gic_ctx_reset();
         // }
         use crate::kernel::vm_if_get_type;
-        match vm_if_get_type(self.vm_id()) {
-            VmType::VmTBma => {
-                debug!("vm {} bma ctx restore", self.vm_id());
-                self.reset_vm_ctx();
-                self.context_ext_regs_store();
-            }
-            _ => {}
+        if vm_if_get_type(self.vm_id()) == VmType::VmTBma {
+            debug!("vm {} bma ctx restore", self.vm_id());
+            self.reset_vm_ctx();
+            self.context_ext_regs_store();
         }
     }
 

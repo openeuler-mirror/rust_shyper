@@ -171,12 +171,9 @@ impl<T: TaskOwner> FairQueue<T> {
     }
 
     pub fn remove(&mut self, owner: usize) {
-        match self.map.remove(&owner) {
-            Some(sub_queue) => {
-                self.len -= sub_queue.len();
-                self.queue = self.queue.extract_if(|x| *x == owner).collect();
-            }
-            None => {}
+        if let Some(sub_queue) = self.map.remove(&owner) {
+            self.len -= sub_queue.len();
+            self.queue = self.queue.extract_if(|x| *x == owner).collect();
         }
     }
 }
@@ -271,17 +268,14 @@ pub async fn async_ipi_req() {
     }
     let task = ipi_list.front().unwrap().clone();
     drop(ipi_list);
-    match task.task_data {
-        AsyncTaskData::AsyncIpiTask(msg) => {
-            if active_vm_id() == 0 {
-                virtio_blk_notify_handler(msg.vq.clone(), msg.blk.clone(), vm(msg.src_id).unwrap());
-            } else {
-                // add_task_ipi_count();
-                // send IPI to target cpu, and the target will invoke `mediated_ipi_handler`
-                ipi_send_msg(0, IpiType::IpiTMediatedDev, IpiInnerMsg::MediatedMsg(msg));
-            }
+    if let AsyncTaskData::AsyncIpiTask(msg) = task.task_data {
+        if active_vm_id() == 0 {
+            virtio_blk_notify_handler(msg.vq.clone(), msg.blk.clone(), vm(msg.src_id).unwrap());
+        } else {
+            // add_task_ipi_count();
+            // send IPI to target cpu, and the target will invoke `mediated_ipi_handler`
+            ipi_send_msg(0, IpiType::IpiTMediatedDev, IpiInnerMsg::MediatedMsg(msg));
         }
-        _ => {}
     }
 }
 
@@ -295,8 +289,8 @@ pub async fn async_blk_io_req() {
     }
     let task = io_list.front().unwrap().clone();
     drop(io_list);
-    match task.task_data {
-        AsyncTaskData::AsyncIoTask(msg) => match msg.io_type {
+    if let AsyncTaskData::AsyncIoTask(msg) = task.task_data {
+        match msg.io_type {
             VIRTIO_BLK_T_IN => {
                 mediated_blk_read(msg.blk_id, msg.sector, msg.count);
             }
@@ -317,8 +311,7 @@ pub async fn async_blk_io_req() {
             _ => {
                 panic!("illegal mediated blk req type {}", msg.io_type);
             }
-        },
-        _ => {}
+        }
     }
 }
 // end async req function
@@ -439,23 +432,20 @@ pub fn finish_async_task(ipi: bool) {
     drop(ipi_list);
     match task.task_data {
         AsyncTaskData::AsyncIoTask(args) => {
-            match args.io_type {
-                VIRTIO_BLK_T_IN => {
-                    // let mut sum = 0;
-                    let mut cache_ptr = args.cache;
-                    for idx in 0..args.iov_list.len() {
-                        let data_bg = args.iov_list[idx].data_bg;
-                        let len = args.iov_list[idx].len as usize;
-                        if trace() && (data_bg < 0x1000 || cache_ptr < 0x1000) {
-                            panic!("illegal des addr {:x}, src addr {:x}", data_bg, cache_ptr);
-                        }
-                        memcpy_safe(data_bg as *mut u8, cache_ptr as *mut u8, len);
-                        // sum |= check_sum(data_bg, len);
-                        cache_ptr += len;
+            if args.io_type == VIRTIO_BLK_T_IN {
+                // let mut sum = 0;
+                let mut cache_ptr = args.cache;
+                for idx in 0..args.iov_list.len() {
+                    let data_bg = args.iov_list[idx].data_bg;
+                    let len = args.iov_list[idx].len as usize;
+                    if trace() && (data_bg < 0x1000 || cache_ptr < 0x1000) {
+                        panic!("illegal des addr {:x}, src addr {:x}", data_bg, cache_ptr);
                     }
-                    // println!("read check_sum is {:x}", sum);
+                    memcpy_safe(data_bg as *mut u8, cache_ptr as *mut u8, len);
+                    // sum |= check_sum(data_bg, len);
+                    cache_ptr += len;
                 }
-                _ => {}
+                // println!("read check_sum is {:x}", sum);
             }
 
             update_used_info(args.vq.clone(), task.src_vmid);

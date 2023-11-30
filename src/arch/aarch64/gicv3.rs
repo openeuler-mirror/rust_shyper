@@ -906,7 +906,8 @@ pub struct GicState {
 impl Default for GicState {
     fn default() -> Self {
         let nr_prio = (((mrs!(ICH_VTR_EL2) >> GICH_VTR_PRIBITS_OFF) & ((1 << GICH_VTR_PRIBITS_LEN) - 1)) + 1) as u32;
-        let r = GicState {
+
+        GicState {
             ctlr: GICC_CTLR_EOIMODE_BIT as u32,
             igrpen1: GICC_IGRPEN_EL1_ENB_BIT,
             pmr: 0xff,
@@ -923,8 +924,7 @@ impl Default for GicState {
             apr0: [0; 4],
             apr1: [0; 4],
             sre_el1: 0,
-        };
-        r
+        }
     }
 }
 

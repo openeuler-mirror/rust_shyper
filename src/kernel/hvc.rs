@@ -204,6 +204,7 @@ pub fn get_share_mem(mem_type: usize) -> usize {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn hvc_guest_handler(
     hvc_type: usize,
     event: usize,
@@ -230,6 +231,7 @@ pub fn hvc_guest_handler(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hvc_config_handler(
     event: usize,
     x0: usize,

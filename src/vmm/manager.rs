@@ -233,14 +233,11 @@ pub fn vmm_boot_vm(vm_id: usize) {
             }
         }
     } else {
-        match current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {
-            None => {
-                let vm = vm(vm_id).unwrap();
-                let vcpuid = vm.pcpuid_to_vcpuid(phys_id).unwrap();
-                let vcpu = vm.vcpuid_to_vcpu(vcpuid);
-                current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
-            }
-            _ => {}
+        if current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).is_none() {
+            let vm = vm(vm_id).unwrap();
+            let vcpuid = vm.pcpuid_to_vcpuid(phys_id).unwrap();
+            let vcpu = vm.vcpuid_to_vcpu(vcpuid);
+            current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
         };
         let vcpu = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).unwrap();
         gicc_clear_current_irq(true);
@@ -425,7 +422,7 @@ pub fn vmm_list_vm(vm_info_ipa: usize) -> Result<usize, ()> {
 
         let vm_name_u8: Vec<u8> = vm_cfg.vm_name().as_bytes().to_vec();
         memcpy_safe(
-            vm_info.info_list[idx].vm_name.as_ptr() as *const _ as *const u8,
+            vm_info.info_list[idx].vm_name.as_ptr(),
             vm_name_u8.as_ptr(),
             NAME_MAX_LEN,
         );

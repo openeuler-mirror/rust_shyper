@@ -379,7 +379,7 @@ impl VirtioMmio {
     }
 
     // use for migration restore
-    pub fn restore_mmio_data(&self, mmio_data: &VirtioMmioData, pa_region: &Vec<VmPa>) {
+    pub fn restore_mmio_data(&self, mmio_data: &VirtioMmioData, pa_region: &[VmPa]) {
         let mut inner = self.inner.lock();
         // inner.id = mmio_data.id;
         inner.driver_features = mmio_data.driver_features;
@@ -392,7 +392,7 @@ impl VirtioMmio {
     }
 
     // use for migration save
-    pub fn save_mmio_data(&self, mmio_data: &mut VirtioMmioData, pa_region: &Vec<VmPa>) {
+    pub fn save_mmio_data(&self, mmio_data: &mut VirtioMmioData, pa_region: &[VmPa]) {
         let inner = self.inner.lock();
         mmio_data.id = inner.id;
         mmio_data.driver_features = inner.driver_features;

@@ -326,27 +326,24 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
 
 fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> FdtWriterResult<()> {
     for dev in devs_config {
-        match dev.dev_type {
-            DtbDevType::DevSerial => {
-                let serial_name = format!("serial@{:x}", dev.addr_region.ipa);
-                let serial = fdt.begin_node(&serial_name)?;
-                if cfg!(feature = "rk3588") {
-                    fdt.property_string("compatible", "snps,dw-apb-uart")?;
-                } else {
-                    fdt.property_string("compatible", "ns16550")?;
-                }
-                fdt.property_u32("clock-frequency", 408000000)?;
-                fdt.property_array_u64("reg", &[dev.addr_region.ipa as u64, 0x1000])?;
-                fdt.property_u32("reg-shift", 0x2)?;
-                fdt.property_array_u32("interrupts", &[0x0, (dev.irqs[0] - 32) as u32, 0x4])?;
-                fdt.property_string("status", "okay")?;
-                // if cfg!(feature = "rk3588") {
-                //     fdt.property_string("pinctrl-names", "default")?;
-                //     fdt.property_u32("pinctrl-0", 0x14d)?;
-                // }
-                fdt.end_node(serial)?;
+        if dev.dev_type == DtbDevType::DevSerial {
+            let serial_name = format!("serial@{:x}", dev.addr_region.ipa);
+            let serial = fdt.begin_node(&serial_name)?;
+            if cfg!(feature = "rk3588") {
+                fdt.property_string("compatible", "snps,dw-apb-uart")?;
+            } else {
+                fdt.property_string("compatible", "ns16550")?;
             }
-            _ => {}
+            fdt.property_u32("clock-frequency", 408000000)?;
+            fdt.property_array_u64("reg", &[dev.addr_region.ipa as u64, 0x1000])?;
+            fdt.property_u32("reg-shift", 0x2)?;
+            fdt.property_array_u32("interrupts", &[0x0, (dev.irqs[0] - 32) as u32, 0x4])?;
+            fdt.property_string("status", "okay")?;
+            // if cfg!(feature = "rk3588") {
+            //     fdt.property_string("pinctrl-names", "default")?;
+            //     fdt.property_u32("pinctrl-0", 0x14d)?;
+            // }
+            fdt.end_node(serial)?;
         }
     }
 

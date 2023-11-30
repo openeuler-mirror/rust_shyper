@@ -28,16 +28,13 @@ fn alt2bits(alt: u8) -> u8 {
 pub fn gpio_select_function(gpio: u8, alt: u8) {
     let mut gpfsel;
     let field_offset;
-    match gpio {
-        0..=9 => {
-            gpfsel = unsafe { *(GPFSEL0 as *const u32) };
-            field_offset = (gpio as u32) % 10 * 3;
-            gpfsel &= !(1 << field_offset);
-            gpfsel &= !(1 << (field_offset + 1));
-            gpfsel &= !(1 << (field_offset + 2));
-            gpfsel |= (alt2bits(alt) as u32) << field_offset;
-            unsafe { (GPFSEL0 as *mut u32).write_volatile(gpfsel) };
-        }
-        _ => {}
+    if gpio <= 9 {
+        gpfsel = unsafe { *(GPFSEL0 as *const u32) };
+        field_offset = (gpio as u32) % 10 * 3;
+        gpfsel &= !(1 << field_offset);
+        gpfsel &= !(1 << (field_offset + 1));
+        gpfsel &= !(1 << (field_offset + 2));
+        gpfsel |= (alt2bits(alt) as u32) << field_offset;
+        unsafe { (GPFSEL0 as *mut u32).write_volatile(gpfsel) };
     }
 }

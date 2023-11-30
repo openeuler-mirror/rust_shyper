@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
+
 use core::mem::size_of;
 use spin::Mutex;
 
@@ -119,7 +119,7 @@ impl NetDesc {
         inner.status
     }
 
-    pub fn cfg_init(&self, mac: &Vec<usize>) {
+    pub fn cfg_init(&self, mac: &[usize]) {
         let mut inner = self.inner.lock();
         inner.mac[0] = mac[0] as u8;
         inner.mac[1] = mac[1] as u8;
@@ -642,15 +642,11 @@ fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
 }
 
 pub fn virtio_net_announce(vm: Vm) {
-    match vm.emu_net_dev(0) {
-        EmuDevs::VirtioNet(nic) => match nic.dev().desc() {
-            DevDesc::NetDesc(desc) => {
-                let status = desc.status();
-                desc.set_status(status | VIRTIO_NET_S_ANNOUNCE);
-                nic.notify_config(vm);
-            }
-            _ => {}
-        },
-        _ => {}
+    if let EmuDevs::VirtioNet(nic) = vm.emu_net_dev(0) {
+        if let DevDesc::NetDesc(desc) = nic.dev().desc() {
+            let status = desc.status();
+            desc.set_status(status | VIRTIO_NET_S_ANNOUNCE);
+            nic.notify_config(vm);
+        }
     }
 }

@@ -435,11 +435,8 @@ impl VmConfigEntry {
     pub fn gicc_addr(&self) -> usize {
         let dtb_devs = self.vm_dtb_devs.lock();
         for dev in &dtb_devs.dtb_device_list {
-            match dev.dev_type {
-                DtbDevType::DevGicc => {
-                    return dev.addr_region.ipa;
-                }
-                _ => {}
+            if let DtbDevType::DevGicc = dev.dev_type {
+                return dev.addr_region.ipa;
             }
         }
         0
@@ -448,11 +445,8 @@ impl VmConfigEntry {
     pub fn gicd_addr(&self) -> usize {
         let dtb_devs = self.vm_dtb_devs.lock();
         for dev in &dtb_devs.dtb_device_list {
-            match dev.dev_type {
-                DtbDevType::DevGicd => {
-                    return dev.addr_region.ipa;
-                }
-                _ => {}
+            if let DtbDevType::DevGicd = dev.dev_type {
+                return dev.addr_region.ipa;
             }
         }
         0
@@ -461,11 +455,8 @@ impl VmConfigEntry {
     pub fn gicr_addr(&self) -> usize {
         let dtb_devs = self.vm_dtb_devs.lock();
         for dev in &dtb_devs.dtb_device_list {
-            match dev.dev_type {
-                DtbDevType::DevGicr => {
-                    return dev.addr_region.ipa;
-                }
-                _ => {}
+            if let DtbDevType::DevGicr = dev.dev_type {
+                return dev.addr_region.ipa;
             }
         }
         0
@@ -749,10 +740,10 @@ pub fn vm_cfg_add_emu_dev(
             EmuDeviceType::EmuDeviceTVirtioBlkMediated => EmuDeviceType::EmuDeviceTVirtioBlk,
             _ => emu_dev_type,
         },
-        mediated: match EmuDeviceType::from_usize(emu_type) {
-            EmuDeviceType::EmuDeviceTVirtioBlkMediated => true,
-            _ => false,
-        },
+        mediated: matches!(
+            EmuDeviceType::from_usize(emu_type),
+            EmuDeviceType::EmuDeviceTVirtioBlkMediated
+        ),
     };
     vm_cfg.add_emulated_device_cfg(emu_dev_cfg);
 
