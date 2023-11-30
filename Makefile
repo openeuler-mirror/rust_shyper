@@ -62,7 +62,7 @@ else ifeq ($(ARCH), riscv64)
 		  -ffreestanding
 endif
 
-export CROSS_COMPILE CFLAGS
+export BOARD CROSS_COMPILE CFLAGS
 
 CARGO_ACTION ?= build
 
@@ -70,14 +70,16 @@ TFTP_SERVER ?= root@192.168.106.153:/tftp
 
 UBOOT_IMAGE ?= Image$(USER)_$(ARCH)_$(BOARD)
 
-.PHONY: build upload qemu rk3588 tx2 pi4 tx2_update tx2_ramdisk gdb clean
+.PHONY: build cargo upload qemu rk3588 tx2 pi4 tx2_update tx2_ramdisk gdb clean clippy
 
-build:
-	cargo ${CARGO_ACTION} ${CARGO_FLAGS}
+build: cargo
 	bash linkimg.sh -i ${TARGET_DIR}/${RELOCATE_IMAGE} -m ${VM0_IMAGE_PATH} \
 		-t ${LD} -f linkers/${ARCH}.ld -s ${TEXT_START} -o ${TARGET_DIR}/${IMAGE}
 	${OBJDUMP} --demangle -d ${TARGET_DIR}/${IMAGE} > ${TARGET_DIR}/t.txt
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
+
+cargo:
+	cargo ${CARGO_ACTION} ${CARGO_FLAGS}
 
 # TODO: fix the mkimage ARCH because it only accept "arm64" and "AArch64" for aarch64
 upload: build
@@ -140,3 +142,6 @@ gdb:
 
 clean:
 	cargo clean
+
+clippy: CARGO_ACTION = clippy
+clippy: cargo

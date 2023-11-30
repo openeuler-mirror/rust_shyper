@@ -17,6 +17,8 @@ license = "MulanPSL-2.0"
 
 [lib]
 crate-type = ["staticlib"]
+test = false
+bench = false
 
 [profile.dev]
 panic = "abort"

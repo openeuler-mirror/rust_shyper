@@ -21,6 +21,13 @@
 #![feature(c_str_literals)]
 #![allow(unused_doc_comments)]
 #![allow(special_module_name)]
+#![allow(clippy::enum_variant_names)]
+#![allow(clippy::module_inception)]
+#![allow(clippy::wrong_self_convention)]
+#![allow(clippy::mut_from_ref)]
+#![allow(clippy::upper_case_acronyms)]
+#![allow(clippy::modulo_one)]
+#![allow(clippy::needless_range_loop)]
 
 #[macro_use]
 extern crate alloc;

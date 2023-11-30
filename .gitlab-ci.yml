@@ -12,6 +12,7 @@ variables:
   CROSS_COMPILE: aarch64-linux-gnu-
   RUST_BACKTRACE: full
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
 
 fmt:
   stage: style
@@ -34,4 +35,5 @@ build:
           - ""
           - rk3588-noeth
   script:
+    - make clippy
     - make
