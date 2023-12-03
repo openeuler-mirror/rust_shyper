@@ -44,17 +44,6 @@ pub fn barrier() {
     }
 }
 
-#[inline(never)]
-pub fn func_barrier() {
-    unsafe {
-        let ori = CPU_FUNC_SYNC.count.fetch_add(1, Ordering::Relaxed);
-        let next_count = round_up(ori + 1, CPU_FUNC_SYNC.n);
-        while CPU_FUNC_SYNC.count.load(Ordering::Acquire) < next_count {
-            core::hint::spin_loop();
-        }
-    }
-}
-
 pub fn set_barrier_num(num: usize) {
     unsafe {
         ptr::write_volatile(&mut CPU_FUNC_SYNC.n, num);

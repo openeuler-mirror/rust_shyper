@@ -118,7 +118,6 @@ declare_enum_with_handler! {
         IpiTIntc => crate::arch::vgic_ipi_handler,
         IpiTPower => crate::arch::psci_ipi_handler,
         IpiTEthernetMsg => crate::device::ethernet_ipi_rev_handler,
-        IpiTHyperFresh => crate::kernel::hyper_fresh_ipi_handler,
         IpiTHvc => crate::kernel::hvc_ipi_handler,
         IpiTVMM => crate::vmm::vmm_ipi_handler,
         IpiTMediatedDev => crate::device::mediated_ipi_handler,

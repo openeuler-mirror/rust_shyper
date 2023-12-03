@@ -18,7 +18,6 @@ use crate::arch::exception_next_instruction_step;
 use crate::arch::smc_guest_handler;
 use crate::device::{emu_handler, emu_reg_handler, EmuContext};
 use crate::kernel::{active_vm, current_cpu, hvc_guest_handler, active_vm_id};
-use crate::kernel::migrate::migrate::migrate_data_abort_handler;
 
 pub const HVC_RETURN_REG: usize = 0;
 
@@ -45,22 +44,6 @@ pub fn data_abort_handler() {
 
     if !exception_data_abort_is_translate_fault() {
         if exception_data_abort_is_permission_fault() {
-            // println!(
-            //     "write {}, width {}, reg width {}, addr {:x}, iss {:x}, reg idx {}, reg val 0x{:x}, esr 0x{:x}",
-            //     exception_data_abort_access_is_write(),
-            //     emu_ctx.width,
-            //     emu_ctx.reg_width,
-            //     emu_ctx.address,
-            //     exception_iss(),
-            //     emu_ctx.reg,
-            //     current_cpu().get_gpr(emu_ctx.reg),
-            //     exception_esr()
-            // );
-            migrate_data_abort_handler(&emu_ctx);
-            // no need to rewrite elr
-
-            // let time1 = time_current_us();
-            // println!("migrate_data_abort_handler: {}us", time1 - time0);
             return;
         } else {
             panic!(
@@ -143,13 +126,6 @@ pub fn hvc_handler() {
         }
     }
     // let time_end = timer_arch_get_counter();
-    // println!(
-    //     "hvc fid 0x{:x} event 0x{:x} counter {}, freq {:x}",
-    //     hvc_type,
-    //     event,
-    //     time_end - time_start,
-    //     timer_arch_get_frequency()
-    // );
 }
 
 #[inline(always)]

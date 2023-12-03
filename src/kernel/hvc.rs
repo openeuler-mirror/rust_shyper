@@ -13,24 +13,17 @@ use core::mem::size_of;
 
 use spin::Mutex;
 
-use crate::arch::{PAGE_SIZE, PTE_S2_NORMAL};
-use crate::arch::gicc_clear_current_irq;
+use crate::arch::PAGE_SIZE;
 use crate::config::*;
 use crate::device::{mediated_blk_notify_handler, mediated_dev_append};
 use crate::kernel::{
-    active_vm, active_vm_id, current_cpu, interrupt_vm_inject, ipi_send_msg, IpiHvcMsg, IpiInnerMsg, IpiMessage,
-    IpiType, ivc_update_mq, mem_heap_region_reserve, Scheduler, vcpu_idle, vm, vm_if_get_cpu_id, vm_if_ivc_arg,
-    vm_if_ivc_arg_ptr, vm_if_set_ivc_arg_ptr, VM_NUM_MAX,
+    current_cpu, interrupt_vm_inject, ipi_send_msg, IpiHvcMsg, IpiInnerMsg, IpiMessage, IpiType, ivc_update_mq, vm,
+    vm_if_get_cpu_id, vm_if_ivc_arg, vm_if_ivc_arg_ptr, vm_if_set_ivc_arg_ptr, VM_NUM_MAX,
 };
-use crate::utils::{func_barrier, memcpy_safe, trace};
+use crate::utils::{memcpy_safe, trace};
 #[cfg(feature = "unilib")]
 use crate::utils::unilib::*;
-use crate::vmm::{get_vm_id, vmm_boot_vm, vmm_list_vm, vmm_migrate_boot, vmm_reboot_vm, vmm_remove_vm};
-use crate::kernel::live_update::live_update::{update_request, UPDATE_IMG_BASE_ADDR};
-use crate::kernel::migrate::migrate::{
-    vmm_migrate_init_vm_hvc_handler, vmm_migrate_vm_boot_hvc_handler, vmm_migrate_finish_hvc_handler,
-    vmm_migrate_ready_hvc_handler, vmm_migrate_memcpy_hvc_handler, migrate_finish_ipi_handler,
-};
+use crate::vmm::{get_vm_id, vmm_boot_vm, vmm_list_vm, vmm_reboot_vm, vmm_remove_vm};
 pub static VM_STATE_FLAG: Mutex<usize> = Mutex::new(0);
 
 pub static SHARE_MEM_LIST: Mutex<BTreeMap<usize, usize>> = Mutex::new(BTreeMap::new());
@@ -40,12 +33,8 @@ const HVC_FINISH: usize = 0;
 const HVC_ERR: usize = usize::MAX;
 
 // share mem type
-pub const MIGRATE_BITMAP: usize = 0;
 pub const VM_CONTEXT_SEND: usize = 1;
 pub const VM_CONTEXT_RECEIVE: usize = 2;
-pub const MIGRATE_SEND: usize = 3;
-pub const MIGRATE_RECEIVE: usize = 4;
-pub const LIVE_UPDATE_IMG: usize = 5;
 
 // hvc_fid
 pub const HVC_SYS: usize = 0;
@@ -261,37 +250,13 @@ fn hvc_config_handler(
     }
 }
 
-fn hvc_sys_handler(event: usize, x0: usize) -> Result<usize, ()> {
+fn hvc_sys_handler(event: usize, _x0: usize) -> Result<usize, ()> {
     match event {
         HVC_SYS_UPDATE => {
-            info!("HVC_SYS_UPDATE");
-            mem_heap_region_reserve(UPDATE_IMG_BASE_ADDR, x0);
-            info!("finish mem_heap_region_reserve");
-            update_request();
-            Ok(0)
+            todo!()
         }
         HVC_SYS_TEST => {
             println!("HVC SYS TEST");
-            Ok(0)
-        }
-        HVC_SYS_UPDATE_MEM_MAP => {
-            //  x1 should be 0x8000000
-            debug!("HVC_SYS_UPDATE_MEM_MAP");
-            let vm = active_vm().unwrap();
-            vm.pt_unmap_range(get_share_mem(LIVE_UPDATE_IMG), 0x8000000, true);
-            vm.pt_map_range(
-                get_share_mem(LIVE_UPDATE_IMG),
-                0x8000000,
-                UPDATE_IMG_BASE_ADDR,
-                PTE_S2_NORMAL,
-                true,
-            );
-            // tlb_invalidate_guest_all();
-            debug!(
-                "map pa {:x} to ipa {:x}",
-                UPDATE_IMG_BASE_ADDR,
-                get_share_mem(LIVE_UPDATE_IMG)
-            );
             Ok(0)
         }
         _ => Err(()),
@@ -319,44 +284,14 @@ fn hvc_vmm_handler(event: usize, x0: usize, _x1: usize) -> Result<usize, ()> {
             get_vm_id(x0);
             Ok(HVC_FINISH)
         }
-        HVC_VMM_MIGRATE_START => {
-            // demo: migration for bma1
-            if x0 == 0 {
-                error!("migration for mvm is not supported");
-                return Err(());
-            }
-
-            hvc_send_msg_to_vm(
-                0,
-                &HvcGuestMsg::Migrate(HvcMigrateMsg {
-                    fid: HVC_VMM,
-                    event: HVC_VMM_MIGRATE_START,
-                    vm_id: x0,
-                    oper: MIGRATE_START,
-                    page_num: 0,
-                }),
-            );
-            Ok(HVC_FINISH)
-        }
-        HVC_VMM_MIGRATE_READY => {
-            vmm_migrate_ready_hvc_handler(x0);
-            Ok(HVC_FINISH)
-        }
-        HVC_VMM_MIGRATE_MEMCPY => {
-            vmm_migrate_memcpy_hvc_handler(x0);
-            Ok(HVC_FINISH)
-        }
-        HVC_VMM_MIGRATE_INIT_VM => {
-            vmm_migrate_init_vm_hvc_handler(x0);
-            Ok(HVC_FINISH)
-        }
-        HVC_VMM_MIGRATE_VM_BOOT => {
-            vmm_migrate_vm_boot_hvc_handler(x0);
-            Ok(HVC_FINISH)
-        }
-        HVC_VMM_MIGRATE_FINISH => {
-            vmm_migrate_finish_hvc_handler(x0);
-            Ok(HVC_FINISH)
+        HVC_VMM_MIGRATE_START
+        | HVC_VMM_MIGRATE_READY
+        | HVC_VMM_MIGRATE_MEMCPY
+        | HVC_VMM_MIGRATE_INIT_VM
+        | HVC_VMM_MIGRATE_VM_BOOT
+        | HVC_VMM_MIGRATE_FINISH => {
+            error!("unimplemented");
+            Err(())
         }
         HVC_VMM_VM_REMOVE => {
             vmm_remove_vm(x0);
@@ -380,18 +315,8 @@ fn hvc_ivc_handler(event: usize, x0: usize, x1: usize) -> Result<usize, ()> {
             }
         }
         HVC_IVC_SHARE_MEM => {
-            let vm = active_vm().unwrap();
-            let base = vm.share_mem_base();
-            vm.add_share_mem_base(x1);
-            add_share_mem(x0, base);
-            info!(
-                "VM{} add share mem type 0x{:x} base 0x{:x} len 0x{:x}",
-                active_vm_id(),
-                x0,
-                base,
-                x1
-            );
-            Ok(base)
+            error!("not support vm migration and live update");
+            Ok(HVC_FINISH)
         }
         _ => {
             error!("hvc_ivc_handler: unknown event {}", event);
@@ -557,63 +482,10 @@ pub fn hvc_ipi_handler(msg: &IpiMessage) {
                         hvc_guest_notify(msg.trgt_vmid);
                     }
                     HVC_VMM_MIGRATE_FINISH => {
-                        // 被迁移VM收到该ipi标志vcpu_idle，VM0收到该ipi标志最后一次内存拷贝
-                        if current_cpu().id == 0 {
-                            migrate_finish_ipi_handler(msg.src_vmid);
-                            return;
-                        }
-                        let trgt_vcpu = match current_cpu().vcpu_array.pop_vcpu_through_vmid(msg.trgt_vmid) {
-                            None => {
-                                error!(
-                                    "Core {} failed to find target vcpu, vmid {}",
-                                    current_cpu().id,
-                                    msg.trgt_vmid
-                                );
-                                return;
-                            }
-                            Some(vcpu) => vcpu,
-                        };
-                        let vm = trgt_vcpu.vm().unwrap();
-                        // println!("Core[{}] clear irq {}", current_cpu().id, current_cpu().current_irq);
-                        gicc_clear_current_irq(true);
-                        // 当满足下序条件时需要拷贝cpu.ctx
-                        // 否则意味着当前核心有多个虚拟机共享，且被迁移虚拟机所在的核心尚未被调度到，寄存器数值无需更新
-                        if vm.id() == msg.trgt_vmid {
-                            trgt_vcpu.context_vm_store();
-                        }
-                        // save gic register for each vcpu
-                        trgt_vcpu.context_gic_irqs_store();
-                        func_barrier();
-                        *VM_STATE_FLAG.lock() = 1;
-                        if trgt_vcpu.id() == 0 {
-                            vm.context_vm_migrate_save();
-                            // println!("send finish ipi to core0");
-                            send_hvc_ipi(msg.trgt_vmid, 0, HVC_VMM, HVC_VMM_MIGRATE_FINISH, 0);
-                        }
-                        // println!(
-                        //     "VMData size is {:x}, VgicMigData size is {:x}, VirtioMmioData size is {:x}",
-                        //     size_of::<VMData>(),
-                        //     size_of::<VgicMigData>(),
-                        //     size_of::<VirtioMmioData>(),
-                        // );
-                        vcpu_idle(trgt_vcpu);
+                        error!("unimplemented");
                     }
                     HVC_VMM_MIGRATE_VM_BOOT => {
-                        // let vm = vm(msg.trgt_vmid).unwrap();
-                        // vm.set_migration_state(true);
-
-                        gicc_clear_current_irq(true);
-                        match current_cpu().vcpu_array.pop_vcpu_through_vmid(msg.trgt_vmid) {
-                            None => {
-                                panic!("Core[{}] does not have VM[{}] vcpu", current_cpu().id, msg.trgt_vmid);
-                            }
-                            Some(vcpu) => {
-                                current_cpu().scheduler().yield_to(vcpu.clone());
-                                // restore gic register for each vcpu
-                                vcpu.context_gic_irqs_restore();
-                            }
-                        }
-                        vmm_migrate_boot();
+                        error!("unimplemented");
                     }
                     _ => {}
                 },
@@ -637,21 +509,5 @@ pub fn hvc_ipi_handler(msg: &IpiMessage) {
         _ => {
             error!("vgic_ipi_handler: illegal ipi");
         }
-    }
-}
-
-pub fn send_hvc_ipi(src_vmid: usize, trgt_vmid: usize, fid: usize, event: usize, trgt_cpuid: usize) {
-    let ipi_msg = IpiHvcMsg {
-        src_vmid,
-        trgt_vmid,
-        fid,
-        event,
-    };
-    if !ipi_send_msg(trgt_cpuid, IpiType::IpiTHvc, IpiInnerMsg::HvcMsg(ipi_msg)) {
-        error!(
-            "send_hvc_ipi: Failed to send ipi message, target {} type {:#?}",
-            0,
-            IpiType::IpiTHvc
-        );
     }
 }

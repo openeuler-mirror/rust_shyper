@@ -17,14 +17,10 @@ use spin::Mutex;
 use spin::RwLock;
 
 use crate::arch::Vgic;
-use crate::device::{
-    virtio_blk_notify_handler, virtio_console_notify_handler, virtio_mediated_blk_notify_handler,
-    virtio_net_notify_handler, VirtioMmio,
-};
+use crate::device::VirtioMmio;
 use crate::kernel::current_cpu;
 use crate::utils::in_range;
 
-pub const EMU_DEV_NUM_MAX: usize = 32;
 pub static EMU_DEVS_LIST: Mutex<Vec<EmuDevEntry>> = Mutex::new(Vec::new());
 
 #[derive(Clone)]
@@ -35,50 +31,6 @@ pub enum EmuDevs {
     VirtioConsole(VirtioMmio),
     None,
 }
-
-impl EmuDevs {
-    pub fn migrate_emu_devs(&mut self, src_dev: EmuDevs) {
-        match self {
-            EmuDevs::Vgic(vgic) => {
-                if let EmuDevs::Vgic(src_vgic) = src_dev {
-                    vgic.save_vgic(src_vgic);
-                } else {
-                    error!("EmuDevs::migrate_save: illegal src dev type for vgic");
-                }
-            }
-            EmuDevs::VirtioBlk(mmio) => {
-                if let EmuDevs::VirtioBlk(src_mmio) = src_dev {
-                    mmio.save_mmio(
-                        src_mmio.clone(),
-                        if src_mmio.dev().mediated() {
-                            Some(virtio_mediated_blk_notify_handler)
-                        } else {
-                            Some(virtio_blk_notify_handler)
-                        },
-                    );
-                } else {
-                    error!("EmuDevs::migrate_save: illegal src dev type for virtio blk");
-                }
-            }
-            EmuDevs::VirtioNet(mmio) => {
-                if let EmuDevs::VirtioNet(src_mmio) = src_dev {
-                    mmio.save_mmio(src_mmio, Some(virtio_net_notify_handler));
-                } else {
-                    error!("EmuDevs::migrate_save: illegal src dev type for virtio net");
-                }
-            }
-            EmuDevs::VirtioConsole(mmio) => {
-                if let EmuDevs::VirtioConsole(src_mmio) = src_dev {
-                    mmio.save_mmio(src_mmio, Some(virtio_console_notify_handler));
-                } else {
-                    error!("EmuDevs::migrate_save: illegal src dev type for virtio console");
-                }
-            }
-            EmuDevs::None => {}
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct EmuContext {
     pub address: usize,
@@ -230,9 +182,6 @@ pub fn emu_register_dev(
     handler: EmuDevHandler,
 ) {
     let mut emu_devs_list = EMU_DEVS_LIST.lock();
-    if emu_devs_list.len() >= EMU_DEV_NUM_MAX {
-        panic!("emu_register_dev: can't register more devs");
-    }
 
     for emu_dev in &*emu_devs_list {
         if vm_id != emu_dev.vm_id {

@@ -45,8 +45,6 @@ impl PlatOperation for Tx2Platform {
     const DISK_PARTITION_1_SIZE: usize = 41943040;
     const DISK_PARTITION_2_SIZE: usize = 8388608;
 
-    const SHARE_MEM_BASE: usize = 0xd_0000_0000;
-
     fn cpuid_to_cpuif(cpuid: usize) -> usize {
         cpuid + PLAT_DESC.cpu_desc.num
     }

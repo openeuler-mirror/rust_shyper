@@ -97,18 +97,6 @@ impl NetDesc {
         }
     }
 
-    // use for live update
-    pub fn back_up(&self) -> NetDesc {
-        let current_inner = self.inner.lock();
-        let inner = NetDescInner {
-            mac: current_inner.mac,
-            status: current_inner.status,
-        };
-        NetDesc {
-            inner: Arc::new(Mutex::new(inner)),
-        }
-    }
-
     pub fn set_status(&self, status: u16) {
         let mut inner = self.inner.lock();
         inner.status = status;
@@ -137,20 +125,6 @@ impl NetDesc {
         }
 
         unsafe { *((start_addr + offset) as *const u32) }
-    }
-
-    // use for migration
-    pub fn restore_net_data(&self, desc_data: &NetDescData) {
-        let mut inner = self.inner.lock();
-        inner.mac = desc_data.mac;
-        inner.status = desc_data.status;
-    }
-
-    // use for migration
-    pub fn save_net_data(&self, desc_data: &mut NetDescData) {
-        let inner = self.inner.lock();
-        desc_data.mac = inner.mac;
-        desc_data.status = inner.status;
     }
 }
 

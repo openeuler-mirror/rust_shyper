@@ -13,10 +13,8 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use spin::Mutex;
 
-use crate::arch::{
-    ContextFrame, ContextFrameTrait, cpu_interrupt_unmask, GicContext, GICD, VmContext, timer_arch_get_counter,
-};
-use crate::board::{Platform, PlatOperation, PLATFORM_VCPU_NUM_MAX};
+use crate::arch::{ContextFrame, ContextFrameTrait, cpu_interrupt_unmask, GicContext, VmContext, timer_arch_get_counter};
+use crate::board::PlatOperation;
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
 use crate::utils::memcpy_safe;
@@ -63,60 +61,6 @@ impl Vcpu {
         crate::board::Platform::cpu_shutdown();
     }
 
-    pub fn migrate_vm_ctx_save(&self, cache_pa: usize) {
-        let inner = self.inner.lock();
-        memcpy_safe(
-            cache_pa as *const u8,
-            &(inner.vm_ctx) as *const _ as *const u8,
-            size_of::<VmContext>(),
-        );
-    }
-
-    pub fn migrate_vcpu_ctx_save(&self, cache_pa: usize) {
-        let inner = self.inner.lock();
-        memcpy_safe(
-            cache_pa as *const u8,
-            &(inner.vcpu_ctx) as *const _ as *const u8,
-            size_of::<ContextFrame>(),
-        );
-    }
-
-    pub fn migrate_gic_ctx_save(&self, cache_pa: usize) {
-        let inner = self.inner.lock();
-        memcpy_safe(
-            cache_pa as *const u8,
-            &(inner.gic_ctx) as *const _ as *const u8,
-            size_of::<GicContext>(),
-        );
-    }
-
-    pub fn migrate_vm_ctx_restore(&self, cache_pa: usize) {
-        let inner = self.inner.lock();
-        memcpy_safe(
-            &(inner.vm_ctx) as *const _ as *const u8,
-            cache_pa as *const u8,
-            size_of::<VmContext>(),
-        );
-    }
-
-    pub fn migrate_vcpu_ctx_restore(&self, cache_pa: usize) {
-        let inner = self.inner.lock();
-        memcpy_safe(
-            &(inner.vcpu_ctx) as *const _ as *const u8,
-            cache_pa as *const u8,
-            size_of::<ContextFrame>(),
-        );
-    }
-
-    pub fn migrate_gic_ctx_restore(&self, cache_pa: usize) {
-        let inner = self.inner.lock();
-        memcpy_safe(
-            &(inner.gic_ctx) as *const _ as *const u8,
-            cache_pa as *const u8,
-            size_of::<GicContext>(),
-        );
-    }
-
     pub fn context_vm_store(&self) {
         self.save_cpu_ctx();
 
@@ -124,48 +68,6 @@ impl Vcpu {
         inner.vm_ctx.ext_regs_store();
         inner.vm_ctx.fpsimd_save_context();
         inner.vm_ctx.gic_save_state();
-    }
-
-    pub fn context_gic_irqs_store(&self) {
-        let mut inner = self.inner.lock();
-        let vm = inner.vm.clone().unwrap();
-        for irq in vm.config().passthrough_device_irqs() {
-            inner.gic_ctx.add_irq(irq as u64);
-        }
-        inner.gic_ctx.add_irq(25);
-        let gicv_ctlr = unsafe { &*(Platform::GICV_BASE as *const u32) };
-        inner.gic_ctx.set_gicv_ctlr(*gicv_ctlr);
-        let gicv_pmr = unsafe { &*((Platform::GICV_BASE + 0x4) as *const u32) };
-        inner.gic_ctx.set_gicv_pmr(*gicv_pmr);
-    }
-
-    pub fn context_gic_irqs_restore(&self) {
-        let inner = self.inner.lock();
-
-        for irq_state in inner.gic_ctx.irq_state.iter() {
-            if irq_state.id != 0 {
-                #[cfg(feature = "gicv3")]
-                {
-                    use crate::arch::{gic_set_enable, gic_set_prio};
-                    gic_set_enable(irq_state.id as usize, irq_state.enable != 0);
-                    gic_set_prio(irq_state.id as usize, irq_state.priority);
-                    GICD.set_route(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
-                }
-                #[cfg(not(feature = "gicv3"))]
-                {
-                    GICD.set_enable(irq_state.id as usize, irq_state.enable != 0);
-                    GICD.set_prio(irq_state.id as usize, irq_state.priority);
-                    GICD.set_trgt(irq_state.id as usize, 1 << Platform::cpuid_to_cpuif(current_cpu().id));
-                }
-            }
-        }
-
-        let gicv_pmr = unsafe { &mut *((Platform::GICV_BASE + 0x4) as *mut u32) };
-        *gicv_pmr = inner.gic_ctx.gicv_pmr();
-        // println!("Core[{}] save gic context", current_cpu().id);
-        let gicv_ctlr = unsafe { &mut *(Platform::GICV_BASE as *mut u32) };
-        *gicv_ctlr = inner.gic_ctx.gicv_ctlr();
-        // show_vcpu_reg_context();
     }
 
     pub fn context_vm_restore(&self) {
@@ -414,8 +316,6 @@ impl VcpuInner {
     }
 
     fn arch_ctx_reset(&mut self) {
-        // let migrate = self.vm.as_ref().unwrap().migration_state();
-        // if !migrate {
         self.vm_ctx.cntvoff_el2 = 0;
         self.vm_ctx.sctlr_el1 = 0x30C50830;
         self.vm_ctx.cntkctl_el1 = 0;
@@ -466,11 +366,8 @@ impl VcpuInner {
     }
 
     fn reset_context(&mut self) {
-        // let migrate = self.vm.as_ref().unwrap().migration_state();
         self.arch_ctx_reset();
-        // if !migrate {
         self.gic_ctx_reset();
-        // }
         use crate::kernel::vm_if_get_type;
         if vm_if_get_type(self.vm_id()) == VmType::VmTBma {
             debug!("vm {} bma ctx restore", self.vm_id());
@@ -521,9 +418,6 @@ pub static VCPU_LIST: Mutex<Vec<Vcpu>> = Mutex::new(Vec::new());
 
 pub fn vcpu_alloc() -> Option<Vcpu> {
     let mut vcpu_list = VCPU_LIST.lock();
-    if vcpu_list.len() >= PLATFORM_VCPU_NUM_MAX {
-        return None;
-    }
 
     let val = Vcpu::default();
     vcpu_list.push(val.clone());

@@ -29,14 +29,6 @@ impl BlkStat {
         }
     }
 
-    pub fn back_up(&self) -> BlkStat {
-        let current_inner = self.inner.lock();
-        let inner = *current_inner;
-        BlkStat {
-            inner: Arc::new(Mutex::new(inner)),
-        }
-    }
-
     pub fn read_req(&self) -> usize {
         let inner = self.inner.lock();
         inner.read_req
@@ -107,20 +99,6 @@ impl NicStat {
         NicStat {
             inner: Arc::new(Mutex::new(NicStatInner::default())),
         }
-    }
-
-    pub fn back_up(&self) -> NicStat {
-        let current_inner = self.inner.lock();
-        let inner = *current_inner;
-        NicStat {
-            inner: Arc::new(Mutex::new(inner)),
-        }
-    }
-
-    pub fn migrate_save(&self, src_stat: NicStat) {
-        let mut dst_inner = self.inner.lock();
-        let src_inner = src_stat.inner.lock();
-        *dst_inner = *src_inner;
     }
 
     pub fn send_req(&self) -> usize {

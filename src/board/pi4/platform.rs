@@ -34,8 +34,6 @@ impl PlatOperation for Pi4Platform {
     const GICH_BASE: usize = 0xFF844000;
     const GICV_BASE: usize = 0xFF846000;
 
-    const SHARE_MEM_BASE: usize = 0x7_0000_0000;
-
     // start sector number (LBA)
     const DISK_PARTITION_0_START: usize = 2048;
     const DISK_PARTITION_1_START: usize = 526336;

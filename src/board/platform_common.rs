@@ -11,7 +11,6 @@
 use crate::arch::ArchDesc;
 
 pub const PLATFORM_CPU_NUM_MAX: usize = 8;
-pub const PLATFORM_VCPU_NUM_MAX: usize = 8;
 
 pub enum SchedRule {
     RoundRobin,
@@ -88,8 +87,6 @@ pub trait PlatOperation {
     const DISK_PARTITION_2_SIZE: usize = usize::MAX;
     const DISK_PARTITION_3_SIZE: usize = usize::MAX;
     const DISK_PARTITION_4_SIZE: usize = usize::MAX;
-
-    const SHARE_MEM_BASE: usize;
 
     fn cpu_on(arch_core_id: usize, entry: usize, ctx: usize) {
         crate::arch::power_arch_cpu_on(arch_core_id, entry, ctx);

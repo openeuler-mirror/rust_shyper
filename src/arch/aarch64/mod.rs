@@ -21,11 +21,9 @@ pub use self::mmu::*;
 pub use self::page_table::*;
 pub use self::psci::*;
 pub use self::smc::*;
-pub use self::cache::*;
 pub use self::smmu::*;
 pub use self::sync::*;
 pub use self::timer::*;
-pub use self::tlb::*;
 pub use self::vcpu::*;
 #[cfg(not(feature = "gicv3"))]
 pub use self::vgic::*;

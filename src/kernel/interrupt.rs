@@ -17,7 +17,6 @@ use crate::arch::{GIC_PRIVINT_NUM, interrupt_arch_vm_register};
 use crate::kernel::{current_cpu, ipi_irq_handler, IpiInnerMsg, IpiMessage, Vcpu, VcpuState};
 use crate::kernel::Vm;
 use crate::utils::{BitAlloc, BitAlloc256, BitAlloc4K, BitMap};
-use crate::kernel::live_update::live_update::update_request;
 use super::Scheduler;
 
 pub const INTERRUPT_NUM_MAX: usize = 1024;
@@ -216,9 +215,4 @@ pub fn interrupt_inject_ipi_handler(msg: &IpiMessage) {
             error!("interrupt_inject_ipi_handler: illegal ipi type");
         }
     }
-}
-
-pub fn hyper_fresh_ipi_handler(_msg: &IpiMessage) {
-    println!("XCPU {:x} will update", current_cpu().id);
-    update_request();
 }

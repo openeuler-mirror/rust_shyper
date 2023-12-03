@@ -658,7 +658,6 @@ pub fn vm_init() {
 
 pub fn vmm_boot() {
     if current_cpu().assigned() && active_vcpu_id() == 0 {
-        // active_vm().unwrap().set_migration_state(false);
         info!("Core {} start running", current_cpu().id);
         vcpu_run(false);
     } else {
@@ -666,13 +665,4 @@ pub fn vmm_boot() {
         info!("Core {} idle", current_cpu().id);
         cpu_idle();
     }
-}
-
-pub fn vmm_migrate_boot() {
-    let vcpu = current_cpu().active_vcpu.clone().unwrap();
-    vcpu.reset_vmpidr();
-    vcpu.reset_vtimer_offset();
-
-    // println!("Core[{}] start running", current_cpu().id);
-    vcpu_run(true);
 }

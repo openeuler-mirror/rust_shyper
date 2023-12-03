@@ -10,21 +10,20 @@
 
 use core::mem::size_of;
 
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use spin::Mutex;
 
 use crate::{arch::GICH, kernel::IpiInitcMessage};
-use crate::board::{PLATFORM_CPU_NUM_MAX, Platform, PlatOperation, PLAT_DESC};
+use crate::board::{Platform, PlatOperation, PLAT_DESC};
 use crate::device::EmuContext;
 use crate::device::EmuDevs;
 use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, cpuid2mpidr};
-use crate::kernel::migrate::migrate::{VgicCpuPrivData, VgicIntData, VgicMigData};
 use crate::kernel::{active_vm, active_vm_id};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
-use crate::kernel::{InitcEvent, Vcpu, Vm, vm};
+use crate::kernel::{InitcEvent, Vcpu, Vm};
 use crate::utils::{bit_extract, bit_get, bitmap_find_nth, ptr_read_write};
 
 use super::gicv3::*;
@@ -36,117 +35,9 @@ struct VgicInt {
 }
 
 impl VgicInt {
-    fn update(&self) -> Self {
-        let new_this = Self::new(self.id() as usize);
-        if let Some(vcpu) = self.owner() {
-            let vm = vcpu.vm().unwrap();
-            new_this.set_owner(vm.vcpu(vcpu.id()).unwrap());
-        }
-        let mut inner = new_this.inner.lock();
-        inner.id = self.id();
-        inner.hw = self.hw();
-        inner.in_lr = self.in_lr();
-        inner.lr = self.lr();
-        inner.enabled = self.enabled();
-        inner.state = self.state();
-        inner.prio = self.prio();
-        inner.targets = self.targets();
-        inner.cfg = self.cfg();
-        inner.in_pend = self.in_pend();
-        inner.in_act = self.in_act();
-        drop(inner);
-        new_this
-    }
-
     fn new(id: usize) -> VgicInt {
         VgicInt {
             inner: Arc::new(Mutex::new(VgicIntInner::new(id))),
-            lock: Arc::new(Mutex::new(())),
-        }
-    }
-
-    pub fn restore_migrate_data(
-        &self,
-        int_data: &VgicIntData,
-        vcpu_list: &[Vcpu],
-        vcpuid_map: &BTreeMap<usize, usize>,
-    ) {
-        let mut inner = self.inner.lock();
-        inner.owner = int_data.owner.map(|id| vcpu_list[id].clone());
-        inner.id = int_data.id;
-        inner.hw = int_data.hw;
-        inner.in_lr = int_data.in_lr;
-        inner.enabled = int_data.enabled;
-        inner.state = int_data.state;
-        inner.prio = int_data.prio;
-        inner.targets = {
-            let mut pcpu_targets = 0;
-            for vcpuid in 0..PLATFORM_CPU_NUM_MAX {
-                if (1 << vcpuid) & int_data.targets != 0 {
-                    pcpu_targets |= (1 << vcpuid_map[&vcpuid]) as u8;
-                }
-            }
-            pcpu_targets
-        };
-        inner.cfg = int_data.cfg;
-        inner.in_pend = int_data.in_pend;
-        inner.in_act = int_data.in_act;
-    }
-
-    pub fn save_migrate_data(&self, int_data: &mut VgicIntData, cpuid_map: &BTreeMap<usize, usize>) {
-        let inner = self.inner.lock();
-        int_data.owner = inner.owner.as_ref().map(|vcpu| vcpu.id());
-        int_data.id = inner.id;
-        int_data.hw = inner.hw;
-        int_data.in_lr = inner.in_lr;
-        int_data.lr = inner.lr;
-        int_data.enabled = inner.enabled;
-        int_data.state = inner.state;
-        int_data.prio = inner.prio;
-        int_data.targets = {
-            let mut vcpu_targets = 0;
-            for pcpuid in 0..PLATFORM_CPU_NUM_MAX {
-                if (1 << pcpuid) & inner.targets != 0 {
-                    vcpu_targets |= (1 << cpuid_map[&pcpuid]) as u8;
-                }
-            }
-            vcpu_targets
-        };
-        int_data.cfg = inner.cfg;
-        int_data.in_pend = inner.in_pend;
-        int_data.in_act = inner.in_act;
-    }
-
-    // back up for hyper fresh
-    pub fn fresh_back_up(&self) -> VgicInt {
-        let inner = self.inner.lock();
-        let owner = {
-            match &inner.owner {
-                None => None,
-                Some(vcpu) => {
-                    let vm_id = vcpu.vm_id();
-                    let vm = vm(vm_id).unwrap();
-                    vm.vcpu(vcpu.id())
-                }
-            }
-        };
-        VgicInt {
-            inner: Arc::new(Mutex::new(VgicIntInner {
-                owner,
-                route: 0,
-                phys: VgicIntPhys::Redist(0),
-                id: inner.id,
-                hw: inner.hw,
-                in_lr: inner.in_lr,
-                lr: inner.lr,
-                enabled: inner.enabled,
-                state: inner.state,
-                prio: inner.prio,
-                targets: inner.targets,
-                cfg: inner.cfg,
-                in_pend: inner.in_pend,
-                in_act: inner.in_act,
-            })),
             lock: Arc::new(Mutex::new(())),
         }
     }
@@ -533,38 +424,6 @@ impl VgicCpuPriv {
             act_list: VecDeque::new(),
         }
     }
-
-    // use for migration
-    pub fn restore_migrate_data(
-        &mut self,
-        cpu_priv_data: &VgicCpuPrivData,
-        vcpu_list: &[Vcpu],
-        vcpuid_map: &BTreeMap<usize, usize>,
-    ) {
-        self.sgis = cpu_priv_data.sgis;
-        self.curr_lrs = cpu_priv_data.curr_lrs;
-        for (idx, int) in self.interrupts.iter_mut().enumerate() {
-            int.restore_migrate_data(&cpu_priv_data.interrupts[idx], vcpu_list, vcpuid_map);
-        }
-        assert_eq!(self.interrupts.len(), cpu_priv_data.interrupts.len());
-    }
-
-    // use for migration
-    pub fn save_migrate_data(&self, cpu_priv_data: &mut VgicCpuPrivData, cpuid_map: &BTreeMap<usize, usize>) {
-        cpu_priv_data.sgis = self.sgis;
-        cpu_priv_data.curr_lrs = self.curr_lrs;
-        for (idx, int) in self.interrupts.iter().enumerate() {
-            int.save_migrate_data(&mut cpu_priv_data.interrupts[idx], cpuid_map);
-        }
-        cpu_priv_data.act_num = self.act_list.len();
-        for (idx, int) in self.act_list.iter().enumerate() {
-            cpu_priv_data.act_list[idx] = int.id() as usize;
-        }
-        cpu_priv_data.act_num = self.pend_list.len();
-        for (idx, int) in self.pend_list.iter().enumerate() {
-            cpu_priv_data.pend_list[idx] = int.id() as usize;
-        }
-    }
 }
 
 pub struct Vgic {
@@ -577,134 +436,6 @@ impl Vgic {
         Vgic {
             vgicd: Mutex::new(Vgicd::default()),
             cpu_priv: Mutex::new(Vec::new()),
-        }
-    }
-
-    // use for migration
-    pub fn restore_vgic_data(&self, vgic_data: &VgicMigData, vcpu_list: &[Vcpu], vcpuid_map: &BTreeMap<usize, usize>) {
-        let mut vgicd = self.vgicd.lock();
-        vgicd.ctlr = vgic_data.vgicd.ctlr;
-        vgicd.typer = vgic_data.vgicd.typer;
-        vgicd.iidr = vgic_data.vgicd.iidr;
-        for (idx, int) in vgicd.interrupts.iter().enumerate() {
-            int.restore_migrate_data(&vgic_data.vgicd.interrupts[idx], vcpu_list, vcpuid_map);
-        }
-        let mut cpu_priv_list = self.cpu_priv.lock();
-        for idx in 0..vgic_data.cpu_priv_num {
-            cpu_priv_list[idx].restore_migrate_data(&vgic_data.cpu_priv[idx], vcpu_list, vcpuid_map);
-            assert_eq!(cpu_priv_list[idx].act_list.len(), 0);
-            assert_eq!(cpu_priv_list[idx].pend_list.len(), 0);
-            // act list
-            for act_idx in 0..vgic_data.cpu_priv[idx].act_num {
-                let id = vgic_data.cpu_priv[idx].act_list[act_idx];
-                let interrupt = if id >= GIC_SPI_MAX {
-                    cpu_priv_list[idx].interrupts[id - GIC_SPI_MAX].clone()
-                } else {
-                    vgicd.interrupts[id].clone()
-                };
-                cpu_priv_list[idx].act_list.push_back(interrupt);
-            }
-            // pend list
-            for pend_idx in 0..vgic_data.cpu_priv[idx].pend_num {
-                let id = vgic_data.cpu_priv[idx].pend_list[pend_idx];
-                let interrupt = if id >= GIC_SPI_MAX {
-                    cpu_priv_list[idx].interrupts[id - GIC_SPI_MAX].clone()
-                } else {
-                    vgicd.interrupts[id].clone()
-                };
-                cpu_priv_list[idx].pend_list.push_back(interrupt);
-            }
-        }
-    }
-
-    // use for migration
-    pub fn save_vgic_data(&self, vgic_data: &mut VgicMigData, cpuid_map: &BTreeMap<usize, usize>) {
-        let vgicd = self.vgicd.lock();
-        vgic_data.vgicd.iidr = vgicd.iidr;
-        vgic_data.vgicd.typer = vgicd.typer;
-        vgic_data.vgicd.ctlr = vgicd.ctlr;
-        for (idx, int) in vgicd.interrupts.iter().enumerate() {
-            int.save_migrate_data(&mut vgic_data.vgicd.interrupts[idx], cpuid_map);
-        }
-
-        let cpu_priv_list = self.cpu_priv.lock();
-        vgic_data.cpu_priv_num = cpu_priv_list.len();
-        for (idx, cpu_priv) in cpu_priv_list.iter().enumerate() {
-            cpu_priv.save_migrate_data(&mut vgic_data.cpu_priv[idx], cpuid_map);
-        }
-    }
-
-    // reset vcpu in save vgic, use for hypervisor fresh
-    pub fn save_vgic(&self, src_vgic: Arc<Vgic>) {
-        let src_vgicd = src_vgic.vgicd.lock();
-        let mut cur_vgicd = self.vgicd.lock();
-        cur_vgicd.ctlr = src_vgicd.ctlr;
-        cur_vgicd.iidr = src_vgicd.iidr;
-        cur_vgicd.typer = src_vgicd.typer;
-        for interrupt in src_vgicd.interrupts.iter() {
-            cur_vgicd.interrupts.push(interrupt.update());
-        }
-        // cur_vgicd.interrupts.append(&mut src_vgicd.interrupts);
-        debug!(
-            "src vgicd interrupts len {}, cur interrupts len {}",
-            src_vgicd.interrupts.len(),
-            cur_vgicd.interrupts.len()
-        );
-
-        let mut src_cpu_priv = src_vgic.cpu_priv.lock();
-        let mut cur_cpu_priv = self.cpu_priv.lock();
-        for cpu_priv in src_cpu_priv.iter_mut() {
-            let vgic_cpu_priv = VgicCpuPriv {
-                vigcr: Vgicr::default(),
-                curr_lrs: cpu_priv.curr_lrs,
-                sgis: cpu_priv.sgis,
-                interrupts: {
-                    let mut interrupts = vec![];
-                    for interrupt in cpu_priv.interrupts.iter_mut() {
-                        interrupts.push(interrupt.clone());
-                    }
-                    for interrupt in cpu_priv.interrupts.iter_mut() {
-                        match interrupt.owner() {
-                            None => {}
-                            Some(vcpu) => {
-                                let vm_id = vcpu.vm_id();
-                                let vm = vm(vm_id).unwrap();
-                                let int_id = interrupt.id() as usize;
-                                let phys_id = vcpu.phys_id();
-                                interrupts.push(VgicInt::priv_new(
-                                    int_id,
-                                    vm.vcpu(vcpu.id()).unwrap(),
-                                    1 << phys_id,
-                                    int_id < GIC_SGIS_NUM,
-                                    0,
-                                    0b0,
-                                ));
-                            }
-                        }
-                    }
-                    debug!(
-                        "src vgicd cpu_priv interrupts len {}, cur interrupts cpu_priv len {}",
-                        cpu_priv.interrupts.len(),
-                        interrupts.len()
-                    );
-                    interrupts
-                },
-                pend_list: {
-                    let mut pend_list = VecDeque::new();
-                    for pend_int in cpu_priv.pend_list.iter() {
-                        pend_list.push_back(pend_int.fresh_back_up());
-                    }
-                    pend_list
-                },
-                act_list: {
-                    let mut act_list = VecDeque::new();
-                    for act_int in cpu_priv.act_list.iter() {
-                        act_list.push_back(act_int.fresh_back_up());
-                    }
-                    act_list
-                },
-            };
-            cur_cpu_priv.push(vgic_cpu_priv);
         }
     }
 

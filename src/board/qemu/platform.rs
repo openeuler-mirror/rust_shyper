@@ -44,8 +44,6 @@ impl PlatOperation for QemuPlatform {
     #[cfg(feature = "gicv3")]
     const ICC_SGIR_ADDR: usize = sysreg_enc_addr(3, 0, 12, 11, 5);
 
-    const SHARE_MEM_BASE: usize = 0x7_0000_0000;
-
     const DISK_PARTITION_0_START: usize = 0;
     const DISK_PARTITION_1_START: usize = 2097152;
     const DISK_PARTITION_2_START: usize = 10289152;

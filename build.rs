@@ -17,11 +17,7 @@ fn get_text_start() -> u64 {
 
     if target_arch == "aarch64" {
         if cfg!(feature = "tx2") {
-            if cfg!(feature = "update") {
-                0x8a000000_u64
-            } else {
-                0x83000000_u64
-            }
+            0x83000000_u64
         } else if cfg!(feature = "pi4") {
             0xf0080000_u64
         } else if cfg!(feature = "qemu") {
