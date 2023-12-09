@@ -32,6 +32,8 @@ impl<T> Clone for DeviceRef<'_, T> {
 
 impl<T> Copy for DeviceRef<'_, T> {}
 
+// SAFETY: T provides the necessary guarantees for Sync and DeviceRef provides the identical semantics as &T.
+unsafe impl<T: Sync> Send for DeviceRef<'_, T> {}
 // SAFETY: T provides the necessary guarantees for Sync.
 unsafe impl<T: Sync> Sync for DeviceRef<'_, T> {}
 
