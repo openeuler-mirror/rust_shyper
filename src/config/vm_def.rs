@@ -14,10 +14,12 @@ use alloc::vec::Vec;
 
 use spin::Mutex;
 
+use crate::arch::traits::InterruptController;
+use crate::arch::IntCtrl;
 use crate::board::*;
 use crate::config::vm_cfg_add_vm_entry;
 use crate::device::EmuDeviceType;
-use crate::kernel::{INTERRUPT_IRQ_GUEST_TIMER, VmType};
+use crate::kernel::VmType;
 
 use super::{
     PassthroughRegion, VmConfigEntry, VmCpuConfig, VMDtbDevConfigList, VmEmulatedDeviceConfig,
@@ -257,8 +259,7 @@ pub fn init_tmp_config_for_vm1() {
             dev_property: true,
         },
     ];
-    // pt_dev_config.irqs = vec![UART_1_INT, INTERRUPT_IRQ_GUEST_TIMER];
-    pt_dev_config.irqs = vec![INTERRUPT_IRQ_GUEST_TIMER];
+    pt_dev_config.irqs = vec![IntCtrl::IRQ_GUEST_TIMER];
 
     // vm1 vm_region
     let mut vm_region: Vec<VmRegion> = Vec::new();
@@ -390,8 +391,7 @@ pub fn init_tmp_config_for_vm2() {
             dev_property: true,
         },
     ];
-    // pt_dev_config.irqs = vec![UART_1_INT, INTERRUPT_IRQ_GUEST_TIMER];
-    pt_dev_config.irqs = vec![INTERRUPT_IRQ_GUEST_TIMER];
+    pt_dev_config.irqs = vec![IntCtrl::IRQ_GUEST_TIMER];
 
     // vm2 vm_region
     let mut vm_region: Vec<VmRegion> = Vec::new();
@@ -464,6 +464,7 @@ pub fn init_tmp_config_for_vm2() {
     let _ = vm_cfg_add_vm_entry(vm2_config);
 }
 
+#[cfg(feature = "gicv3")]
 pub fn init_gicv3_config_for_vm1() {
     info!("init_gicv3_config_for_vm1");
 
@@ -537,8 +538,7 @@ pub fn init_gicv3_config_for_vm1() {
         //     dev_property: true
         // },
     ];
-    // pt_dev_config.irqs = vec![UART_1_INT, INTERRUPT_IRQ_GUEST_TIMER];
-    pt_dev_config.irqs = vec![INTERRUPT_IRQ_GUEST_TIMER];
+    pt_dev_config.irqs = vec![IntCtrl::IRQ_GUEST_TIMER];
 
     // vm1 vm_region
     let mut vm_region: Vec<VmRegion> = Vec::new();

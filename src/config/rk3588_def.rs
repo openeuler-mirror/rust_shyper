@@ -15,11 +15,12 @@ use alloc::vec::Vec;
 use fdt::binding::FdtBuf;
 use spin::Mutex;
 
+use crate::arch::traits::InterruptController;
 use crate::board::{Platform, PlatOperation};
 use crate::config::vm_cfg_add_vm_entry;
 use crate::device::EmuDeviceType;
 use crate::error::Result;
-use crate::kernel::{HVC_IRQ, INTERRUPT_IRQ_GUEST_TIMER, VmType};
+use crate::kernel::{HVC_IRQ, VmType};
 
 use super::{
     PassthroughRegion, vm_cfg_set_config_name, VmConfigEntry, VmCpuConfig, VmEmulatedDeviceConfig,
@@ -212,7 +213,7 @@ pub fn mvm_config_init() {
         20,  //fsc_interrupt_int_n
         23,  //ARM-PMU
         26,  //arch-timer
-        INTERRUPT_IRQ_GUEST_TIMER,  //timer
+        crate::arch::IntCtrl::IRQ_GUEST_TIMER,  //timer
         30,  //ptimer
         105, //dmc 32 + 0x49
         118, //fea10000.dma-controller

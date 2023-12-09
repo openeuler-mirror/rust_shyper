@@ -12,91 +12,56 @@ use alloc::collections::BTreeMap;
 
 use spin::Mutex;
 
-use crate::arch::{interrupt_arch_ipi_send, interrupt_arch_vm_inject};
-use crate::arch::{GIC_PRIVINT_NUM, interrupt_arch_vm_register};
+use crate::arch::traits::InterruptController;
+use crate::arch::IntCtrl;
 use crate::kernel::{current_cpu, ipi_irq_handler, IpiInnerMsg, IpiMessage, Vcpu, VcpuState};
 use crate::kernel::Vm;
 use crate::utils::{BitAlloc, BitAlloc256, BitAlloc4K, BitMap};
 use super::Scheduler;
 
-pub const INTERRUPT_NUM_MAX: usize = 1024;
-pub const INTERRUPT_IRQ_HYPERVISOR_TIMER: usize = 26;
-pub const INTERRUPT_IRQ_GUEST_TIMER: usize = 27;
-pub const INTERRUPT_IRQ_IPI: usize = 1;
-
-pub static INTERRUPT_HYPER_BITMAP: Mutex<BitMap<BitAlloc256>> = Mutex::new(BitAlloc4K::default());
 pub static INTERRUPT_GLB_BITMAP: Mutex<BitMap<BitAlloc256>> = Mutex::new(BitAlloc4K::default());
-// pub static INTERRUPT_HANDLERS: Mutex<[InterruptHandler; INTERRUPT_NUM_MAX]> =
-//     Mutex::new([InterruptHandler::None; INTERRUPT_NUM_MAX]);
-pub static INTERRUPT_HANDLERS: Mutex<BTreeMap<usize, InterruptHandler>> = Mutex::new(BTreeMap::new());
-
-#[derive(Copy, Clone)]
-pub enum InterruptHandler {
-    IpiIrqHandler(fn()),
-    GicMaintenanceHandler(fn(usize)),
-    TimeIrqHandler(fn(usize)),
-    None,
-}
-
-impl InterruptHandler {
-    pub fn call(&self, arg0: usize, _arg1: usize) {
-        match self {
-            InterruptHandler::IpiIrqHandler(irq_handler) => irq_handler(),
-            InterruptHandler::GicMaintenanceHandler(gic_handler) => gic_handler(arg0),
-            InterruptHandler::TimeIrqHandler(time_handler) => time_handler(arg0),
-            InterruptHandler::None => panic!("Call An Empty Interrupt Hanlder!"),
-        }
-    }
-}
+pub static INTERRUPT_HANDLERS: Mutex<BTreeMap<usize, fn()>> = Mutex::new(BTreeMap::new());
 
 pub fn interrupt_cpu_ipi_send(target_cpu: usize, ipi_id: usize) {
-    interrupt_arch_ipi_send(target_cpu, ipi_id);
+    IntCtrl::ipi_send(target_cpu, ipi_id);
 }
 
-pub fn interrupt_reserve_int(int_id: usize, handler: InterruptHandler) {
-    if int_id < INTERRUPT_NUM_MAX {
-        let mut irq_handler_lock = INTERRUPT_HANDLERS.lock();
-        let mut hyper_bitmap_lock = INTERRUPT_HYPER_BITMAP.lock();
-        let mut glb_bitmap_lock = INTERRUPT_GLB_BITMAP.lock();
-        // irq_handler_lock[int_id] = handler;
-        irq_handler_lock.insert(int_id, handler);
-        hyper_bitmap_lock.set(int_id);
-        glb_bitmap_lock.set(int_id)
+pub fn interrupt_reserve_int(int_id: usize, handler: fn()) {
+    if int_id < IntCtrl::NUM_MAX {
+        INTERRUPT_HANDLERS.lock().insert(int_id, handler);
+        INTERRUPT_GLB_BITMAP.lock().set(int_id);
     }
 }
 
-fn interrupt_is_reserved(int_id: usize) -> bool {
-    let hyper_bitmap_lock = INTERRUPT_HYPER_BITMAP.lock();
-    hyper_bitmap_lock.get(int_id) != 0
+fn interrupt_is_reserved(int_id: usize) -> Option<fn()> {
+    INTERRUPT_HANDLERS.lock().get(&int_id).cloned()
 }
 
 pub fn interrupt_cpu_enable(int_id: usize, en: bool) {
-    use crate::arch::interrupt_arch_enable;
-    interrupt_arch_enable(int_id, en);
+    IntCtrl::enable(int_id, en);
 }
 
 pub fn interrupt_init() {
-    use crate::arch::interrupt_arch_init;
-    interrupt_arch_init();
+    IntCtrl::init();
 
     let cpu_id = current_cpu().id;
     if cpu_id == 0 {
-        interrupt_reserve_int(INTERRUPT_IRQ_IPI, InterruptHandler::IpiIrqHandler(ipi_irq_handler));
+        interrupt_reserve_int(IntCtrl::IRQ_IPI, ipi_irq_handler);
 
         info!("Interrupt init ok");
     }
-    interrupt_cpu_enable(INTERRUPT_IRQ_IPI, true);
+    interrupt_cpu_enable(IntCtrl::IRQ_IPI, true);
 }
 
 pub fn interrupt_vm_register(vm: Vm, id: usize) -> bool {
     // println!("VM {} register interrupt {}", vm.id(), id);
     let mut glb_bitmap_lock = INTERRUPT_GLB_BITMAP.lock();
-    if glb_bitmap_lock.get(id) != 0 && id >= GIC_PRIVINT_NUM {
+    if glb_bitmap_lock.get(id) != 0 && id >= IntCtrl::PRI_NUN_MAX {
         warn!("interrupt_vm_register: VM {} interrupts conflict, id = {}", vm.id(), id);
         return false;
     }
 
-    interrupt_arch_vm_register(vm.clone(), id);
+    IntCtrl::vm_register(vm.clone(), id);
     vm.set_int_bit_map(id);
     glb_bitmap_lock.set(id);
     true
@@ -107,21 +72,12 @@ pub fn interrupt_vm_remove(_vm: Vm, id: usize) {
     // vgic and vm will be removed with struct vm
     glb_bitmap_lock.clear(id);
     // todo: for interrupt 16~31, need to check by vm config
-    if id >= GIC_PRIVINT_NUM {
+    if id >= IntCtrl::PRI_NUN_MAX {
         interrupt_cpu_enable(id, false);
     }
 }
 
-pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize, _source: usize) {
-    // if vm.id() == 1 {
-    //     println!("inject int {} to vm1", int_id);
-    // }
-    // if current_cpu().id == 2 {
-    //     println!("inject int {} to core 2", int_id);
-    // }
-    // if current_cpu().id == 1 && int_id == 49 {
-    //     println!("inject int {} to core 1", int_id);
-    // }
+pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize) {
     if vcpu.phys_id() != current_cpu().id {
         error!(
             "interrupt_vm_inject: Core {} failed to find target (VCPU {} VM {})",
@@ -135,29 +91,12 @@ pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize, _source: usize) {
         current_cpu().cpu_state = crate::kernel::CpuState::CpuRun;
         current_cpu().scheduler().wakeup(vcpu.clone());
     }
-    interrupt_arch_vm_inject(vm, vcpu, int_id);
+    IntCtrl::vm_inject(vm, vcpu, int_id);
 }
 
-pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
-    if interrupt_is_reserved(int_id) {
-        let irq_handler_list = INTERRUPT_HANDLERS.lock();
-        let irq_handler = *irq_handler_list.get(&int_id).unwrap();
-        drop(irq_handler_list);
-        match irq_handler {
-            InterruptHandler::IpiIrqHandler(ipi_handler) => {
-                ipi_handler();
-            }
-            InterruptHandler::GicMaintenanceHandler(maintenace_handler) => {
-                maintenace_handler(int_id);
-            }
-            InterruptHandler::TimeIrqHandler(timer_irq_handler) => {
-                timer_irq_handler(int_id);
-            }
-            InterruptHandler::None => {
-                unimplemented!();
-            }
-        }
-        // drop(irq_handler);
+pub fn interrupt_handler(int_id: usize) -> bool {
+    if let Some(irq_handler) = interrupt_is_reserved(int_id) {
+        irq_handler();
         return true;
     }
 
@@ -165,7 +104,7 @@ pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
         if let Some(vcpu) = &current_cpu().active_vcpu {
             if let Some(active_vm) = vcpu.vm() {
                 if active_vm.has_interrupt(int_id) {
-                    interrupt_vm_inject(active_vm, vcpu.clone(), int_id, src);
+                    interrupt_vm_inject(active_vm, vcpu.clone(), int_id);
                     return false;
                 } else {
                     return true;
@@ -183,7 +122,7 @@ pub fn interrupt_handler(int_id: usize, src: usize) -> bool {
                     return true;
                 }
 
-                interrupt_vm_inject(vm, vcpu.clone(), int_id, src);
+                interrupt_vm_inject(vm, vcpu.clone(), int_id);
                 return false;
             }
         }
@@ -207,7 +146,7 @@ pub fn interrupt_inject_ipi_handler(msg: &IpiMessage) {
                     panic!("inject int {} to illegal cpu {}", int_id, current_cpu().id);
                 }
                 Some(vcpu) => {
-                    interrupt_vm_inject(vcpu.vm().unwrap(), vcpu, int_id, 0);
+                    interrupt_vm_inject(vcpu.vm().unwrap(), vcpu, int_id);
                 }
             }
         }

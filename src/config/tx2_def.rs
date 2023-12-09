@@ -14,10 +14,11 @@ use alloc::vec::Vec;
 
 use spin::Mutex;
 
+use crate::arch::traits::InterruptController;
 use crate::board::{Platform, PlatOperation};
 use crate::config::vm_cfg_add_vm_entry;
 use crate::device::EmuDeviceType;
-use crate::kernel::{HVC_IRQ, INTERRUPT_IRQ_GUEST_TIMER, VmType};
+use crate::kernel::{HVC_IRQ, VmType};
 
 use super::{
     PassthroughRegion, vm_cfg_set_config_name, VmConfigEntry, VmCpuConfig, VmEmulatedDeviceConfig,
@@ -202,7 +203,7 @@ pub fn mvm_config_init() {
     ];
     // 146 is UART_INT
     pt_dev_config.irqs = vec![
-        INTERRUPT_IRQ_GUEST_TIMER, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 49, 56, 57, 58, 59, 60, 62, 63, 64, 65, 67, 68,
+        crate::arch::IntCtrl::IRQ_GUEST_TIMER, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 49, 56, 57, 58, 59, 60, 62, 63, 64, 65, 67, 68,
         69, 70, 71, 72, 74, 76, 79, 82, 85, 88, 91, 92, 94, 95, 96, 97, 102, 103, 104, 105, 107,
         108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125,
         126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, Platform::UART_0_INT, 151, 152,

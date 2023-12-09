@@ -1799,7 +1799,7 @@ fn vgic_int_get_owner(vcpu: Vcpu, interrupt: VgicInt) -> bool {
     }
 }
 
-pub fn gic_maintenance_handler(_arg: usize) {
+pub fn gic_maintenance_handler() {
     let misr = GICH.misr();
     let vm = match active_vm() {
         Some(vm) => vm,
@@ -2047,7 +2047,7 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
                 }
             }
             InitcEvent::Vgicdinject => {
-                crate::kernel::interrupt_vm_inject(trgt_vcpu.vm().unwrap(), trgt_vcpu.clone(), int_id as usize, 0);
+                crate::kernel::interrupt_vm_inject(trgt_vcpu.vm().unwrap(), trgt_vcpu.clone(), int_id as usize);
             }
             _ => {
                 error!("vgic_ipi_handler: core {} received unknown event", current_cpu().id)

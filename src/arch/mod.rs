@@ -19,4 +19,4 @@ pub use self::riscv64::*;
 mod riscv64;
 
 pub use self::traits::*;
-mod traits;
+pub mod traits;

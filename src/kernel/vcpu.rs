@@ -236,7 +236,7 @@ impl Vcpu {
                 drop(inner);
                 for int in int_list {
                     // println!("schedule: inject int {} for vm {}", int, vm.id());
-                    interrupt_vm_inject(vm.clone(), self.clone(), int, 0);
+                    interrupt_vm_inject(vm.clone(), self.clone(), int);
                 }
             }
         }

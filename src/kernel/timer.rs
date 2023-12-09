@@ -8,9 +8,9 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::INTERRUPT_IRQ_HYPERVISOR_TIMER;
-// use crate::board::PLATFORM_CPU_NUM_MAX;
-use crate::kernel::{current_cpu, InterruptHandler, Scheduler};
+use crate::arch::traits::InterruptController;
+use crate::arch::IntCtrl;
+use crate::kernel::{current_cpu, Scheduler};
 
 // #[derive(Copy, Clone)]
 // struct Timer(bool);
@@ -36,10 +36,7 @@ pub fn timer_init() {
     crate::utils::barrier();
 
     if current_cpu().id == 0 {
-        crate::kernel::interrupt_reserve_int(
-            INTERRUPT_IRQ_HYPERVISOR_TIMER,
-            InterruptHandler::TimeIrqHandler(timer_irq_handler),
-        );
+        crate::kernel::interrupt_reserve_int(IntCtrl::IRQ_HYPERVISOR_TIMER, timer_irq_handler);
         info!("Timer frequency: {}Hz", crate::arch::timer_arch_get_frequency());
         info!("Timer init ok");
     }
@@ -51,7 +48,7 @@ pub fn timer_enable(val: bool) {
     //     current_cpu().id,
     //     if val { "enable" } else { "disable" }
     // );
-    super::interrupt::interrupt_cpu_enable(INTERRUPT_IRQ_HYPERVISOR_TIMER, val);
+    super::interrupt::interrupt_cpu_enable(IntCtrl::IRQ_HYPERVISOR_TIMER, val);
 }
 
 fn timer_notify_after(ms: usize) {
@@ -64,7 +61,7 @@ fn timer_notify_after(ms: usize) {
     timer_arch_enable_irq();
 }
 
-pub fn timer_irq_handler(_arg: usize) {
+pub fn timer_irq_handler() {
     use crate::arch::timer_arch_disable_irq;
 
     timer_arch_disable_irq();

@@ -455,7 +455,7 @@ pub fn hvc_guest_notify(vm_id: usize) {
         }
         Some(vcpu) => {
             // println!("hvc_guest_notify here");
-            interrupt_vm_inject(vm, vcpu, HVC_IRQ, 0);
+            interrupt_vm_inject(vm, vcpu, HVC_IRQ);
         }
     };
 }

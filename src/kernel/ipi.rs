@@ -8,7 +8,7 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::INTERRUPT_IRQ_IPI;
+use crate::arch::traits::InterruptController;
 use crate::board::PLAT_DESC;
 use crate::device::{VirtioMmio, Virtq};
 use crate::kernel::{CPU_IF_LIST, current_cpu, interrupt_cpu_ipi_send};
@@ -193,7 +193,7 @@ fn ipi_send(target_id: usize, msg: IpiMessage) -> bool {
     unsafe {
         core::arch::asm!("dsb ishst");
     }
-    interrupt_cpu_ipi_send(target_id, INTERRUPT_IRQ_IPI);
+    interrupt_cpu_ipi_send(target_id, crate::arch::IntCtrl::IRQ_IPI);
 
     true
 }

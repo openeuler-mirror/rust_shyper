@@ -185,7 +185,7 @@ impl VirtioMmio {
         drop(inner);
         use crate::kernel::interrupt_vm_inject;
         if trgt_id == current_cpu().id {
-            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id, 0);
+            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id);
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(trgt_id, IpiType::IpiTIntInject, IpiInnerMsg::IntInjectMsg(m)) {
@@ -202,7 +202,7 @@ impl VirtioMmio {
         drop(inner);
         use crate::kernel::interrupt_vm_inject;
         if trgt_id == current_cpu().id {
-            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id, 0);
+            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id);
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(trgt_id, IpiType::IpiTIntInject, IpiInnerMsg::IntInjectMsg(m)) {

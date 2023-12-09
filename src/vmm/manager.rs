@@ -10,8 +10,8 @@
 
 use alloc::vec::Vec;
 
-use crate::arch::gicc_clear_current_irq;
-use crate::arch::power_arch_vm_shutdown_secondary_cores;
+use crate::arch::traits::InterruptController;
+use crate::arch::{power_arch_vm_shutdown_secondary_cores, IntCtrl};
 use crate::board::PLATFORM_CPU_NUM_MAX;
 use crate::config::{vm_id_list, vm_num};
 // use crate::config::{init_tmp_config_for_bma1, init_tmp_config_for_bma2, init_tmp_config_for_vm1, init_tmp_config_for_vm2};
@@ -240,7 +240,7 @@ pub fn vmm_boot_vm(vm_id: usize) {
             current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
         };
         let vcpu = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).unwrap();
-        gicc_clear_current_irq(true);
+        IntCtrl::clear();
         // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
         current_cpu().scheduler().yield_to(vcpu);
         vmm_boot();
@@ -332,7 +332,7 @@ pub fn vmm_reboot() {
     vm_if_set_ivc_arg(vm.id(), 0);
     vm_if_set_ivc_arg_ptr(vm.id(), 0);
 
-    crate::arch::interrupt_arch_clear();
+    IntCtrl::clear();
     crate::arch::vcpu_arch_init(vm.clone(), vm.vcpu(0).unwrap());
     vcpu.reset_context();
 

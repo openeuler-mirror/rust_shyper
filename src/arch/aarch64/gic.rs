@@ -15,9 +15,10 @@ use tock_registers::*;
 use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 
+use crate::arch::traits::InterruptController;
+use crate::arch::IntCtrl;
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::current_cpu;
-use crate::kernel::INTERRUPT_NUM_MAX;
 use crate::utils::bit_extract;
 use crate::utils::device_ref::DeviceRef;
 
@@ -33,9 +34,9 @@ const GICH_HCR_LRENPIE_BIT: usize = 1 << 2;
 
 pub const GIC_SGIS_NUM: usize = 16;
 const GIC_PPIS_NUM: usize = 16;
-pub const GIC_INTS_MAX: usize = INTERRUPT_NUM_MAX;
+pub const GIC_INTS_MAX: usize = IntCtrl::NUM_MAX;
 pub const GIC_PRIVINT_NUM: usize = GIC_SGIS_NUM + GIC_PPIS_NUM;
-pub const GIC_SPI_MAX: usize = INTERRUPT_NUM_MAX - GIC_PRIVINT_NUM;
+pub const GIC_SPI_MAX: usize = IntCtrl::NUM_MAX - GIC_PRIVINT_NUM;
 pub const GIC_PRIO_BITS: usize = 8;
 pub const GIC_TARGET_BITS: usize = 8;
 pub const GIC_TARGETS_MAX: usize = GIC_TARGET_BITS;
@@ -142,6 +143,7 @@ register_structs! {
     }
 }
 
+// SAFETY: GicDistributor is a register block, can be safely shared between threads.
 unsafe impl Sync for GicDistributor {}
 
 impl GicDistributor {
@@ -595,13 +597,16 @@ pub fn gicc_clear_current_irq(for_hypervisor: bool) {
     current_cpu().current_irq = irq;
 }
 
-pub fn gicc_get_current_irq() -> (usize, usize) {
+pub fn gicc_get_current_irq() -> Option<usize> {
     let iar = GICC.IAR.get();
     let irq = iar as usize;
     current_cpu().current_irq = irq;
     let id = bit_extract(iar as usize, 0, 10);
-    let src = bit_extract(iar as usize, 10, 3);
-    (id, src)
+    if id >= IntCtrl::NUM_MAX {
+        None
+    } else {
+        Some(id)
+    }
 }
 
 pub fn gic_lrs() -> usize {

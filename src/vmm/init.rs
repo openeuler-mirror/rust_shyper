@@ -650,6 +650,9 @@ pub fn vm_init() {
         super::vmm_init_gvm(0);
         #[cfg(feature = "static-config")]
         {
+            #[cfg(not(feature = "gicv3"))]
+            crate::config::init_tmp_config_for_vm1();
+            #[cfg(feature = "gicv3")]
             crate::config::init_gicv3_config_for_vm1();
             super::vmm_init_gvm(1);
         }

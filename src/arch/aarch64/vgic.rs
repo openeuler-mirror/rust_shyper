@@ -1795,7 +1795,7 @@ fn vgic_int_get_owner(vcpu: Vcpu, interrupt: VgicInt) -> bool {
     // return false;
 }
 
-pub fn gic_maintenance_handler(_arg: usize) {
+pub fn gic_maintenance_handler() {
     let misr = GICH.misr();
     let vm = match active_vm() {
         Some(vm) => vm,
