@@ -192,8 +192,7 @@ impl GicContext {
     }
 }
 
-#[repr(C)]
-#[repr(align(16))]
+#[repr(C, align(16))]
 #[derive(Debug, Copy, Clone)]
 pub struct VmContext {
     // generic timer
@@ -247,9 +246,9 @@ pub struct VmContext {
     pub gic_state: GicState,
 }
 
-impl VmContext {
-    pub fn default() -> VmContext {
-        VmContext {
+impl Default for VmContext {
+    fn default() -> Self {
+        Self {
             // generic timer
             cntvoff_el2: 0,
             cntp_cval_el0: 0,
@@ -270,7 +269,7 @@ impl VmContext {
             sp_el1: 0,
             elr_el1: 0,
             spsr_el1: 0,
-            sctlr_el1: 0,
+            sctlr_el1: 0x30C50830,
             actlr_el1: 0,
             cpacr_el1: 0,
             ttbr0_el1: 0,
@@ -294,14 +293,28 @@ impl VmContext {
 
             // exception
             pmcr_el0: 0,
-            vtcr_el2: 0,
+            vtcr_el2: if cfg!(feature = "lvl4") {
+                (1 << 31)
+                    + (VTCR_EL2::PS::PA_44B_16TB
+                        + VTCR_EL2::TG0::Granule4KB
+                        + VTCR_EL2::SH0::Inner
+                        + VTCR_EL2::ORGN0::NormalWBRAWA
+                        + VTCR_EL2::IRGN0::NormalWBRAWA
+                        + VTCR_EL2::SL0.val(0b10) // 10: If TG0 is 00 (4KB granule), start at level 0.
+                        + VTCR_EL2::T0SZ.val(64 - 44))
+                    .value
+            } else {
+                0x8001355c
+            },
             far_el2: 0,
             hpfar_el2: 0,
             fpsimd: VmCtxFpsimd::default(),
             gic_state: GicState::default(),
         }
     }
+}
 
+impl VmContext {
     pub fn reset(&mut self) {
         self.cntvoff_el2 = 0;
         self.cntp_cval_el0 = 0;

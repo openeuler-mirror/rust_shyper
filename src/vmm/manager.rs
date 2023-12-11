@@ -82,14 +82,8 @@ pub fn vmm_alloc_vcpu(vm_id: usize) {
     };
 
     for i in 0..vm.config().cpu_num() {
-        use crate::kernel::vcpu_alloc;
-        if let Some(vcpu) = vcpu_alloc() {
-            vcpu.init(vm.clone(), i);
-            vm.push_vcpu(vcpu.clone());
-        } else {
-            error!("failed to allocte vcpu");
-            return;
-        }
+        let vcpu = crate::kernel::Vcpu::new(vm.clone(), i);
+        vm.push_vcpu(vcpu);
     }
 
     info!(

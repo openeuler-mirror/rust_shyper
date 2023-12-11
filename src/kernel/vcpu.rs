@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use spin::Mutex;
 
-use crate::arch::{ContextFrame, ContextFrameTrait, cpu_interrupt_unmask, GicContext, VmContext, timer_arch_get_counter};
+use crate::arch::{ContextFrame, ContextFrameTrait, GicContext, VmContext, timer_arch_get_counter};
 use crate::board::PlatOperation;
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
@@ -29,26 +29,35 @@ pub enum VcpuState {
     Sleep = 3,
 }
 
+struct VcpuInnerConst {
+    id: usize,
+    vm: Option<Vm>,
+}
+
+pub struct VcpuInner {
+    inner_const: VcpuInnerConst,
+    pub inner_mut: Mutex<VcpuInnerMut>,
+}
+
 #[derive(Clone)]
 pub struct Vcpu {
-    pub inner: Arc<Mutex<VcpuInner>>,
+    pub inner: Arc<VcpuInner>,
 }
 
 impl Vcpu {
-    pub fn default() -> Vcpu {
-        Vcpu {
-            inner: Arc::new(Mutex::new(VcpuInner::default())),
-        }
-    }
-
-    pub fn init(&self, vm: Vm, vcpu_id: usize) {
-        let mut inner = self.inner.lock();
-        inner.vm = Some(vm.clone());
-        inner.id = vcpu_id;
-        inner.phys_id = 0;
-        drop(inner);
-        crate::arch::vcpu_arch_init(vm, self.clone());
-        self.reset_context();
+    pub fn new(vm: Vm, vcpu_id: usize) -> Self {
+        let this = Self {
+            inner: Arc::new(VcpuInner {
+                inner_const: VcpuInnerConst {
+                    id: vcpu_id,
+                    vm: Some(vm.clone()),
+                },
+                inner_mut: Mutex::new(VcpuInnerMut::new()),
+            }),
+        };
+        crate::arch::vcpu_arch_init(vm, this.clone());
+        this.reset_context();
+        this
     }
 
     pub fn shutdown(&self) {
@@ -64,7 +73,7 @@ impl Vcpu {
     pub fn context_vm_store(&self) {
         self.save_cpu_ctx();
 
-        let mut inner = self.inner.lock();
+        let mut inner = self.inner.inner_mut.lock();
         inner.vm_ctx.ext_regs_store();
         inner.vm_ctx.fpsimd_save_context();
         inner.vm_ctx.gic_save_state();
@@ -73,7 +82,7 @@ impl Vcpu {
     pub fn context_vm_restore(&self) {
         self.restore_cpu_ctx();
 
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         // restore vm's VFP and SIMD
         inner.vm_ctx.fpsimd_restore_context();
         inner.vm_ctx.gic_restore_state();
@@ -84,17 +93,17 @@ impl Vcpu {
     }
 
     pub fn gic_restore_context(&self) {
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         inner.vm_ctx.gic_restore_state();
     }
 
     pub fn gic_save_context(&self) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.inner.inner_mut.lock();
         inner.vm_ctx.gic_save_state();
     }
 
     pub fn save_cpu_ctx(&self) {
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         match current_cpu().ctx_ptr() {
             None => {
                 error!("save_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
@@ -110,7 +119,7 @@ impl Vcpu {
     }
 
     fn restore_cpu_ctx(&self) {
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         match current_cpu().ctx_ptr() {
             None => {
                 error!("restore_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
@@ -126,43 +135,41 @@ impl Vcpu {
     }
 
     pub fn set_phys_id(&self, phys_id: usize) {
-        let mut inner = self.inner.lock();
-        debug!("set vcpu {} phys id {}", inner.id, phys_id);
+        let mut inner = self.inner.inner_mut.lock();
+        debug!("set vcpu {} phys id {}", self.id(), phys_id);
         inner.phys_id = phys_id;
     }
 
     pub fn set_gich_ctlr(&self, ctlr: u32) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.inner.inner_mut.lock();
         inner.vm_ctx.gic_state.ctlr = ctlr;
     }
 
     pub fn set_hcr(&self, hcr: u64) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.inner.inner_mut.lock();
         inner.vm_ctx.hcr_el2 = hcr;
     }
 
     pub fn state(&self) -> VcpuState {
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         inner.state
     }
 
     pub fn set_state(&self, state: VcpuState) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.inner.inner_mut.lock();
         inner.state = state;
     }
 
     pub fn id(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.id
+        self.inner.inner_const.id
     }
 
     pub fn vm(&self) -> Option<Vm> {
-        let inner = self.inner.lock();
-        inner.vm.clone()
+        self.inner.inner_const.vm.clone()
     }
 
     pub fn phys_id(&self) -> usize {
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         inner.phys_id
     }
 
@@ -175,52 +182,69 @@ impl Vcpu {
     }
 
     pub fn reset_context(&self) {
-        let mut inner = self.inner.lock();
-        inner.reset_context();
-    }
+        let mut inner = self.inner.inner_mut.lock();
+        let mut vmpidr = 0;
+        vmpidr |= 1 << 31; //bit[31]:res1
 
-    pub fn reset_vmpidr(&self) {
-        let mut inner = self.inner.lock();
-        inner.reset_vmpidr();
+        if self.vm().as_ref().unwrap().config().cpu_num() == 1 {
+            vmpidr |= 1 << 30; //bit[30]: Indicates a Uniprocessor system
+        }
+
+        #[cfg(feature = "tx2")]
+        if self.vm_id() == 0 {
+            // A57 is cluster #1 for L4T
+            vmpidr |= 0x100;
+        }
+
+        vmpidr |= if cfg!(feature = "rk3588") {
+            0x100_0000 | (self.id() << 8)
+        } else {
+            self.id()
+        };
+        inner.vm_ctx.vmpidr_el2 = vmpidr as u64;
+        let vm_id = self.vm().unwrap().id();
+        use crate::kernel::vm_if_get_type;
+        if vm_if_get_type(vm_id) == VmType::VmTBma {
+            debug!("vm {} bma ctx restore", vm_id);
+            inner.vm_ctx.reset();
+            drop(inner);
+            self.context_ext_regs_store();
+        }
     }
 
     pub fn reset_vtimer_offset(&self) {
-        let mut inner = self.inner.lock();
-        inner.reset_vtimer_offset();
+        let mut inner = self.inner.inner_mut.lock();
+        let curpct = timer_arch_get_counter() as u64;
+        inner.vm_ctx.cntvoff_el2 = curpct - inner.vm_ctx.cntvct_el0;
     }
 
     pub fn context_ext_regs_store(&self) {
-        let mut inner = self.inner.lock();
-        inner.context_ext_regs_store();
+        let mut inner = self.inner.inner_mut.lock();
+        inner.vm_ctx.ext_regs_store();
     }
 
     pub fn vcpu_ctx_addr(&self) -> usize {
-        let inner: spin::MutexGuard<VcpuInner> = self.inner.lock();
-        inner.vcpu_ctx_addr()
+        let inner: spin::MutexGuard<VcpuInnerMut> = self.inner.inner_mut.lock();
+        &(inner.vcpu_ctx) as *const _ as usize
     }
 
     pub fn set_elr(&self, elr: usize) {
-        let mut inner = self.inner.lock();
-        inner.set_elr(elr);
+        let mut inner = self.inner.inner_mut.lock();
+        inner.vcpu_ctx.set_exception_pc(elr);
     }
 
     pub fn elr(&self) -> usize {
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         inner.vcpu_ctx.exception_pc()
     }
 
     pub fn set_gpr(&self, idx: usize, val: usize) {
-        let mut inner = self.inner.lock();
-        inner.set_gpr(idx, val);
-    }
-
-    pub fn show_ctx(&self) {
-        let inner = self.inner.lock();
-        inner.show_ctx();
+        let mut inner = self.inner.inner_mut.lock();
+        inner.vcpu_ctx.set_gpr(idx, val);
     }
 
     pub fn push_int(&self, int: usize) {
-        let mut inner = self.inner.lock();
+        let mut inner = self.inner.inner_mut.lock();
         if !inner.int_list.contains(&int) {
             inner.int_list.push(int);
         }
@@ -230,7 +254,7 @@ impl Vcpu {
         match self.vm() {
             None => {}
             Some(vm) => {
-                let mut inner = self.inner.lock();
+                let mut inner = self.inner.inner_mut.lock();
                 let int_list = inner.int_list.clone();
                 inner.int_list.clear();
                 drop(inner);
@@ -243,7 +267,7 @@ impl Vcpu {
     }
 
     pub fn get_vmpidr(&self) -> usize {
-        let inner = self.inner.lock();
+        let inner = self.inner.inner_mut.lock();
         inner.vm_ctx.vmpidr_el2 as usize
     }
 }
@@ -276,103 +300,24 @@ pub fn run_idle_thread() {
     );
 }
 
-pub fn find_vcpu_by_id(id: usize) -> Option<Vcpu> {
-    let vcpu_list = VCPU_LIST.lock();
-    vcpu_list.iter().find(|&x| x.id() == id).cloned()
-}
-
-pub struct VcpuInner {
-    pub id: usize,
+pub struct VcpuInnerMut {
     pub phys_id: usize,
     pub state: VcpuState,
-    pub vm: Option<Vm>,
     pub int_list: Vec<usize>,
     pub vcpu_ctx: ContextFrame,
     pub vm_ctx: VmContext,
     pub gic_ctx: GicContext,
 }
 
-impl VcpuInner {
-    pub fn default() -> VcpuInner {
-        VcpuInner {
-            id: 0,
+impl VcpuInnerMut {
+    fn new() -> VcpuInnerMut {
+        VcpuInnerMut {
             phys_id: 0,
             state: VcpuState::Invalid,
-            vm: None,
             int_list: vec![],
             vcpu_ctx: ContextFrame::default(),
             vm_ctx: VmContext::default(),
             gic_ctx: GicContext::default(),
-        }
-    }
-
-    fn vcpu_ctx_addr(&self) -> usize {
-        &(self.vcpu_ctx) as *const _ as usize
-    }
-
-    fn vm_id(&self) -> usize {
-        let vm = self.vm.as_ref().unwrap();
-        vm.id()
-    }
-
-    fn arch_ctx_reset(&mut self) {
-        self.vm_ctx.cntvoff_el2 = 0;
-        self.vm_ctx.sctlr_el1 = 0x30C50830;
-        self.vm_ctx.cntkctl_el1 = 0;
-        self.vm_ctx.pmcr_el0 = 0;
-        if cfg!(feature = "lvl4") {
-            use cortex_a::registers::VTCR_EL2;
-            let vtcr = (1 << 31)
-                + (VTCR_EL2::PS::PA_44B_16TB
-                    + VTCR_EL2::TG0::Granule4KB
-                    + VTCR_EL2::SH0::Inner
-                    + VTCR_EL2::ORGN0::NormalWBRAWA
-                    + VTCR_EL2::IRGN0::NormalWBRAWA
-                    + VTCR_EL2::SL0.val(0b10) // 10: If TG0 is 00 (4KB granule), start at level 0.
-                    + VTCR_EL2::T0SZ.val(64 - 44))
-                .value;
-            self.vm_ctx.vtcr_el2 = vtcr;
-        } else {
-            self.vm_ctx.vtcr_el2 = 0x8001355c;
-        }
-        self.reset_vmpidr()
-    }
-
-    fn reset_vmpidr(&mut self) {
-        let mut vmpidr = 0;
-        vmpidr |= 1 << 31; //bit[31]:res1
-
-        if self.vm.as_ref().unwrap().config().cpu_num() == 1 {
-            vmpidr |= 1 << 30; //bit[30]: Indicates a Uniprocessor system
-        }
-
-        #[cfg(feature = "tx2")]
-        if self.vm_id() == 0 {
-            // A57 is cluster #1 for L4T
-            vmpidr |= 0x100;
-        }
-
-        vmpidr |= if cfg!(feature = "rk3588") {
-            0x100_0000 | (self.id << 8)
-        } else {
-            self.id
-        };
-        self.vm_ctx.vmpidr_el2 = vmpidr as u64;
-    }
-
-    fn reset_vtimer_offset(&mut self) {
-        let curpct = timer_arch_get_counter() as u64;
-        self.vm_ctx.cntvoff_el2 = curpct - self.vm_ctx.cntvct_el0;
-    }
-
-    fn reset_context(&mut self) {
-        self.arch_ctx_reset();
-        self.gic_ctx_reset();
-        use crate::kernel::vm_if_get_type;
-        if vm_if_get_type(self.vm_id()) == VmType::VmTBma {
-            debug!("vm {} bma ctx restore", self.vm_id());
-            self.reset_vm_ctx();
-            self.context_ext_regs_store();
         }
     }
 
@@ -382,64 +327,6 @@ impl VcpuInner {
             self.vm_ctx.gic_state.lr[i] = 0;
         }
         self.vm_ctx.gic_state.hcr |= 1 << 2; // init hcr
-    }
-
-    fn context_ext_regs_store(&mut self) {
-        self.vm_ctx.ext_regs_store();
-    }
-
-    fn reset_vm_ctx(&mut self) {
-        self.vm_ctx.reset();
-    }
-
-    fn set_elr(&mut self, elr: usize) {
-        self.vcpu_ctx.set_exception_pc(elr);
-    }
-
-    fn set_gpr(&mut self, idx: usize, val: usize) {
-        self.vcpu_ctx.set_gpr(idx, val);
-    }
-
-    fn show_ctx(&self) {
-        info!(
-            "cntvoff_el2 {:x}, sctlr_el1 {:x}, cntkctl_el1 {:x}, pmcr_el0 {:x}, vtcr_el2 {:x} x0 {:x}",
-            self.vm_ctx.cntvoff_el2,
-            self.vm_ctx.sctlr_el1,
-            self.vm_ctx.cntkctl_el1,
-            self.vm_ctx.pmcr_el0,
-            self.vm_ctx.vtcr_el2,
-            self.vcpu_ctx.gpr(0)
-        );
-        info!("id {} vm_ctx {:x?}", self.id, self.vm_ctx);
-    }
-}
-
-pub static VCPU_LIST: Mutex<Vec<Vcpu>> = Mutex::new(Vec::new());
-
-pub fn vcpu_alloc() -> Option<Vcpu> {
-    let mut vcpu_list = VCPU_LIST.lock();
-
-    let val = Vcpu::default();
-    vcpu_list.push(val.clone());
-    Some(val)
-}
-
-pub fn vcpu_remove(vcpu: Vcpu) {
-    let mut vcpu_list = VCPU_LIST.lock();
-    for (idx, core) in vcpu_list.iter().enumerate() {
-        if core.id() == vcpu.id() && core.vm_id() == vcpu.vm_id() {
-            vcpu_list.remove(idx);
-            return;
-        }
-    }
-    panic!("illegal vm{} vcpu{}, not exist in vcpu_list", vcpu.vm_id(), vcpu.id());
-}
-
-pub fn vcpu_idle(_vcpu: Vcpu) -> ! {
-    cpu_interrupt_unmask();
-    loop {
-        // TODO: replace it with an Arch function `arch_idle`
-        cortex_a::asm::wfi();
     }
 }
 
