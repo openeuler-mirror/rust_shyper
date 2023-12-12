@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Utils module, including some common functions and data structures.
+
 pub use self::barrier::*;
 pub use self::bitmap::*;
 pub use self::print::*;

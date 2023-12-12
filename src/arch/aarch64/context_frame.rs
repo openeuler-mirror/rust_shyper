@@ -25,12 +25,15 @@ use crate::arch::aarch64::regs::{WriteableReg, ReadableReg};
 global_asm!(include_str!("fpsimd.S"));
 
 extern "C" {
+    /// Save the floating-point and SIMD registers.
     pub fn fpsimd_save_ctx(fpsimd_addr: usize);
+    /// Restore the floating-point and SIMD registers.
     pub fn fpsimd_restore_ctx(fpsimd_addr: usize);
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+/// Context frame for AArch64.
 pub struct Aarch64ContextFrame {
     gpr: [u64; 31],
     pub spsr: u64,
@@ -124,6 +127,7 @@ impl Aarch64ContextFrame {
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Copy, Clone, Debug)]
+/// Context frame for AArch64.
 pub struct VmCtxFpsimd {
     fpsimd: [u64; 64],
     fpsr: u32,
@@ -149,6 +153,7 @@ impl VmCtxFpsimd {
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Debug, Copy, Clone, Default)]
+/// Arm GIC irq state struct
 pub struct GicIrqState {
     pub id: u64,
     pub enable: u8,
@@ -161,6 +166,7 @@ pub struct GicIrqState {
 #[repr(C)]
 #[repr(align(16))]
 #[derive(Debug, Copy, Clone, Default)]
+/// Arm GIC context struct
 pub struct GicContext {
     irq_num: usize,
     pub irq_state: [GicIrqState; 10],
@@ -198,6 +204,7 @@ impl GicContext {
 
 #[repr(C, align(16))]
 #[derive(Debug, Copy, Clone)]
+/// VM context struct
 pub struct VmContext {
     // generic timer
     pub cntvoff_el2: u64,

@@ -34,6 +34,7 @@ static mut CPU_FUNC_SYNC: CpuSyncToken = CpuSyncToken {
 };
 
 #[inline(never)]
+/// Wait for all CPUs to reach the barrier.
 pub fn barrier() {
     unsafe {
         let ori = CPU_GLB_SYNC.count.fetch_add(1, Ordering::Relaxed);

@@ -107,14 +107,17 @@ impl BlockDescriptor {
 
 #[repr(C)]
 #[repr(align(4096))]
+/// PageTable struct
 pub struct PageTables {
     entry: [BlockDescriptor; ENTRY_PER_PAGE],
 }
 
+/// level1 page table
 pub static mut LVL1_PAGE_TABLE: PageTables = PageTables {
     entry: [BlockDescriptor(0); ENTRY_PER_PAGE],
 };
 
+/// level2 page table
 pub static mut LVL2_PAGE_TABLE: PageTables = PageTables {
     entry: [BlockDescriptor(0); ENTRY_PER_PAGE],
 };
@@ -123,6 +126,7 @@ const PLATFORM_PHYSICAL_LIMIT_GB: usize = 16;
 
 #[no_mangle]
 // #[link_section = ".text.boot"]
+/// populate page table
 pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables) {
     let lvl1_base: usize = lvl1_pt as *const _ as usize;
     let lvl2_base = lvl2_pt as *const _ as usize;
@@ -244,6 +248,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
 
 #[no_mangle]
 // #[link_section = ".text.boot"]
+/// init mmu, set mmu-related registers
 pub extern "C" fn mmu_init(pt: &PageTables) {
     use cortex_a::registers::*;
     MAIR_EL2.write(
@@ -272,6 +277,7 @@ pub extern "C" fn mmu_init(pt: &PageTables) {
 const PAR_EL1_OFF: usize = 12;
 const PAR_EL1_LEN: usize = 36;
 
+/// translate gva to ipa
 pub fn gva2ipa(gva: usize) -> Result<usize, ()> {
     use cortex_a::registers::PAR_EL1;
 

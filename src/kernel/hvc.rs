@@ -195,6 +195,7 @@ pub fn get_share_mem(mem_type: usize) -> usize {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// handler of hypervisor call from guest os
 pub fn hvc_guest_handler(
     hvc_type: usize,
     event: usize,
@@ -443,7 +444,7 @@ pub fn hvc_send_msg_to_vm(vm_id: usize, guest_msg: &HvcGuestMsg) -> bool {
     true
 }
 
-// notify current cpu's vcpu
+/// notify current cpu's vcpu
 pub fn hvc_guest_notify(vm_id: usize) {
     let vm = vm(vm_id).unwrap();
     match current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {

@@ -74,6 +74,7 @@ pub fn vm_if_get_cpu_id(vm_id: usize) -> usize {
     vm_if.master_cpu_id
 }
 
+/// compare vm_if mac addr with frame mac addr
 pub fn vm_if_cmp_mac(vm_id: usize, frame: &[u8]) -> bool {
     let vm_if = VM_IF_LIST[vm_id].lock();
     for (i, &b) in vm_if.mac.iter().enumerate() {
@@ -277,6 +278,7 @@ impl Vm {
         }
     }
 
+    /// Init the VM's interrupt controller mode.
     pub fn init_intc_mode(&self, emu: bool) {
         let vm_inner = self.inner.lock();
         for vcpu in &vm_inner.vcpu_list {

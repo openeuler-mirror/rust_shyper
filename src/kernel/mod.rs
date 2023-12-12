@@ -8,6 +8,9 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! The rust-shyper hypervisor kernel code.
+//! 
+
 pub use self::async_task::*;
 pub use self::cpu::*;
 pub use self::hvc::*;

@@ -11,6 +11,7 @@
 use core::arch::asm;
 
 #[inline(never)]
+/// invoke a secure monitor call
 pub fn smc_call(x0: usize, x1: usize, x2: usize, x3: usize) -> (usize, usize, usize, usize) {
     #[cfg(target_arch = "aarch64")]
     unsafe {

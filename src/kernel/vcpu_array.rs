@@ -12,6 +12,7 @@ use alloc::slice::{Iter, IterMut};
 use crate::board::{PLAT_DESC, SchedRule};
 use crate::kernel::{current_cpu, SchedType, SchedulerRR, Vcpu, VM_NUM_MAX, interrupt_cpu_enable};
 
+/// vcpu array for storing vcpu objects
 pub struct VcpuArray {
     array: [Option<Vcpu>; VM_NUM_MAX],
     len: usize,
@@ -107,6 +108,7 @@ pub fn cpu_sched_init() {
     }
 }
 
+/// restore gic context for current vcpu
 pub fn restore_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
     match cur_vcpu {
         None => {
@@ -123,6 +125,7 @@ pub fn restore_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
     }
 }
 
+/// save gic context for current vcpu
 pub fn save_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
     match cur_vcpu {
         None => {

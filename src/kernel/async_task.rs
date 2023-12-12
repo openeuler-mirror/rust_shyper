@@ -68,6 +68,7 @@ pub static ASYNC_IPI_TASK_LIST: Mutex<LinkedList<AsyncTask>> = Mutex::new(Linked
 pub static ASYNC_IO_TASK_LIST: Mutex<FairQueue<AsyncTask>> = Mutex::new(FairQueue::new());
 pub static ASYNC_USED_INFO_LIST: Mutex<BTreeMap<usize, LinkedList<UsedInfo>>> = Mutex::new(BTreeMap::new());
 
+/// trait for determining the owner of a task
 pub trait TaskOwner {
     fn owner(&self) -> usize;
 }
@@ -78,9 +79,13 @@ pub trait TaskOwner {
 //     queue: LinkedList<Arc<RefCell<LinkedList<T>>>>,
 // }
 
+/// Fair Queue, a queue of tasks which can serve tasks at a fair manner
 pub struct FairQueue<T: TaskOwner> {
+    /// number of tasks in the queue
     len: usize,
+    /// a map from owner to a sub queue of tasks
     map: BTreeMap<usize, LinkedList<T>>,
+    /// a queue of owners, which is used to determine the order of serving tasks
     queue: LinkedList<usize>,
 }
 
@@ -93,14 +98,17 @@ impl<T: TaskOwner> FairQueue<T> {
         }
     }
 
+    /// check if the queue is empty
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
 
+    /// get the length of the queue (i.e. number of tasks)
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// push a task to the back of the queue, and insert  the belonging owner to the back of the queue
     pub fn push_back(&mut self, task: T) {
         let key = task.owner();
         match self.map.get_mut(&key) {
@@ -115,6 +123,7 @@ impl<T: TaskOwner> FairQueue<T> {
         self.len += 1;
     }
 
+    /// pop the front task, and move the belonging owner to the back of the queue
     pub fn pop_front(&mut self) -> Option<T> {
         match self.queue.pop_front() {
             Some(owner) => match self.map.get_mut(&owner) {
@@ -134,6 +143,7 @@ impl<T: TaskOwner> FairQueue<T> {
         }
     }
 
+    /// get the front task, but not pop it
     pub fn front(&self) -> Option<&T> {
         match self.queue.front() {
             Some(owner) => match self.map.get(owner) {
@@ -144,6 +154,7 @@ impl<T: TaskOwner> FairQueue<T> {
         }
     }
 
+    /// remove the owner and all its tasks
     pub fn remove(&mut self, owner: usize) {
         if let Some(sub_queue) = self.map.remove(&owner) {
             self.len -= sub_queue.len();
@@ -160,6 +171,7 @@ impl<T: TaskOwner> Iterator for FairQueue<T> {
 }
 
 #[derive(Clone)]
+/// data of an async task
 pub enum AsyncTaskData {
     AsyncIpiTask(IpiMediatedMsg),
     AsyncIoTask(IoAsyncMsg),
@@ -175,19 +187,23 @@ fn set_async_exe_status(status: AsyncExeStatus) {
 }
 
 #[derive(Clone)]
+/// an struct to describe an async task
 pub struct AsyncTask {
     pub task_data: AsyncTaskData,
+    /// the owner of the task
     pub src_vmid: usize,
+    /// the state of the task
     pub state: Arc<Mutex<AsyncTaskState>>,
     pub task: Arc<Mutex<Pin<Box<dyn Future<Output = ()> + 'static + Send + Sync>>>>,
 }
-
+ 
 impl TaskOwner for AsyncTask {
     fn owner(&self) -> usize {
         self.src_vmid
     }
 }
 
+/// implement wake trait for AsyncTask, manages things that need to be done when a task is waken
 impl Wake for AsyncTask {
     fn wake(self: Arc<Self>) {
         todo!()
@@ -208,6 +224,7 @@ impl AsyncTask {
         }
     }
 
+    /// handle a task, and return true if the task is finished
     pub fn handle(&mut self) -> bool {
         let mut state = self.state.lock();
         match *state {
@@ -234,7 +251,7 @@ impl AsyncTask {
     }
 }
 
-// async req function
+/// async request function
 pub async fn async_ipi_req() {
     let ipi_list = ASYNC_IPI_TASK_LIST.lock();
     if ipi_list.is_empty() {
@@ -255,7 +272,7 @@ pub async fn async_ipi_req() {
 
 pub async fn async_blk_id_req() {}
 
-// inject an interrupt to service VM
+/// inject an interrupt to service VM
 pub async fn async_blk_io_req() {
     let io_list = ASYNC_IO_TASK_LIST.lock();
     if io_list.is_empty() {
@@ -290,6 +307,7 @@ pub async fn async_blk_io_req() {
 }
 // end async req function
 
+/// set the state of the front task in the IO task list
 pub fn set_front_io_task_state(state: AsyncTaskState) {
     let io_list = ASYNC_IO_TASK_LIST.lock();
     match io_list.front() {
@@ -302,6 +320,7 @@ pub fn set_front_io_task_state(state: AsyncTaskState) {
     }
 }
 
+/// add a task to the async task list
 pub fn add_async_task(task: AsyncTask, ipi: bool) {
     // println!("add {} task", if ipi { "ipi" } else { "blk io" });
     let mut ipi_list = ASYNC_IPI_TASK_LIST.lock();
@@ -335,7 +354,7 @@ pub fn add_async_task(task: AsyncTask, ipi: bool) {
     }
 }
 
-// async task executor
+// async task executor, iterately gets tasks from the queue and executse them
 pub fn async_task_exe() {
     if active_vm_id() == 0 {
         match async_exe_status() {

@@ -65,6 +65,7 @@ pub mod tlbi {
     define_tlbi_va!(vae2);
 }
 
+/// invalidate all guest tlb entries
 pub fn tlb_invalidate_guest_all() {
     dsb::ish();
     tlbi::vmalls12e1is();
@@ -72,6 +73,7 @@ pub fn tlb_invalidate_guest_all() {
     isb();
 }
 
+/// invalidate all hypervisor tlb entries
 pub fn invalid_hypervisor_all() {
     dsb::ish();
     tlbi::alle2is();

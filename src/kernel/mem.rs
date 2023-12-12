@@ -27,6 +27,7 @@ pub fn mem_init() {
     info!("Mem init ok");
 }
 
+/// Clear BSS section
 pub unsafe fn clear_bss() {
     extern "C" {
         fn _bss_begin();
@@ -36,6 +37,7 @@ pub unsafe fn clear_bss() {
     from_raw_parts_mut(_bss_begin as usize as *mut u8, _bss_end as usize - _bss_begin as usize).fill(0);
 }
 
+/// init heap memory region
 pub fn mem_heap_region_init() {
     extern "C" {
         // Note: link-time label, see aarch64.lds
@@ -135,6 +137,7 @@ fn mem_heap_reset() {
     memset_safe(heap.region.base as *mut u8, 0, heap.region.size * PAGE_SIZE);
 }
 
+/// alloc some page from heap region
 pub fn mem_heap_alloc(page_num: usize, _aligned: bool) -> Result<usize, AllocError> {
     if page_num == 0 {
         return Err(AllocZeroPage);
@@ -148,19 +151,23 @@ pub fn mem_heap_alloc(page_num: usize, _aligned: bool) -> Result<usize, AllocErr
     heap.alloc_pages(page_num)
 }
 
+/// free some page from heap region
 pub fn mem_heap_free(addr: usize, page_num: usize) -> bool {
     let mut heap = HEAP_REGION.lock();
     heap.free_pages(addr, page_num)
 }
 
+/// alloc one page
 pub fn mem_page_alloc() -> Result<PageFrame, AllocError> {
     PageFrame::alloc_pages(1)
 }
 
+/// alloc some continuous pages
 pub fn mem_pages_alloc(page_num: usize) -> Result<PageFrame, AllocError> {
     PageFrame::alloc_pages(page_num)
 }
 
+/// alloc some space and create a new vm region
 pub fn mem_vm_region_alloc(size: usize) -> usize {
     let mut vm_region = VM_REGION.lock();
     for i in 0..vm_region.region.len() {
@@ -185,6 +192,7 @@ pub fn mem_vm_region_alloc(size: usize) -> usize {
     0
 }
 
+/// free a vm region
 pub fn mem_vm_region_free(start: usize, size: usize) {
     let mut vm_region = VM_REGION.lock();
     let mut free_idx = None;

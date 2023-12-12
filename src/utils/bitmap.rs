@@ -19,38 +19,39 @@ use alloc::vec::Vec;
 
 use crate::utils::bit_get;
 
+/// a trait of bit map
 pub trait BitAlloc {
-    // The bitmap has a total of CAP bits, numbered from 0 to CAP-1 inclusively.
+    /// The bitmap has a total of CAP bits, numbered from 0 to CAP-1 inclusively.
     const CAP: usize;
 
-    // The default value. Workaround for `const fn new() -> Self`.
+    /// The default value. Workaround for `const fn new() -> Self`.
     #[allow(clippy::declare_interior_mutable_const)]
     const DEFAULT: Self;
 
-    // Set a bit.
+    /// Set a bit.
     fn set(&mut self, idx: usize);
 
-    // Clear a bit
+    /// Clear a bit
     fn clear(&mut self, idx: usize);
 
-    // Get a bit
+    /// Get a bit
     fn get(&self, idx: usize) -> usize;
 
     // Whether there are free bits remaining
     // fn any(&self) -> bool;
 }
 
-// A bitmap of 4K bits
+/// A bitmap of 256 bits
 pub type BitAlloc256 = BitMap<BitAlloc16>;
-// A bitmap of 4K bits
+/// A bitmap of 4K bits
 pub type BitAlloc4K = BitMap<BitAlloc256>;
-// A bitmap of 64K bits
+/// A bitmap of 64K bits
 pub type BitAlloc64K = BitMap<BitAlloc4K>;
-// A bitmap of 1M bits
+/// A bitmap of 1M bits
 pub type BitAlloc1M = BitMap<BitAlloc64K>;
-// A bitmap of 16M bits
+/// A bitmap of 16M bits
 pub type BitAlloc16M = BitMap<BitAlloc1M>;
-// A bitmap of 256M bits
+/// A bitmap of 256M bits
 pub type BitAlloc256M = BitMap<BitAlloc16M>;
 
 #[repr(C)]
@@ -129,7 +130,7 @@ impl BitAlloc for BitAlloc16 {
     }
 }
 
-// flex bit map
+/// flex bit map
 #[derive(Clone)]
 pub struct FlexBitmap {
     pub len: usize,
@@ -142,12 +143,14 @@ impl FlexBitmap {
         FlexBitmap { len, map }
     }
 
+    /// init the bitmap with all dirty
     pub fn init_dirty(&mut self) {
         for i in 0..self.map.len() {
             self.map[i] = usize::MAX;
         }
     }
 
+    /// init the bitmap with all clean
     pub fn clear(&mut self) {
         for i in 0..self.map.len() {
             self.map[i] = 0;
@@ -173,6 +176,7 @@ impl FlexBitmap {
         }
     }
 
+    /// set bits from bit to bit+len to val
     pub fn set_bits(&mut self, bit: usize, len: usize, val: bool) {
         if bit + len > self.len {
             panic!("set_bits: too large idx {} for set bitmap", bit);
@@ -201,6 +205,7 @@ impl FlexBitmap {
         self.map.len()
     }
 
+    /// get the sum of all 1 bits
     pub fn sum(&self) -> usize {
         let mut sum = 0;
         for val in &self.map {
@@ -209,6 +214,7 @@ impl FlexBitmap {
         sum
     }
 
+    /// get the first bit that is 0
     pub fn first(&self) -> usize {
         let mut first = 0;
         for val in &self.map {

@@ -211,6 +211,7 @@ impl IrqState {
     }
 }
 
+/// Gic Descriptor struct
 pub struct GicDesc {
     pub gicd_addr: usize,
     pub gicc_addr: usize,

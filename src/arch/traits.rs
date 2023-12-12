@@ -10,6 +10,7 @@
 use crate::kernel::Vm;
 use crate::kernel::Vcpu;
 
+/// Architecture-independent ContextFrame trait.
 pub trait ContextFrameTrait {
     fn new(pc: usize, sp: usize, arg: usize) -> Self;
 
@@ -22,6 +23,7 @@ pub trait ContextFrameTrait {
     fn gpr(&self, index: usize) -> usize;
 }
 
+/// Architecture-independent PageTableEntry trait.
 pub trait ArchPageTableEntryTrait {
     fn from_pte(value: usize) -> Self;
     fn from_pa(pa: usize) -> Self;
@@ -33,6 +35,8 @@ pub trait ArchPageTableEntryTrait {
     fn make_table(frame_pa: usize) -> Self;
 }
 
+/// Architecture-independent Interrupt Context trait.
+/// Interrupt Context: the context of interrupt controller of specific VM
 pub trait InterruptContextTriat: Default {
     fn save_state(&mut self);
     fn restore_state(&self);

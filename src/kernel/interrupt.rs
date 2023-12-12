@@ -37,10 +37,12 @@ fn interrupt_is_reserved(int_id: usize) -> Option<fn()> {
     INTERRUPT_HANDLERS.lock().get(&int_id).cloned()
 }
 
+/// enable or disable specific interrupt on current cpu
 pub fn interrupt_cpu_enable(int_id: usize, en: bool) {
     IntCtrl::enable(int_id, en);
 }
 
+/// perform interrupt initialization
 pub fn interrupt_init() {
     IntCtrl::init();
 
@@ -53,6 +55,7 @@ pub fn interrupt_init() {
     interrupt_cpu_enable(IntCtrl::IRQ_IPI, true);
 }
 
+/// register a new interrupt for specific vm
 pub fn interrupt_vm_register(vm: Vm, id: usize) -> bool {
     // println!("VM {} register interrupt {}", vm.id(), id);
     let mut glb_bitmap_lock = INTERRUPT_GLB_BITMAP.lock();
@@ -67,6 +70,7 @@ pub fn interrupt_vm_register(vm: Vm, id: usize) -> bool {
     true
 }
 
+/// remove interrupt for specific vm
 pub fn interrupt_vm_remove(_vm: Vm, id: usize) {
     let mut glb_bitmap_lock = INTERRUPT_GLB_BITMAP.lock();
     // vgic and vm will be removed with struct vm
@@ -136,6 +140,7 @@ pub fn interrupt_handler(int_id: usize) -> bool {
     true
 }
 
+/// ipi interrupt handler entry
 pub fn interrupt_inject_ipi_handler(msg: &IpiMessage) {
     match &msg.ipi_message {
         IpiInnerMsg::IntInjectMsg(int_msg) => {

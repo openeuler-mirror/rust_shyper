@@ -109,6 +109,7 @@ pub fn pt_lvl3_idx(va: usize) -> usize {
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug)]
+/// Aarch64PageTableEntry struct represents a page table entry.
 pub struct Aarch64PageTableEntry(usize);
 
 impl ArchPageTableEntryTrait for Aarch64PageTableEntry {
@@ -148,12 +149,14 @@ impl ArchPageTableEntryTrait for Aarch64PageTableEntry {
 }
 
 #[derive(Clone)]
+/// PageTable struct represents a page table, consisting of a directory and a list of pages.
 pub struct PageTable {
     pub directory: Arc<PageFrame>,
     pub pages: Arc<Mutex<Vec<PageFrame>>>,
 }
 
 impl PageTable {
+    /// Create a new page table with given directory.
     pub fn new(directory: PageFrame) -> PageTable {
         PageTable {
             directory: Arc::new(directory),
@@ -165,6 +168,7 @@ impl PageTable {
         self.directory.pa()
     }
 
+    /// modify a range of ipa's access permission
     pub fn access_permission(&self, start_ipa: usize, len: usize, ap: usize) -> (usize, usize) {
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());
         let mut ipa = start_ipa;
@@ -210,6 +214,7 @@ impl PageTable {
         (pa, size)
     }
 
+    /// map a 2mb page of ipa to a physical address
     pub fn map_2mb(&self, ipa: usize, pa: usize, pte: usize) {
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());
         let l0e = if cfg!(feature = "lvl4") {
@@ -254,7 +259,8 @@ impl PageTable {
             l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry::from_pa(pa | pte | PTE_BLOCK));
         }
     }
-
+    
+    /// unmap a 2mb page of ipa
     pub fn unmap_2mb(&self, ipa: usize) {
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());
         let l0e = if cfg!(feature = "lvl4") {
@@ -285,6 +291,7 @@ impl PageTable {
         }
     }
 
+    /// map a 2 4kb page of ipa to a physical address
     pub fn map(&self, ipa: usize, pa: usize, pte: usize) {
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());
         let l0e = if cfg!(feature = "lvl4") {
@@ -345,6 +352,7 @@ impl PageTable {
         }
     }
 
+    /// unmap a 4kb page of ipa
     pub fn unmap(&self, ipa: usize) {
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());
         let l0e = if cfg!(feature = "lvl4") {
@@ -385,6 +393,7 @@ impl PageTable {
         }
     }
 
+    /// map a range of ipa to a range of physical space, which page size is 2mb
     pub fn map_range_2mb(&self, ipa: usize, len: usize, pa: usize, pte: usize) {
         let size_2mb = 1 << LVL2_SHIFT;
         let page_num = round_up(len, size_2mb) / size_2mb;
@@ -394,6 +403,7 @@ impl PageTable {
         }
     }
 
+    /// unmap a range of ipa, which page size is 2mb
     pub fn unmap_range_2mb(&self, ipa: usize, len: usize) {
         let size_2mb = 1 << LVL2_SHIFT;
         let page_num = round_up(len, size_2mb) / size_2mb;
@@ -403,6 +413,7 @@ impl PageTable {
         }
     }
 
+    /// map a range of ipa to a range of physical space, which page size is 4kb
     pub fn map_range(&self, ipa: usize, len: usize, pa: usize, pte: usize) {
         let page_num = round_up(len, PAGE_SIZE) / PAGE_SIZE;
         for i in 0..page_num {
@@ -410,6 +421,7 @@ impl PageTable {
         }
     }
 
+    /// unmap a range of ipa, which page size is 4kb
     pub fn unmap_range(&self, ipa: usize, len: usize) {
         let page_num = round_up(len, PAGE_SIZE) / PAGE_SIZE;
         for i in 0..page_num {
@@ -417,6 +429,7 @@ impl PageTable {
         }
     }
 
+    /// display page table to debug
     pub fn show_pt(&self, ipa: usize) {
         // println!("show_pt");
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());
@@ -441,6 +454,7 @@ impl PageTable {
         }
     }
 
+    /// map a range of ipa to a range of physical space, using 4kb or 2mb page depending on the alignment of ipa, len and pa
     pub fn pt_map_range(&self, ipa: usize, len: usize, pa: usize, pte: usize, map_block: bool) {
         let size_2mb = 1 << LVL2_SHIFT;
         if ipa % size_2mb == 0 && len % size_2mb == 0 && pa % size_2mb == 0 && map_block {
@@ -450,6 +464,7 @@ impl PageTable {
         }
     }
 
+    /// unmap a range of ipa, using 4kb or 2mb page depending on the alignment of ipa and len
     pub fn pt_unmap_range(&self, ipa: usize, len: usize, map_block: bool) {
         let size_2mb = 1 << LVL2_SHIFT;
         if ipa % size_2mb == 0 && len % size_2mb == 0 && map_block {
@@ -460,6 +475,7 @@ impl PageTable {
     }
 }
 
+/// check if a page is empty
 pub fn empty_page(addr: usize) -> bool {
     for i in 0..(PAGE_SIZE / 8) {
         if unsafe { ((addr + i * 8) as *const usize).read_volatile() != 0 } {

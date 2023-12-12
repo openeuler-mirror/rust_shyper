@@ -78,6 +78,7 @@ pub fn data_abort_handler() {
     current_cpu().set_elr(val);
 }
 
+/// architecture specific smc handler entry
 pub fn smc_handler() {
     let fid = current_cpu().get_gpr(0);
     let x1 = current_cpu().get_gpr(1);
@@ -102,6 +103,7 @@ pub fn smc_handler() {
     current_cpu().set_elr(val);
 }
 
+/// architecture specific hvc handler entry
 pub fn hvc_handler() {
     // let time_start = timer_arch_get_counter();
     let x0 = current_cpu().get_gpr(0);

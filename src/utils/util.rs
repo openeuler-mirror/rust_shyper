@@ -15,10 +15,12 @@ use crate::arch::PAGE_SIZE;
 
 static TRACE: AtomicBool = AtomicBool::new(true);
 
+/// Set trace flag.
 pub fn set_trace(value: bool) {
     TRACE.store(value, Ordering::Relaxed);
 }
 
+/// Get trace flag.
 pub fn trace() -> bool {
     TRACE.load(Ordering::Relaxed)
 }
@@ -85,6 +87,7 @@ pub fn bitmap_find_nth(bitmap: usize, start: usize, size: usize, nth: usize, set
     None
 }
 
+/// Read or write a value from/to a pointer.
 pub fn ptr_read_write(addr: usize, width: usize, val: usize, read: bool) -> usize {
     if read {
         if width == 1 {

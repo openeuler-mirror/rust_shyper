@@ -22,6 +22,7 @@ use crate::utils::memcpy_safe;
 use super::{CpuState, Vm, VmType};
 
 #[derive(Clone, Copy, Debug)]
+/// Vcpu state Enum
 pub enum VcpuState {
     Invalid = 0,
     Ready = 1,
@@ -40,6 +41,7 @@ pub struct VcpuInner {
 }
 
 #[derive(Clone)]
+/// Vcpu struct
 pub struct Vcpu {
     pub inner: Arc<VcpuInner>,
 }
@@ -60,6 +62,7 @@ impl Vcpu {
         this
     }
 
+    /// shutdown this vcpu
     pub fn shutdown(&self) {
         info!(
             "Core {} (vm {} vcpu {}) shutdown ok",

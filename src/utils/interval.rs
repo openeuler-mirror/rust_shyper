@@ -2,6 +2,7 @@ use alloc::vec::{Vec, IntoIter};
 use core::mem::MaybeUninit;
 
 #[derive(Debug, Clone, Default)]
+/// A struct to store all the discontinuous intervals.
 pub struct IntervalExcluder {
     inner: Vec<(usize, isize)>,
 }
@@ -19,6 +20,7 @@ impl IntervalExcluder {
         Self::default()
     }
 
+    /// Add a range of memory(give left and right) to the interval excluder.
     pub fn add_range(&mut self, left: usize, right: usize) -> &mut Self {
         self.inner.push((left, 1));
         self.inner.push((right, -1));
@@ -28,16 +30,19 @@ impl IntervalExcluder {
         self
     }
 
+    /// Add a range of memory(give start and len) to the interval excluder.
     pub fn add_len(&mut self, start: usize, length: usize) -> &mut Self {
         self.add_range(start, start + length)
     }
 
+    /// Exclude a range of memory(give left and right) from the interval excluder.
     pub fn exclude_range(&mut self, left: usize, right: usize) -> &mut Self {
         self.inner.push((left, -INF));
         self.inner.push((right, INF));
         self
     }
 
+    /// Exclude a range of memory(give start and len) from the interval excluder.
     pub fn exclude_len(&mut self, start: usize, length: usize) -> &mut Self {
         self.exclude_range(start, start + length)
     }
@@ -71,6 +76,7 @@ impl IntoIterator for IntervalExcluder {
     }
 }
 
+/// An iterator over the intervals in an `IntervalExcluder`.
 impl Iterator for IntervalIter {
     type Item = Interval;
 

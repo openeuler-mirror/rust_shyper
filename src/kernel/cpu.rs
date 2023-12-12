@@ -30,6 +30,7 @@ pub const CONTEXT_GPR_NUM: usize = 31;
 pub const CPU_STACK_OFFSET: usize = offset_of!(Cpu, stack);
 
 #[derive(Copy, Clone, Debug, Eq)]
+/// CPU state Enum
 pub enum CpuState {
     CpuInv = 0,
     CpuIdle = 1,
@@ -49,6 +50,7 @@ pub enum StartReason {
     None,
 }
 
+/// A struct to store the information of a CPU
 pub struct CpuIf {
     pub msg_queue: Vec<IpiMessage>,
     pub entry: u64,
@@ -81,6 +83,7 @@ impl CpuIf {
     }
 }
 
+/// stores the information of all CPUs, which count is the number of CPU on the platform
 pub static CPU_IF_LIST: Mutex<Vec<CpuIf>> = Mutex::new(Vec::new());
 
 fn cpu_if_init() {
@@ -184,6 +187,7 @@ impl Cpu {
         self.ctx_mut().unwrap().set_exception_pc(val)
     }
 
+    /// set a active vcpu for this physical cpu
     pub fn set_active_vcpu(&mut self, active_vcpu: Option<Vcpu>) {
         self.active_vcpu = active_vcpu.clone();
         match active_vcpu {
@@ -194,6 +198,7 @@ impl Cpu {
         }
     }
 
+    /// schedule a vcpu to run on this physical cpu
     pub fn schedule_to(&mut self, next_vcpu: Vcpu) {
         if let Some(prev_vcpu) = &self.active_vcpu {
             if prev_vcpu.vm_id() != next_vcpu.vm_id() {
@@ -222,6 +227,7 @@ impl Cpu {
         }
     }
 
+    /// get this cpu's scheduler
     pub fn scheduler(&mut self) -> &mut impl Scheduler {
         match &mut self.sched {
             SchedType::None => panic!("scheduler is None"),
@@ -229,6 +235,7 @@ impl Cpu {
         }
     }
 
+    /// check whether this cpu is assigned to one or more vm
     pub fn assigned(&self) -> bool {
         self.vcpu_array.vcpu_num() != 0
     }
@@ -269,6 +276,7 @@ pub fn active_vm_ncpu() -> usize {
     }
 }
 
+/// initialize the CPU
 pub fn cpu_init() {
     let cpu_id = current_cpu().id;
     if cpu_id == 0 {
@@ -299,6 +307,7 @@ pub fn cpu_init() {
     }
 }
 
+/// make the current cpu idle
 pub fn cpu_idle() -> ! {
     let state = CpuState::CpuIdle;
     current_cpu().cpu_state = state;
@@ -308,6 +317,7 @@ pub fn cpu_idle() -> ! {
     }
 }
 
+/// store all cpu's CPU struct in this array
 pub static mut CPU_LIST: [Cpu; PLATFORM_CPU_NUM_MAX] = [const { Cpu::default() }; PLATFORM_CPU_NUM_MAX];
 
 pub extern "C" fn cpu_map_self(mpidr: usize) {

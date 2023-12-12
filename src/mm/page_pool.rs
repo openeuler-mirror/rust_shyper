@@ -18,8 +18,11 @@ use crate::mm::PageFrame;
 use self::Error::*;
 
 #[derive(Copy, Clone, Debug)]
+/// Error type for page pool allocator.
 pub enum Error {
+    /// No free page frame.
     OutOfFrame,
+    /// Free a page frame that is not allocated.
     FreeNotAllocated,
 }
 
@@ -28,6 +31,7 @@ struct PagePool {
     allocated: Vec<usize>,
 }
 
+/// PagePoolTrait is a trait for page pool allocator, which manages a range of memory and allocates/free page frames.
 pub trait PagePoolTrait {
     fn init(&mut self, range: Range<usize>);
     fn allocate(&mut self) -> Result<PageFrame, Error>;
@@ -69,12 +73,14 @@ static PAGE_POOL: Mutex<PagePool> = Mutex::new(PagePool {
     allocated: Vec::new(),
 });
 
+/// Initialize the page pool allocator.
 pub fn init() {
     let range = super::config::paged_range();
     let mut pool = PAGE_POOL.lock();
     pool.init(range);
 }
 
+/// Allocate a page frame, panic when error happens.
 pub fn alloc() -> PageFrame {
     let mut pool = PAGE_POOL.lock();
     if let Ok(frame) = pool.allocate() {
@@ -84,12 +90,15 @@ pub fn alloc() -> PageFrame {
     }
 }
 
+
+/// Try to alloc a page frame, return the error when error happens.
 pub fn try_alloc() -> Result<PageFrame, Error> {
     let mut pool = PAGE_POOL.lock();
     let r = pool.allocate();
     r
 }
 
+/// Free a page frame, return the error when error happens.
 pub fn free(pa: usize) -> Result<(), Error> {
     let mut pool = PAGE_POOL.lock();
     pool.free(pa)

@@ -70,13 +70,21 @@ TFTP_SERVER ?= root@192.168.106.153:/tftp
 
 UBOOT_IMAGE ?= Image$(USER)_$(ARCH)_$(BOARD)
 
-.PHONY: build cargo upload qemu rk3588 tx2 pi4 tx2_update tx2_ramdisk gdb clean clippy
+.PHONY: build doc cargo upload qemu rk3588 tx2 pi4 tx2_update tx2_ramdisk gdb clean clippy
 
 build: cargo
 	bash linkimg.sh -i ${TARGET_DIR}/${RELOCATE_IMAGE} -m ${VM0_IMAGE_PATH} \
 		-t ${LD} -f linkers/${ARCH}.ld -s ${TEXT_START} -o ${TARGET_DIR}/${IMAGE}
 	${OBJDUMP} --demangle -d ${TARGET_DIR}/${IMAGE} > ${TARGET_DIR}/t.txt
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
+
+doc-pre:
+	cargo doc ${CARGO_FLAGS}
+	sudo cp -r target/aarch64/doc/* /var/www/html
+
+# This target is created for passing env variable ${BOARD} to MAKE
+doc:
+	$(MAKE) doc-pre BOARD=qemu
 
 cargo:
 	cargo ${CARGO_ACTION} ${CARGO_FLAGS}

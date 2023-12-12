@@ -25,6 +25,7 @@ impl Write for Writer {
     }
 }
 
+/// Print a format string to the console.
 pub fn _print(args: Arguments) {
     // use core::fmt::Write;
     let mut lock = WRITER.lock();

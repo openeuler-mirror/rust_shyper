@@ -19,6 +19,7 @@ const CTL_IMASK: usize = 1 << 1;
 pub static TIMER_FREQ: AtomicUsize = AtomicUsize::new(0);
 pub static TIMER_SLICE: AtomicUsize = AtomicUsize::new(0); // ms
 
+/// Set expiration time to `num` ms later
 pub fn timer_arch_set(num: usize) {
     let slice = TIMER_SLICE.load(Ordering::Relaxed);
     let val = slice * num;
@@ -29,6 +30,7 @@ pub fn timer_arch_set(num: usize) {
     }
 }
 
+/// Enable timer interrupt
 pub fn timer_arch_enable_irq() {
     // SAFETY:
     // Enable[0] timer interrupt
@@ -37,6 +39,7 @@ pub fn timer_arch_enable_irq() {
     }
 }
 
+/// Disable timer interrupt
 pub fn timer_arch_disable_irq() {
     // SAFETY:
     // MASK[1] timer interrupt
@@ -45,14 +48,17 @@ pub fn timer_arch_disable_irq() {
     }
 }
 
+/// Get current counter value
 pub fn timer_arch_get_counter() -> usize {
     cortex_a::registers::CNTPCT_EL0.get() as usize
 }
 
+/// Get timer frequency
 pub fn timer_arch_get_frequency() -> usize {
     cortex_a::registers::CNTFRQ_EL0.get() as usize
 }
 
+/// timer init function for specific architecture
 pub fn timer_arch_init() {
     let freq = timer_arch_get_frequency();
     let slice = freq / 1000;

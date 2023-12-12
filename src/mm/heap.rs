@@ -21,8 +21,10 @@ struct HeapRegion([u8; HEAP_SIZE]);
 static mut HEAP_REGION: HeapRegion = HeapRegion([0; HEAP_SIZE]);
 
 #[global_allocator]
+/// Global heap allocator
 pub static HEAP_ALLOCATOR: LockedHeap<32> = LockedHeap::empty();
 
+/// Initialize heap allocator
 pub fn heap_init() {
     unsafe {
         println!(

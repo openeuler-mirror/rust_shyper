@@ -28,6 +28,7 @@ use crate::kernel::{current_cpu, Scheduler};
 // static TIMER_LIST: Mutex<[Timer; PLATFORM_CPU_NUM_MAX]> =
 //     Mutex::new([Timer::default(); PLATFORM_CPU_NUM_MAX]);
 
+/// initialize timer on current cpu (This function needs to be executed on each cpu)
 pub fn timer_init() {
     crate::arch::timer_arch_init();
     timer_enable(false);
@@ -42,6 +43,7 @@ pub fn timer_init() {
     }
 }
 
+/// enable timer on current cpu
 pub fn timer_enable(val: bool) {
     // println!(
     //     "Core {} {} EL2 timer",
@@ -51,6 +53,7 @@ pub fn timer_enable(val: bool) {
     super::interrupt::interrupt_cpu_enable(IntCtrl::IRQ_HYPERVISOR_TIMER, val);
 }
 
+/// trigger timer interrupt after X ms
 fn timer_notify_after(ms: usize) {
     use crate::arch::{timer_arch_enable_irq, timer_arch_set};
     if ms == 0 {

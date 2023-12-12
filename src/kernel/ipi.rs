@@ -31,6 +31,7 @@ pub enum InitcEvent {
 }
 
 #[derive(Copy, Clone)]
+/// CPU Power event enum
 pub enum PowerEvent {
     PsciIpiCpuOn,
     PsciIpiCpuOff,
@@ -39,6 +40,7 @@ pub enum PowerEvent {
 }
 
 #[derive(Copy, Clone)]
+/// Event message struct transfered by IPI
 pub struct IpiInitcMessage {
     pub event: InitcEvent,
     pub vm_id: usize,
@@ -50,6 +52,7 @@ pub struct IpiInitcMessage {
 * src: src vm id
 */
 #[derive(Copy, Clone)]
+/// Power Message Struct transfered by IPI
 pub struct IpiPowerMessage {
     pub src: usize,
     pub vcpuid: usize,
@@ -65,18 +68,21 @@ pub struct IpiPowerMessage {
 // }
 
 #[derive(Copy, Clone)]
+/// Ethernet Message Struct transfered by IPI
 pub struct IpiEthernetMsg {
     pub src_vmid: usize,
     pub trgt_vmid: usize,
 }
 
 #[derive(Copy, Clone)]
+/// VM Management Message Struct transfered by IPI
 pub struct IpiVmmMsg {
     pub vmid: usize,
     pub event: VmmEvent,
 }
 
 #[derive(Copy, Clone)]
+/// VCPU Message Struct transfered by IPI
 pub struct IpiVcpuMsg {
     pub vmid: usize,
     pub vcpuid: usize,
@@ -85,6 +91,7 @@ pub struct IpiVcpuMsg {
 
 // only support for mediated blk
 #[derive(Clone)]
+/// Mediated Device Message Struct transfered by IPI
 pub struct IpiMediatedMsg {
     pub src_id: usize,
     pub vq: Virtq,
@@ -93,11 +100,13 @@ pub struct IpiMediatedMsg {
 }
 
 #[derive(Clone, Copy)]
+/// Mediated Device Notify Message Struct transfered by IPI
 pub struct IpiMediatedNotifyMsg {
     pub vm_id: usize,
 }
 
 #[derive(Clone, Copy)]
+/// HVC Message Struct transfered by IPI
 pub struct IpiHvcMsg {
     pub src_vmid: usize,
     pub trgt_vmid: usize,
@@ -106,6 +115,7 @@ pub struct IpiHvcMsg {
 }
 
 #[derive(Clone, Copy)]
+/// Interrupt Inject Message Struct transfered by IPI
 pub struct IpiIntInjectMsg {
     pub vm_id: usize,
     pub int_id: usize,
@@ -126,6 +136,7 @@ declare_enum_with_handler! {
 }
 
 #[derive(Clone)]
+/// Struct for all types of IPI Message
 pub enum IpiInnerMsg {
     Initc(IpiInitcMessage),
     Power(IpiPowerMessage),
@@ -140,6 +151,7 @@ pub enum IpiInnerMsg {
     None,
 }
 
+/// Struct for IPI Message
 pub struct IpiMessage {
     pub ipi_type: IpiType,
     pub ipi_message: IpiInnerMsg,
@@ -149,6 +161,7 @@ const IPI_HANDLER_MAX: usize = 16;
 
 pub type IpiHandlerFunc = fn(&IpiMessage);
 
+/// IPI Handler Struct
 pub struct IpiHandler {
     pub handler: IpiHandlerFunc,
     pub ipi_type: IpiType,
@@ -160,6 +173,7 @@ impl IpiHandler {
     }
 }
 
+/// ipi handler entry, scanning the received ipi list and call the coresponding handler
 pub fn ipi_irq_handler() {
     // println!("ipi handler");
     let cpu_id = current_cpu().id;
@@ -196,6 +210,7 @@ fn ipi_send(target_id: usize, msg: IpiMessage) -> bool {
     true
 }
 
+/// send ipi to target cpu
 pub fn ipi_send_msg(target_id: usize, ipi_type: IpiType, ipi_message: IpiInnerMsg) -> bool {
     let msg = IpiMessage { ipi_type, ipi_message };
     ipi_send(target_id, msg)

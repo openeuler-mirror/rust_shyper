@@ -30,6 +30,7 @@ extern "C" {
 #[naked]
 #[no_mangle]
 #[link_section = ".text.boot"]
+/// The entry point of the kernel.
 pub unsafe extern "C" fn _start() -> ! {
     asm!(
         r#"

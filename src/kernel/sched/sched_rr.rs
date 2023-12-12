@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use crate::kernel::{Vcpu, Scheduler, SchedulerUpdate, current_cpu, VcpuState, timer_enable, vm, run_idle_thread};
 
 #[derive(Default)]
+/// Round-Robin Scheduler struct
 pub struct SchedulerRR {
     queue: Vec<Vcpu>,
     active_idx: usize,
@@ -31,6 +32,7 @@ impl SchedulerRR {
 impl Scheduler for SchedulerRR {
     fn init(&mut self) {}
 
+    /// Select the next vcpu object in the round-robin queue
     fn next(&mut self) -> Option<Vcpu> {
         let queue = &self.queue;
         let len = queue.len();
@@ -50,6 +52,7 @@ impl Scheduler for SchedulerRR {
         None
     }
 
+    /// Schedule to the next vcpu object
     fn do_schedule(&mut self) {
         // let next_vcpu = self.next().unwrap();
         // current_cpu().schedule_to(next_vcpu);
@@ -67,6 +70,7 @@ impl Scheduler for SchedulerRR {
         }
     }
 
+    /// put vcpu into sleep, and remove it from scheduler
     fn sleep(&mut self, vcpu: Vcpu) {
         // println!(
         //     "SchedulerRR: Core {} sleep VM[{}] vcpu {}",
@@ -101,6 +105,7 @@ impl Scheduler for SchedulerRR {
         }
     }
 
+    /// wakeup a vcpu, meaning that the vcpu is ready to be scheduled
     fn wakeup(&mut self, vcpu: Vcpu) {
         let queue = &mut self.queue;
         vcpu.set_state(VcpuState::Ready);
@@ -113,6 +118,7 @@ impl Scheduler for SchedulerRR {
         }
     }
 
+    /// yield to another cpu, only used when vcpu is new added and want to be excuted immediately
     fn yield_to(&mut self, vcpu: Vcpu) {
         let queue = &mut self.queue;
         queue.push(vcpu.clone());

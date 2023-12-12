@@ -21,6 +21,7 @@ use super::AllocError;
 const TOTAL_MEM_REGION_MAX: usize = 16;
 
 #[derive(Copy, Clone, Eq, Debug)]
+/// Memory Region Descriptor Struct, used to describe a continuous platform memory region
 pub struct MemRegion {
     pub base: usize,
     pub size: usize,
@@ -54,6 +55,7 @@ impl MemRegion {
     }
 }
 
+/// Heap Region Struct, using a bitmap to manage heap memory
 pub struct HeapRegion {
     pub map: BitMap<BitAlloc4K>,
     pub region: MemRegion,
@@ -65,6 +67,7 @@ impl HeapRegion {
     }
 
     // base addr need to align to PAGE_SIZE
+    /// Reserve a range of pages in heap region, to avoid allocation of this range
     pub fn reserve_pages(&mut self, base: usize, size: usize) {
         debug!(
             "reserve pages from {:x}, size {:x}, region from{:x}",
@@ -100,6 +103,7 @@ impl HeapRegion {
         }
     }
 
+    /// alloc continuous pages for use
     pub fn alloc_pages(&mut self, size: usize) -> Result<usize, AllocError> {
         let res = self.first_fit(size);
         if res.is_none() {
@@ -127,6 +131,7 @@ impl HeapRegion {
         Ok(addr)
     }
 
+    /// free a segment of continuous pages
     pub fn free_pages(&mut self, base: usize, size: usize) -> bool {
         use crate::utils::range_in_range;
         if !range_in_range(base, size * PAGE_SIZE, self.region.base, self.region.size * PAGE_SIZE) {
@@ -150,6 +155,7 @@ impl HeapRegion {
     }
 }
 
+/// Vm memory region struct
 pub struct VmRegion {
     pub region: Vec<MemRegion>,
 }
@@ -174,6 +180,7 @@ pub fn bits_to_pages(bits: usize) -> usize {
     round_up(bits, PAGE_SIZE)
 }
 
+/// check if a physical address is in heap region
 pub fn pa_in_heap_region(pa: usize) -> bool {
     let heap_region = HEAP_REGION.lock();
     pa > heap_region.region.base && pa < (heap_region.region.base * PAGE_SIZE + heap_region.region.size)

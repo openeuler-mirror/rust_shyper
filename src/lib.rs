@@ -8,6 +8,21 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Rust-Shyper is a type-1 hypervisor based on Rust. It now supports Aarch64 architecture.
+//! The introduces of all modules are showed below:
+//! * [arch]: The architecture-dependent code, including the code for the Aarch64 architecture.
+//! * [board]: The code for the specific board, including the code for the Raspberry Pi 4B, tx2 and so on.
+//! * [config]: The configuration file for the hypervisor.
+//! * [device]: The emulation of the devices, including virtio emulation.
+//! * [driver]: The driver for the devices, including gpio and uart.
+//! * [kernel]: The rust-shyper hypervisor kernel code, manages the virtual machines, interrupts, address translation, vcpu scheduling and so on.
+//! * [mm]: The memory management code, including the code for the page frame allocator and rust global allocator.
+//! * [utils]: The utility code, including the code for the barrier, bitmap and so on.
+//! * [vmm]: The virtual machine monitor code, including the code for virtual machine management such as creation, startup, shutdown and removal.
+//! * [macros]: Defines the macros for the hypervisor.
+//! * error: Defines the error type for the hypervisor.
+//! * panic: Defines the panic handler for the hypervisor.
+
 #![no_std]
 #![no_main]
 #![feature(core_intrinsics)]
@@ -45,36 +60,36 @@ use vmm::{vm_init, vmm_boot_vm};
 use crate::kernel::{cpu_sched_init, iommu_init};
 
 #[macro_use]
-mod macros;
+pub mod macros;
 
 #[allow(dead_code)]
-mod arch;
+pub mod arch;
 #[allow(dead_code)]
-mod board;
+pub mod board;
 #[allow(dead_code)]
-mod config;
+pub mod config;
 #[allow(dead_code)]
-mod device;
+pub mod device;
 #[allow(dead_code)]
-mod driver;
+pub mod driver;
 #[allow(dead_code)]
-mod kernel;
+pub mod kernel;
 #[allow(dead_code)]
-mod mm;
+pub mod mm;
 #[allow(dead_code)]
-mod panic;
+pub mod panic;
 #[allow(dead_code)]
-mod utils;
+pub mod utils;
 #[allow(dead_code)]
-mod vmm;
+pub mod vmm;
 
-mod error;
+pub mod error;
 
 // use lib::{BitAlloc, BitAlloc256};
 
 pub static SYSTEM_FDT: spin::Once<alloc::vec::Vec<u8>> = spin::Once::new();
 
-mod built_info {
+pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 

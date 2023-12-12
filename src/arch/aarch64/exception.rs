@@ -92,6 +92,7 @@ pub fn exception_fault_addr() -> usize {
     (far & 0xfff) | (hpfar << 8)
 }
 
+/// Get the length of the instruction that caused the exception
 /// \return 1 means 32-bit instruction, 0 means 16-bit instruction
 #[inline(always)]
 fn exception_instruction_length() -> usize {
