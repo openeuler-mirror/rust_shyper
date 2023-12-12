@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Driver module, including device drivers and board drivers.
+
 pub use uart::putc;
 
 #[cfg(feature = "pi4")]

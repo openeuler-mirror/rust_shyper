@@ -56,6 +56,7 @@ pub const VIRTIO_MMIO_REGS_END: usize = 0x200;
 pub const VIRTIO_MMIO_INT_VRING: u32 = 1 << 0;
 pub const VIRTIO_MMIO_INT_CONFIG: u32 = 1 << 1;
 
+/// Represents the registers of a Virtio MMIO device.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct VirtMmioRegs {
@@ -74,6 +75,7 @@ pub struct VirtMmioRegs {
     dev_stat: u32,
 }
 
+/// Represents the data structure for Virtio MMIO device.
 pub struct VirtioMmioData {
     pub id: usize,
     pub driver_features: usize,
@@ -85,6 +87,7 @@ pub struct VirtioMmioData {
 }
 
 impl VirtMmioRegs {
+    /// Creates a default instance of VirtMmioRegs.
     pub fn default() -> VirtMmioRegs {
         VirtMmioRegs {
             magic: 0,
@@ -103,6 +106,7 @@ impl VirtMmioRegs {
         }
     }
 
+    /// Initializes the VirtMmioRegs with specified VirtioDeviceType.
     pub fn init(&mut self, id: VirtioDeviceType) {
         self.magic = 0x74726976;
         self.version = 0x2;
@@ -114,12 +118,14 @@ impl VirtMmioRegs {
     }
 }
 
+/// Represents a Virtio MMIO device.
 #[derive(Clone)]
 pub struct VirtioMmio {
     inner: Arc<Mutex<VirtioMmioInner>>,
 }
 
 impl VirtioQueue for VirtioMmio {
+    /// Initializes the Virtio queue based on the specified VirtioDeviceType.
     fn virtio_queue_init(&self, dev_type: VirtioDeviceType) {
         match dev_type {
             VirtioDeviceType::Block => {
@@ -164,6 +170,7 @@ impl VirtioQueue for VirtioMmio {
         }
     }
 
+    /// Resets the Virtio queue at the specified index.
     fn virtio_queue_reset(&self, index: usize) {
         let inner = self.inner.lock();
         inner.vq[index].reset(index);
@@ -171,12 +178,14 @@ impl VirtioQueue for VirtioMmio {
 }
 
 impl VirtioMmio {
+    /// Creates a new instance of VirtioMmio with the specified ID.
     pub fn new(id: usize) -> VirtioMmio {
         VirtioMmio {
             inner: Arc::new(Mutex::new(VirtioMmioInner::new(id))),
         }
     }
 
+    /// Notifies the specified VM about the configuration changes.
     pub fn notify_config(&self, vm: Vm) {
         let mut inner = self.inner.lock();
         inner.regs.irt_stat |= VIRTIO_MMIO_INT_CONFIG;
@@ -194,6 +203,7 @@ impl VirtioMmio {
         }
     }
 
+    /// Notifies the specified VM.
     pub fn notify(&self, vm: Vm) {
         let mut inner = self.inner.lock();
         inner.regs.irt_stat |= VIRTIO_MMIO_INT_VRING;
@@ -211,11 +221,13 @@ impl VirtioMmio {
         }
     }
 
+    /// Initializes the MMIO registers based on the specified VirtioDeviceType.
     pub fn mmio_reg_init(&self, dev_type: VirtioDeviceType) {
         let mut inner = self.inner.lock();
         inner.reg_init(dev_type);
     }
 
+    /// Initializes the Virtio device based on the specified parameters.
     pub fn dev_init(&self, dev_type: VirtioDeviceType, config: &VmEmulatedDeviceConfig, mediated: bool) {
         let inner = self.inner.lock();
         inner.dev.init(dev_type, config, mediated)
@@ -234,101 +246,121 @@ impl VirtioMmio {
         inner.dev.set_activated(false);
     }
 
+    /// Sets the Interrupt Status (IRT_STAT) for the Virtio MMIO device.
     pub fn set_irt_stat(&self, irt_stat: u32) {
         let mut inner = self.inner.lock();
         inner.regs.irt_stat = irt_stat;
     }
 
+    /// Sets the Interrupt Acknowledge (IRT_ACK) for the Virtio MMIO device.
     pub fn set_irt_ack(&self, irt_ack: u32) {
         let mut inner = self.inner.lock();
         inner.regs.irt_ack = irt_ack;
     }
 
+    /// Sets the selected queue index (Q_SEL) for the Virtio MMIO device.
     pub fn set_q_sel(&self, q_sel: u32) {
         let mut inner = self.inner.lock();
         inner.regs.q_sel = q_sel;
     }
 
+    /// Sets the Device Status (DEV_STAT) for the Virtio MMIO device.
     pub fn set_dev_stat(&self, dev_stat: u32) {
         let mut inner = self.inner.lock();
         inner.regs.dev_stat = dev_stat;
     }
 
+    /// Sets the maximum queue number (Q_NUM_MAX) for the Virtio MMIO device.
     pub fn set_q_num_max(&self, q_num_max: u32) {
         let mut inner = self.inner.lock();
         inner.regs.q_num_max = q_num_max;
     }
 
+    /// Sets the Device Features (DEV_FEATURE) for the Virtio MMIO device.
     pub fn set_dev_feature(&self, dev_feature: u32) {
         let mut inner = self.inner.lock();
         inner.regs.dev_feature = dev_feature;
     }
 
+    /// Sets the Device Features Selector (DEV_FEATURE_SEL) for the Virtio MMIO device.
     pub fn set_dev_feature_sel(&self, dev_feature_sel: u32) {
         let mut inner = self.inner.lock();
         inner.regs.dev_feature_sel = dev_feature_sel;
     }
 
+    /// Sets the Driver Features (DRV_FEATURE) for the Virtio MMIO device.
     pub fn set_drv_feature(&self, drv_feature: u32) {
         let mut inner = self.inner.lock();
         inner.regs.drv_feature = drv_feature;
     }
 
+    /// Sets the Driver Features Selector (DRV_FEATURE_SEL) for the Virtio MMIO device.
     pub fn set_drv_feature_sel(&self, drv_feature_sel: u32) {
         let mut inner = self.inner.lock();
         inner.regs.drv_feature = drv_feature_sel;
     }
 
+    /// Performs a bitwise OR operation on the Driver Features (DRV_FEATURE) with the specified value.
     pub fn or_driver_feature(&self, driver_features: usize) {
         let mut inner = self.inner.lock();
         inner.driver_features |= driver_features;
     }
 
+    /// Retrieves a clone of the VirtioDev associated with the Virtio MMIO device.
     pub fn dev(&self) -> VirtDev {
         let inner = self.inner.lock();
         inner.dev.clone()
     }
 
+    /// Retrieves the selected queue index (Q_SEL) for the Virtio MMIO device.
     pub fn q_sel(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.q_sel
     }
 
+    /// Retrieves the magic value from the Virtio MMIO registers.
     pub fn magic(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.magic
     }
 
+    /// Retrieves the version value from the Virtio MMIO registers.
     pub fn version(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.version
     }
 
+    /// Retrieves the device ID from the Virtio MMIO registers.
     pub fn device_id(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.device_id
     }
 
+    /// Retrieves the vendor ID from the Virtio MMIO registers.
     pub fn vendor_id(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.vendor_id
     }
 
+    /// Retrieves the device status (DEV_STAT) from the Virtio MMIO registers.
     pub fn dev_stat(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.dev_stat
     }
 
+    /// Retrieves the Device Features Selector (DEV_FEATURE_SEL) from the Virtio MMIO registers.
     pub fn dev_feature_sel(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.dev_feature_sel
     }
 
+    /// Retrieves the Driver Features Selector (DRV_FEATURE_SEL) from the Virtio MMIO registers.
     pub fn drv_feature_sel(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.drv_feature_sel
     }
 
+    /// Retrieves the maximum queue number (Q_NUM_MAX) from the Virtio MMIO registers.
     pub fn q_num_max(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.q_num_max
@@ -339,6 +371,8 @@ impl VirtioMmio {
         inner.regs.irt_stat
     }
 
+    /// Retrieves a clone of the Virtq associated with the specified index, wrapped in a Result.
+    /// Returns an Err variant if the index is out of bounds.
     pub fn vq(&self, idx: usize) -> Result<Virtq, ()> {
         let inner = self.inner.lock();
         if idx >= inner.vq.len() {
@@ -347,11 +381,14 @@ impl VirtioMmio {
         Ok(inner.vq[idx].clone())
     }
 
+    /// Retrieves the ID of the Virtio MMIO device.
     pub fn id(&self) -> usize {
         let inner = self.inner.lock();
         inner.id
     }
 
+    /// Calls the notify handler for the Virtq associated with the specified index.
+    /// Returns true if the operation is successful, otherwise false.
     pub fn notify_handler(&self, idx: usize) -> bool {
         let inner = self.inner.lock();
         if idx >= inner.vq.len() {
@@ -363,6 +400,7 @@ impl VirtioMmio {
     }
 }
 
+/// Represents the inner data structure of VirtioMmio.
 struct VirtioMmioInner {
     id: usize,
     driver_features: usize,
@@ -374,6 +412,7 @@ struct VirtioMmioInner {
 }
 
 impl VirtioMmioInner {
+    /// Creates a new `VirtioMmioInner` instance with the given ID.
     fn new(id: usize) -> VirtioMmioInner {
         VirtioMmioInner {
             id,
@@ -385,11 +424,13 @@ impl VirtioMmioInner {
         }
     }
 
+    /// Initializes the registers of the `VirtioMmioInner` with the specified device type.
     fn reg_init(&mut self, dev_type: VirtioDeviceType) {
         self.regs.init(dev_type);
     }
 }
 
+/// Handles prologue access to Virtio MMIO registers.
 fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize, write: bool) {
     if !write {
         let value;
@@ -460,6 +501,7 @@ fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: u
     }
 }
 
+/// Handles queue access to Virtio MMIO registers.
 fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize, write: bool) {
     if !write {
         let value;
@@ -628,6 +670,7 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
     }
 }
 
+/// Handles config space access to Virtio MMIO registers.
 fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize, write: bool) {
     if !write {
         let value;
@@ -661,6 +704,7 @@ fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize,
     }
 }
 
+/// Initializes the Virtio MMIO device for a virtual machine.
 pub fn emu_virtio_mmio_init(vm: Vm, emu_dev_id: usize, mediated: bool) -> bool {
     let virt_dev_type: VirtioDeviceType;
     let vm_cfg = vm.config();
@@ -692,6 +736,7 @@ pub fn emu_virtio_mmio_init(vm: Vm, emu_dev_id: usize, mediated: bool) -> bool {
     true
 }
 
+/// Handles Virtio MMIO events for the specified emulated device.
 pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     trace!("emu_virtio_mmio_handler active_vcpu addr {:x}", unsafe {
         *(&current_cpu().active_vcpu as *const _ as *const usize)

@@ -25,6 +25,7 @@ use super::{
     VmEmulatedDeviceConfigList, VmImageConfig, VmMemoryConfig, VmPassthroughDeviceConfig, VmRegion,
 };
 
+/// Initializes the configuration for the manager VM (VM0).
 #[rustfmt::skip]
 pub fn mvm_config_init() {
     info!("mvm_config_init() init config for VM0, which is manager VM");

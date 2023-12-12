@@ -12,9 +12,12 @@ use tock_registers::interfaces::*;
 use tock_registers::register_structs;
 use tock_registers::registers::*;
 
+/// Flag indicating that the receive FIFO is full.
 const UART_FR_RXFF: u32 = 1 << 4;
+/// Flag indicating that the transmit FIFO is full.
 const UART_FR_TXFF: u32 = 1 << 5;
 
+/// Register struct representing the PL011 MMIO block.
 register_structs! {
   #[allow(non_snake_case)]
   pub Pl011Mmio {
@@ -43,6 +46,7 @@ impl super::UartOperation for Pl011Mmio {
     #[inline]
     fn init(&self) {}
 
+    /// Sends a byte through the UART device.
     #[inline]
     fn send(&self, byte: u8) {
         while self.Flag.get() & UART_FR_TXFF != 0 {

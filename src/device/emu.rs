@@ -23,6 +23,7 @@ use crate::utils::in_range;
 
 pub static EMU_DEVS_LIST: Mutex<Vec<EmuDevEntry>> = Mutex::new(Vec::new());
 
+/// Enumeration representing various emulator devices.
 #[derive(Clone)]
 pub enum EmuDevs {
     Vgic(Arc<Vgic>),
@@ -42,6 +43,7 @@ pub struct EmuContext {
 }
 
 impl EmuContext {
+    /// Reads from the specified emulator context.
     pub unsafe fn read(&self) -> usize {
         match self.width {
             1 => ptr::read_volatile(self.address as *const u8) as usize,
@@ -52,6 +54,7 @@ impl EmuContext {
         }
     }
 
+    /// Writes to the specified emulator context.
     pub unsafe fn write(&self, val: usize) {
         match self.width {
             1 => ptr::write_volatile(self.address as *mut u8, val as u8),
@@ -63,17 +66,26 @@ impl EmuContext {
     }
 }
 
+/// Struct representing an emulator device entry.
 pub struct EmuDevEntry {
+    /// The type of the emulator device.
     pub emu_type: EmuDeviceType,
+    /// The virtual machine ID associated with the emulator device.
     pub vm_id: usize,
+    /// The ID of the emulator device.
     pub id: usize,
+    /// The inmediate physical address associated with the emulator device.
     pub ipa: usize,
+    /// The size of the emulator device.
     pub size: usize,
+    /// The handler function for the emulator device.
     pub handler: EmuDevHandler,
 }
 
+/// Enumeration representing the type of emulator devices.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EmuDeviceType {
+    // Variants representing different emulator device types.
     EmuDeviceTConsole = 0,
     EmuDeviceTGicd = 1,
     EmuDeviceTGPPT = 2,
@@ -90,6 +102,7 @@ pub enum EmuDeviceType {
 }
 
 impl Display for EmuDeviceType {
+    // Implementation of the Display trait for EmuDeviceType.
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             EmuDeviceType::EmuDeviceTConsole => write!(f, "console"),
@@ -109,7 +122,9 @@ impl Display for EmuDeviceType {
     }
 }
 
+/// Implementation of methods for EmuDeviceType.
 impl EmuDeviceType {
+    // Implementation of methods for EmuDeviceType.
     pub fn removable(&self) -> bool {
         matches!(
             *self,
@@ -148,6 +163,7 @@ impl EmuDeviceType {
 
 pub type EmuDevHandler = fn(usize, &EmuContext) -> bool;
 
+/// Function to handle emulator operations based on the emulator context.
 // TO CHECK
 pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
     let ipa = emu_ctx.address;
@@ -173,6 +189,7 @@ pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
     false
 }
 
+/// Function to register an emulator device.
 pub fn emu_register_dev(
     emu_type: EmuDeviceType,
     vm_id: usize,
@@ -202,6 +219,7 @@ pub fn emu_register_dev(
     });
 }
 
+/// Function to remove an emulator device.
 pub fn emu_remove_dev(vm_id: usize, dev_id: usize, address: usize, size: usize) {
     let mut emu_devs_list = EMU_DEVS_LIST.lock();
     for (idx, emu_dev) in emu_devs_list.iter().enumerate() {
@@ -216,8 +234,10 @@ pub fn emu_remove_dev(vm_id: usize, dev_id: usize, address: usize, size: usize) 
     );
 }
 
+/// Static RwLock containing a vector of EmuRegEntry instances, representing emulator registers.
 static EMU_REGS_LIST: RwLock<Vec<EmuRegEntry>> = RwLock::new(Vec::new());
 
+/// Handles emulator register operations based on the provided EmuContext.
 pub fn emu_reg_handler(emu_ctx: &EmuContext) -> bool {
     let address = emu_ctx.address;
     let active_vcpu = current_cpu().active_vcpu.as_ref().unwrap();
@@ -240,6 +260,7 @@ pub fn emu_reg_handler(emu_ctx: &EmuContext) -> bool {
     false
 }
 
+/// Registers a new emulator register with the specified type, address, and handler function.
 pub fn emu_register_reg(emu_type: EmuRegType, address: usize, handler: EmuRegHandler) {
     let mut emu_regs_list = EMU_REGS_LIST.write();
 
@@ -260,14 +281,21 @@ pub fn emu_register_reg(emu_type: EmuRegType, address: usize, handler: EmuRegHan
     });
 }
 
+/// Type alias for the handler function of emulator registers.
 type EmuRegHandler = EmuDevHandler;
 
+/// Struct representing an entry in the emulator register list.
 pub struct EmuRegEntry {
+    /// The type of the emulator register.
     pub emu_type: EmuRegType,
+    /// The address associated with the emulator register.
     pub addr: usize,
+    /// The handler function for the emulator register.
     pub handler: EmuRegHandler,
 }
 
+/// Enumeration representing the type of emulator registers.
 pub enum EmuRegType {
+    /// System register type for emulator registers.
     SysReg,
 }

@@ -515,7 +515,7 @@ impl Default for GicState {
     }
 }
 
-impl crate::arch::InterruptContextTriat for GicState {
+impl crate::arch::InterruptContextTrait for GicState {
     fn save_state(&mut self) {
         self.hcr = GICH.hcr();
         self.apr = GICH.APR.get();

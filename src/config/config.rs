@@ -8,6 +8,11 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+/// This module contains configurations for the virtual machine.
+/// It defines structures and functions to manage VM configurations.
+/// Each VM has its own configuration, and this module provides
+/// functions to manipulate VM configurations, such as adding memory regions,
+/// setting CPU configurations, and adding emulated or passthrough devices.
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -21,12 +26,14 @@ use crate::kernel::{active_vm, vm, Vm, vm_ipa2pa, VM_NUM_MAX, VmType};
 use crate::utils::{BitAlloc, BitAlloc16, memcpy_safe};
 use crate::vmm::vmm_init_gvm;
 
+/// The maximum length of a VM name.
 pub const NAME_MAX_LEN: usize = 32;
 const CFG_MAX_NUM: usize = 0x10;
 const IRQ_MAX_NUM: usize = 0x40;
 const PASSTHROUGH_DEV_MAX_NUM: usize = 128;
 const EMULATED_DEV_MAX_NUM: usize = 16;
 
+/// Represents the type of a device in the device tree.
 #[derive(Clone, Copy, PartialEq)]
 pub enum DtbDevType {
     DevSerial = 0,
@@ -36,6 +43,7 @@ pub enum DtbDevType {
 }
 
 impl DtbDevType {
+    /// Convert a `usize` value to a `DtbDevType`.
     pub fn from_usize(value: usize) -> DtbDevType {
         match value {
             0 => DtbDevType::DevSerial,
@@ -47,22 +55,33 @@ impl DtbDevType {
     }
 }
 
+//！ Represents the configuration of an emulated device for a virtual machine.
 #[derive(Clone)]
 pub struct VmEmulatedDeviceConfig {
+    /// The name of the emulated device.
     pub name: String,
+    /// The base IPA (Intermediate Physical Address) of the device.
     pub base_ipa: usize,
+    /// The length of the device.
     pub length: usize,
+    /// The IRQ (Interrupt Request) ID of the device.
     pub irq_id: usize,
+    /// List of configuration values for the device.
     pub cfg_list: Vec<usize>,
+    /// The type of emulated device.
     pub emu_type: EmuDeviceType,
+    /// Indicates whether the device is mediated.
     pub mediated: bool,
 }
 
+/// Represents a list of emulated device configurations for a virtual machine.
 pub struct VmEmulatedDeviceConfigList {
+    /// List of emulated device configurations.
     pub emu_dev_list: Vec<VmEmulatedDeviceConfig>,
 }
 
 impl VmEmulatedDeviceConfigList {
+    /// Creates a new, empty list of emulated device configurations.
     pub const fn default() -> VmEmulatedDeviceConfigList {
         VmEmulatedDeviceConfigList {
             emu_dev_list: Vec::new(),
@@ -70,11 +89,16 @@ impl VmEmulatedDeviceConfigList {
     }
 }
 
+/// Represents the configuration of a passthrough region.
 #[derive(Default, Clone, Copy, Debug, Eq)]
 pub struct PassthroughRegion {
+    /// The IPA (Intermediate Physical Address) of the passthrough region.
     pub ipa: usize,
+    /// The PA (Physical Address) of the passthrough region.
     pub pa: usize,
+    /// The length of the passthrough region.
     pub length: usize,
+    /// Indicates whether the region has device properties.
     pub dev_property: bool,
 }
 
@@ -84,14 +108,19 @@ impl PartialEq for PassthroughRegion {
     }
 }
 
+/// Represents the configuration of a passthrough device for a virtual machine.
 #[derive(Default, Clone)]
 pub struct VmPassthroughDeviceConfig {
+    /// List of passthrough regions.
     pub regions: Vec<PassthroughRegion>,
+    /// List of IRQs (Interrupt Requests) for the passthrough device.
     pub irqs: Vec<usize>,
+    /// List of stream IDs for the passthrough device.
     pub streams_ids: Vec<usize>,
 }
 
 impl VmPassthroughDeviceConfig {
+    /// Creates a new, default configuration for passthrough devices.
     pub const fn default() -> VmPassthroughDeviceConfig {
         VmPassthroughDeviceConfig {
             regions: Vec::new(),
@@ -101,13 +130,17 @@ impl VmPassthroughDeviceConfig {
     }
 }
 
+/// Represents a memory region configuration for a virtual machine.
 #[derive(Clone, Copy, Debug, Eq)]
 pub struct VmRegion {
+    /// The starting IPA (Intermediate Physical Address) of the memory region.
     pub ipa_start: usize,
+    /// The length of the memory region.
     pub length: usize,
 }
 
 impl VmRegion {
+    /// Creates a new memory region configuration.
     pub const fn default() -> VmRegion {
         VmRegion {
             ipa_start: 0,
@@ -116,23 +149,27 @@ impl VmRegion {
     }
 }
 
+/// Implementation of the PartialEq trait for VmRegion, enabling equality comparisons between VmRegion instances.
 impl PartialEq for VmRegion {
     fn eq(&self, other: &Self) -> bool {
         self.ipa_start == other.ipa_start && self.length == other.length
     }
 }
 
+/// Clone implementation for VmMemoryConfig struct.
 #[derive(Clone)]
 pub struct VmMemoryConfig {
     pub region: Vec<VmRegion>,
 }
 
 impl VmMemoryConfig {
+    /// Default constructor for VmMemoryConfig.
     pub const fn default() -> VmMemoryConfig {
         VmMemoryConfig { region: vec![] }
     }
 }
 
+/// Clone, Copy, and Default implementations for VmImageConfig struct.
 #[derive(Clone, Copy, Default)]
 pub struct VmImageConfig {
     pub kernel_img_name: Option<&'static str>,
@@ -147,6 +184,7 @@ pub struct VmImageConfig {
 }
 
 impl VmImageConfig {
+    /// Constructor for VmImageConfig with essential parameters.
     pub fn new(kernel_load_ipa: usize, device_tree_load_ipa: usize, ramdisk_load_ipa: usize) -> VmImageConfig {
         VmImageConfig {
             kernel_img_name: None,
@@ -162,6 +200,7 @@ impl VmImageConfig {
     }
 }
 
+/// Configuration for VmCpu (Virtual Machine CPU).
 #[derive(Clone, Copy)]
 pub struct VmCpuConfig {
     pub num: usize,
@@ -170,6 +209,7 @@ pub struct VmCpuConfig {
 }
 
 impl VmCpuConfig {
+    /// Default constructor for VmCpuConfig.
     pub const fn default() -> VmCpuConfig {
         VmCpuConfig {
             num: 0,
@@ -178,7 +218,12 @@ impl VmCpuConfig {
         }
     }
 
+    /// Constructor for VmCpuConfig with specified parameters.
     fn new(num: usize, allocate_bitmap: usize, master: usize) -> Self {
+        /// Adjust num and allocate_bitmap based on the given values.
+        /// Ensure allocate_bitmap and num match, accepting the lower bitmap by the given CPU num.
+        /// This is a complex process of bit manipulation to synchronize allocate_bitmap and num.
+        /// The resulting values are stored in a new VmCpuConfig instance.
         let num = usize::min(num, allocate_bitmap.count_ones() as usize);
         // make sure `allocate_bitmap` and `num` matches
         let allocate_bitmap = {
@@ -202,12 +247,14 @@ impl VmCpuConfig {
     }
 }
 
+/// Structure representing address regions.
 #[derive(Clone, Copy)]
 pub struct AddrRegions {
     pub ipa: usize,
     pub length: usize,
 }
 
+/// Configuration for VmDtbDev (Device Tree Device in Virtual Machine).
 #[derive(Clone)]
 pub struct VmDtbDevConfig {
     pub name: String,
@@ -216,12 +263,14 @@ pub struct VmDtbDevConfig {
     pub addr_region: AddrRegions,
 }
 
+/// Configuration for VMDtbDevConfigList (List of Device Tree Devices in Virtual Machine).
 #[derive(Clone)]
 pub struct VMDtbDevConfigList {
     pub dtb_device_list: Vec<VmDtbDevConfig>,
 }
 
 impl VMDtbDevConfigList {
+    // Default constructor for VMDtbDevConfigList.
     pub const fn default() -> VMDtbDevConfigList {
         VMDtbDevConfigList {
             dtb_device_list: Vec::new(),
@@ -229,6 +278,7 @@ impl VMDtbDevConfigList {
     }
 }
 
+/// Configuration for VmConfigEntry (Virtual Machine Configuration Entry).
 #[derive(Clone)]
 pub struct VmConfigEntry {
     // VM id, generate inside hypervisor.
@@ -247,6 +297,7 @@ pub struct VmConfigEntry {
     pub fdt_overlay: Arc<Mutex<Vec<u8>>>,
 }
 
+/// Default implementation for VmConfigEntry.
 impl Default for VmConfigEntry {
     fn default() -> VmConfigEntry {
         VmConfigEntry {
@@ -265,7 +316,9 @@ impl Default for VmConfigEntry {
     }
 }
 
+/// Additional methods for VmConfigEntry.
 impl VmConfigEntry {
+    /// Creates a new VmConfigEntry with the specified parameters.
     pub fn new(
         name: String,
         cmdline: String,
@@ -287,23 +340,28 @@ impl VmConfigEntry {
         }
     }
 
+    /// Returns the ID of the VmConfigEntry.
     pub fn id(&self) -> usize {
         self.id
     }
 
+    /// Sets the ID of the VmConfigEntry.
     pub fn set_id(&mut self, id: usize) {
         self.id = id;
     }
 
+    /// Returns the name of the virtual machine.
     pub fn vm_name(&self) -> String {
         self.name.clone()
     }
 
+    /// Returns the index of the mediated block, if any.
     pub fn mediated_block_index(&self) -> Option<usize> {
         let img_cfg = self.image.lock();
         img_cfg.mediated_block_index
     }
 
+    /// Sets the mediated block index.
     pub fn set_mediated_block_index(&mut self, med_blk_id: usize) {
         let mut img_cfg = self.image.lock();
         // println!("set_mediated_block_index {}",med_blk_id);
@@ -311,96 +369,115 @@ impl VmConfigEntry {
         // println!("set_mediated_block_index {} self.med_blk_idx {:?}",med_blk_id, img_cfg.mediated_block_index);
     }
 
+    /// Returns the name of the kernel image, if any.
     pub fn kernel_img_name(&self) -> Option<&'static str> {
         let img_cfg = self.image.lock();
         img_cfg.kernel_img_name
     }
 
+    /// Returns the IPA (Physical Address) of the kernel load address.
     pub fn kernel_load_ipa(&self) -> usize {
         let img_cfg = self.image.lock();
         img_cfg.kernel_load_ipa
     }
 
+    /// Sets the physical address of the kernel load address.
     pub fn set_kernel_load_pa(&mut self, kernel_load_pa: usize) {
         let mut img_cfg = self.image.lock();
         img_cfg.kernel_load_pa = kernel_load_pa
     }
 
+    /// Returns the physical address of the kernel load address.
     pub fn kernel_load_pa(&self) -> usize {
         let img_cfg = self.image.lock();
         img_cfg.kernel_load_pa
     }
 
+    /// Returns the entry point of the kernel.
     pub fn kernel_entry_point(&self) -> usize {
         let img_cfg = self.image.lock();
         img_cfg.kernel_entry_point
     }
 
+    /// Returns the IPA (Physical Address) of the device tree load address.
     pub fn device_tree_load_ipa(&self) -> usize {
         let img_cfg = self.image.lock();
         img_cfg.device_tree_load_ipa
     }
 
+    /// Returns the IPA (Physical Address) of the ramdisk load address.
     pub fn ramdisk_load_ipa(&self) -> usize {
         let img_cfg = self.image.lock();
         img_cfg.ramdisk_load_ipa
     }
 
+    /// Returns the memory regions configured for the virtual machine.
     pub fn memory_region(&self) -> Vec<VmRegion> {
         let mem_cfg = self.memory.lock();
         mem_cfg.region.clone()
     }
 
+    /// Adds a memory configuration with the specified IPA start and length.
     pub fn add_memory_cfg(&self, ipa_start: usize, length: usize) {
         let mut mem_cfg = self.memory.lock();
         mem_cfg.region.push(VmRegion { ipa_start, length });
     }
 
+    /// Returns the number of CPUs configured for the virtual machine.
     pub fn cpu_num(&self) -> usize {
         let cpu_cfg = self.cpu.lock();
         cpu_cfg.num
     }
 
+    /// Returns the CPU allocate bitmap for the virtual machine.
     pub fn cpu_allocated_bitmap(&self) -> u32 {
         let cpu_cfg = self.cpu.lock();
         cpu_cfg.allocate_bitmap
     }
 
+    /// Returns the master CPU ID for the virtual machine.
     pub fn cpu_master(&self) -> usize {
         let cpu_cfg = self.cpu.lock();
         cpu_cfg.master as usize
     }
 
+    /// Sets the CPU configuration with the specified number, allocate bitmap, and master CPU ID.
     pub fn set_cpu_cfg(&self, num: usize, allocate_bitmap: usize, master: usize) {
         let mut cpu_cfg = self.cpu.lock();
         *cpu_cfg = VmCpuConfig::new(num, allocate_bitmap, master);
     }
 
+    /// Returns the list of emulated devices configured for the virtual machine.
     pub fn emulated_device_list(&self) -> Vec<VmEmulatedDeviceConfig> {
         let emu_dev_cfg = self.vm_emu_dev_confg.lock();
         emu_dev_cfg.emu_dev_list.clone()
     }
 
+    /// Adds an emulated device configuration to the virtual machine.
     pub fn add_emulated_device_cfg(&self, cfg: VmEmulatedDeviceConfig) {
         let mut emu_dev_cfgs = self.vm_emu_dev_confg.lock();
         emu_dev_cfgs.emu_dev_list.push(cfg);
     }
 
+    /// Returns the list of passthrough device regions configured for the virtual machine.
     pub fn passthrough_device_regions(&self) -> Vec<PassthroughRegion> {
         let pt_dev_cfg = self.vm_pt_dev_confg.lock();
         pt_dev_cfg.regions.clone()
     }
 
+    /// Returns the list of passthrough device IRQs configured for the virtual machine.
     pub fn passthrough_device_irqs(&self) -> Vec<usize> {
         let pt_dev_cfg = self.vm_pt_dev_confg.lock();
         pt_dev_cfg.irqs.clone()
     }
 
+    /// Returns the list of passthrough device stream IDs configured for the virtual machine.
     pub fn passthrough_device_stread_ids(&self) -> Vec<usize> {
         let pt_dev_cfg = self.vm_pt_dev_confg.lock();
         pt_dev_cfg.streams_ids.clone()
     }
 
+    /// Adds a passthrough device region with the specified IPA start, PA start, and length.
     pub fn add_passthrough_device_region(&self, base_ipa: usize, base_pa: usize, length: usize) {
         let mut pt_dev_cfg = self.vm_pt_dev_confg.lock();
         let pt_region_cfg = PassthroughRegion {
@@ -412,26 +489,31 @@ impl VmConfigEntry {
         pt_dev_cfg.regions.push(pt_region_cfg)
     }
 
+    /// Adds passthrough device IRQs to the virtual machine configuration.
     pub fn add_passthrough_device_irqs(&self, irqs: &mut Vec<usize>) {
         let mut pt_dev_cfg = self.vm_pt_dev_confg.lock();
         pt_dev_cfg.irqs.append(irqs);
     }
 
+    /// Adds passthrough device stream IDs to the virtual machine configuration.
     pub fn add_passthrough_device_streams_ids(&self, streams_ids: &mut Vec<usize>) {
         let mut pt_dev_cfg = self.vm_pt_dev_confg.lock();
         pt_dev_cfg.streams_ids.append(streams_ids);
     }
 
+    /// Returns the list of DTB (Device Tree Blob) devices configured for the virtual machine.
     pub fn dtb_device_list(&self) -> Vec<VmDtbDevConfig> {
         let dtb_dev_cfg = self.vm_dtb_devs.lock();
         dtb_dev_cfg.dtb_device_list.clone()
     }
 
+    /// Adds a DTB device configuration to the virtual machine.
     pub fn add_dtb_device(&self, cfg: VmDtbDevConfig) {
         let mut dtb_dev_cfg = self.vm_dtb_devs.lock();
         dtb_dev_cfg.dtb_device_list.push(cfg);
     }
 
+    /// Returns the IPA of the GICC (Generic Interrupt Controller - CPU Interface) device.
     pub fn gicc_addr(&self) -> usize {
         let dtb_devs = self.vm_dtb_devs.lock();
         for dev in &dtb_devs.dtb_device_list {
@@ -442,6 +524,7 @@ impl VmConfigEntry {
         0
     }
 
+    /// Returns the IPA of the GICD (Generic Interrupt Controller Distributor) device.
     pub fn gicd_addr(&self) -> usize {
         let dtb_devs = self.vm_dtb_devs.lock();
         for dev in &dtb_devs.dtb_device_list {
@@ -452,6 +535,7 @@ impl VmConfigEntry {
         0
     }
 
+    /// Returns the IPA of the GICR (Generic Interrupt Controller Redistributor) device.
     pub fn gicr_addr(&self) -> usize {
         let dtb_devs = self.vm_dtb_devs.lock();
         for dev in &dtb_devs.dtb_device_list {
@@ -463,6 +547,7 @@ impl VmConfigEntry {
     }
 }
 
+/// Represents the configuration table for virtual machines.
 #[derive(Clone)]
 pub struct VmConfigTable {
     pub name: Option<&'static str>,
@@ -471,7 +556,9 @@ pub struct VmConfigTable {
     pub entries: Vec<VmConfigEntry>,
 }
 
+/// Additional methods for VmConfigTable.
 impl VmConfigTable {
+    /// Creates a new VmConfigTable.
     const fn new() -> VmConfigTable {
         VmConfigTable {
             name: None,
@@ -481,6 +568,7 @@ impl VmConfigTable {
         }
     }
 
+    /// Generates a new VM ID and returns it.
     pub fn generate_vm_id(&mut self) -> Result<usize, ()> {
         for i in 0..VM_NUM_MAX {
             if self.vm_bitmap.get(i) == 0 {
@@ -491,6 +579,7 @@ impl VmConfigTable {
         Err(())
     }
 
+    /// Removes a VM ID from the bitmap.
     pub fn remove_vm_id(&mut self, vm_id: usize) {
         if vm_id >= VM_NUM_MAX || self.vm_bitmap.get(vm_id) == 0 {
             error!("illegal vm id {}", vm_id);
@@ -499,18 +588,22 @@ impl VmConfigTable {
     }
 }
 
+/// Static instance of the default VM configuration table.
 pub static DEF_VM_CONFIG_TABLE: Mutex<VmConfigTable> = Mutex::new(VmConfigTable::new());
 
+/// Sets the configuration name for the default VM configuration table.
 pub fn vm_cfg_set_config_name(name: &'static str) {
     let mut vm_config = DEF_VM_CONFIG_TABLE.lock();
     vm_config.name = Some(name);
 }
 
+/// Returns the number of configured virtual machines.
 pub fn vm_num() -> usize {
     let vm_config = DEF_VM_CONFIG_TABLE.lock();
     vm_config.entries.len()
 }
 
+/// Returns the type of the virtual machine with the specified ID.
 pub fn vm_type(vmid: usize) -> VmType {
     let vm_config = DEF_VM_CONFIG_TABLE.lock();
     for vm_cfg_entry in vm_config.entries.iter() {
@@ -522,6 +615,7 @@ pub fn vm_type(vmid: usize) -> VmType {
     VmType::VmTOs
 }
 
+/// Returns a list of IDs for all configured virtual machines.
 pub fn vm_id_list() -> Vec<usize> {
     let vm_config = DEF_VM_CONFIG_TABLE.lock();
     let mut id_list: Vec<usize> = Vec::new();
@@ -531,6 +625,7 @@ pub fn vm_id_list() -> Vec<usize> {
     id_list
 }
 
+/// Returns the configuration entry for the virtual machine with the specified ID.
 pub fn vm_cfg_entry(vmid: usize) -> Option<VmConfigEntry> {
     let vm_config = DEF_VM_CONFIG_TABLE.lock();
     for vm_cfg_entry in vm_config.entries.iter() {
@@ -542,6 +637,7 @@ pub fn vm_cfg_entry(vmid: usize) -> Option<VmConfigEntry> {
     None
 }
 
+/// Adds a virtual machine configuration entry to DEF_VM_CONFIG_TABLE.
 /* Add VM config entry to DEF_VM_CONFIG_TABLE */
 pub fn vm_cfg_add_vm_entry(mut vm_cfg_entry: VmConfigEntry) -> Result<usize, ()> {
     let mut vm_config = DEF_VM_CONFIG_TABLE.lock();
@@ -570,6 +666,7 @@ pub fn vm_cfg_add_vm_entry(mut vm_cfg_entry: VmConfigEntry) -> Result<usize, ()>
     }
 }
 
+/// Adds a virtual machine configuration entry to DEF_VM_CONFIG_TABLE.
 pub fn vm_cfg_remove_vm_entry(vm_id: usize) {
     let mut vm_config = DEF_VM_CONFIG_TABLE.lock();
     for (idx, vm_cfg_entry) in vm_config.entries.iter().enumerate() {
@@ -590,6 +687,7 @@ pub fn vm_cfg_remove_vm_entry(vm_id: usize) {
     error!("VM[{}] config not found in vm-config-table", vm_id);
 }
 
+/// Generates a new VM Config Entry and sets basic values.
 /* Generate a new VM Config Entry, set basic value */
 pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
     let config_pa = vm_ipa2pa(active_vm().unwrap(), config_ipa);
@@ -634,6 +732,7 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
     vm_cfg_add_vm_entry(new_vm_cfg)
 }
 
+/// Deletes a VM config entry.
 /* Delete a VM config entry */
 pub fn vm_cfg_del_vm(vmid: usize) -> Result<usize, ()> {
     info!("VM[{}] delete config entry", vmid);
@@ -641,6 +740,7 @@ pub fn vm_cfg_del_vm(vmid: usize) -> Result<usize, ()> {
     Ok(0)
 }
 
+/// Add VM memory region according to VM id.
 /* Add VM memory region according to VM id */
 pub fn vm_cfg_add_mem_region(vmid: usize, ipa_start: usize, length: usize) -> Result<usize, ()> {
     let vm_cfg = match vm_cfg_entry(vmid) {
@@ -655,6 +755,7 @@ pub fn vm_cfg_add_mem_region(vmid: usize, ipa_start: usize, length: usize) -> Re
     Ok(0)
 }
 
+/// Set VM CPU config according to VM id.
 /* Set VM cpu config according to VM id */
 pub fn vm_cfg_set_cpu(vmid: usize, num: usize, allocate_bitmap: usize, master: usize) -> Result<usize, ()> {
     let vm_cfg = match vm_cfg_entry(vmid) {
@@ -675,6 +776,7 @@ pub fn vm_cfg_set_cpu(vmid: usize, num: usize, allocate_bitmap: usize, master: u
     Ok(0)
 }
 
+/// Add emulated device config for VM.
 /* Add emulated device config for VM */
 pub fn vm_cfg_add_emu_dev(
     vmid: usize,
@@ -763,6 +865,7 @@ pub fn vm_cfg_add_emu_dev(
     Ok(0)
 }
 
+/// Add passthrough device config region for VM
 /* Add passthrough device config region for VM */
 pub fn vm_cfg_add_passthrough_device_region(
     vmid: usize,
@@ -794,6 +897,7 @@ pub fn vm_cfg_add_passthrough_device_region(
     Ok(0)
 }
 
+/// Add passthrough device config irqs for VM.
 /* Add passthrough device config irqs for VM */
 pub fn vm_cfg_add_passthrough_device_irqs(vmid: usize, irqs_base_ipa: usize, irqs_length: usize) -> Result<usize, ()> {
     info!(
@@ -825,6 +929,7 @@ pub fn vm_cfg_add_passthrough_device_irqs(vmid: usize, irqs_base_ipa: usize, irq
     Ok(0)
 }
 
+/// Add passthrough device config streams ids for VM
 /* Add passthrough device config streams ids for VM */
 pub fn vm_cfg_add_passthrough_device_streams_ids(
     vmid: usize,
@@ -860,6 +965,7 @@ pub fn vm_cfg_add_passthrough_device_streams_ids(
     Ok(0)
 }
 
+/// Add device tree device config for VM
 /* Add device tree device config for VM */
 pub fn vm_cfg_add_dtb_dev(
     vmid: usize,
@@ -928,6 +1034,8 @@ pub fn vm_cfg_add_dtb_dev(
     Ok(0)
 }
 
+/// Final step for GVM configuration.
+/// Set up GVM configuration and VM kernel image load region.
 /**
  * Final Step for GVM configuration.
  * Set up GVM configuration;
@@ -967,6 +1075,10 @@ fn vm_cfg_finish_configuration(vmid: usize, img_size: usize) -> Vm {
     vm
 }
 
+/// Uploads the kernel image file from MVM user space.
+///
+/// This function is the last step in GVM configuration. It sets up the GVM and loads the kernel
+/// image into the specified VM.
 /**
  * Load kernel image file from MVM user space.
  * It's the last step in GVM configuration.
@@ -1019,6 +1131,7 @@ pub fn vm_cfg_upload_kernel_image(
     Ok(0)
 }
 
+/// Uploads the device tree from MVM user space.
 pub fn vm_cfg_upload_device_tree(
     vmid: usize,
     _img_size: usize,

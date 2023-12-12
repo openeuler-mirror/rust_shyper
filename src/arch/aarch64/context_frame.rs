@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use core::arch::global_asm;
-use crate::arch::traits::InterruptContextTriat;
+use crate::arch::traits::InterruptContextTrait;
 use core::fmt;
 
 use cortex_a::registers::*;

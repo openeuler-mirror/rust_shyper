@@ -8,6 +8,9 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Re-exporting common items
+//! Module specific items
+
 pub use self::blk::*;
 pub use self::dev::*;
 pub use self::iov::*;

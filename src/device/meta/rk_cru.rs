@@ -3,11 +3,18 @@ use crate::device::meta::*;
 use crate::kernel::{current_cpu, Vm};
 use crate::error::Result;
 
+/// Emulated device representing the Rockchip Clock and Reset Unit (CRU).
+///
+/// The `RockchipGuestCru` struct implements the `MetaDevice` trait and serves as an
+/// emulated device for the Rockchip Clock and Reset Unit (CRU). It handles read and write
+/// operations, refusing writes to specific addresses.
 pub struct RockchipGuestCru {
+    /// Atomic flag indicating whether the device should refuse further writes.
     flag: AtomicBool,
 }
 
 impl MetaDevice for RockchipGuestCru {
+    /// Creates a new instance of the `RockchipGuestCru` device.
     fn new(vm: &Vm, dev_id: usize, arg: &str) -> Result<Self> {
         info!("rk_cru: vm {}, dev {dev_id}: {arg}", vm.id());
         Ok(Self {
@@ -15,6 +22,7 @@ impl MetaDevice for RockchipGuestCru {
         })
     }
 
+    /// Handles read and write operations for the Rockchip CRU device.
     fn handle(&self, ctx: MetaContext) {
         let dev_id = ctx.dev_id;
         let ctx = ctx.ctx;

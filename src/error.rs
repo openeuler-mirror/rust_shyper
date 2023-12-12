@@ -1,3 +1,5 @@
+//! Defines the error type for the hypervisor.
+
 use core::fmt;
 use core::error::Error as CoreError;
 use core::result::Result as CoreResult;

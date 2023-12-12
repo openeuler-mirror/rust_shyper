@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! MVM init configuration, including platform-specific configuration and VM configuration.
+
 pub use self::config::*;
 #[cfg(feature = "static-config")]
 pub use self::vm_def::*;

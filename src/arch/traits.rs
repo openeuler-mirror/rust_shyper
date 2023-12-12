@@ -37,7 +37,7 @@ pub trait ArchPageTableEntryTrait {
 
 /// Architecture-independent Interrupt Context trait.
 /// Interrupt Context: the context of interrupt controller of specific VM
-pub trait InterruptContextTriat: Default {
+pub trait InterruptContextTrait: Default {
     fn save_state(&mut self);
     fn restore_state(&self);
 }

@@ -27,6 +27,10 @@ use super::{
     AddrRegions, DtbDevType,
 };
 
+/// Initializes temporary configuration for the first bare metal app (BMA1).
+///
+/// This function configures emulated devices, passthrough devices, memory regions, and other settings
+/// for BMA1. It then adds the configuration to the virtual machine manager.
 pub fn init_tmp_config_for_bma1() {
     info!("init_tmp_config_for_bma1");
     // #################### bare metal app emu (vm1) ######################
@@ -108,6 +112,10 @@ pub fn init_tmp_config_for_bma1() {
     let _ = vm_cfg_add_vm_entry(bma_config);
 }
 
+/// Initializes temporary configuration for the second bare metal app (BMA2).
+///
+/// This function configures emulated devices, passthrough devices, memory regions, and other settings
+/// for BMA2. It then adds the configuration to the virtual machine manager.
 pub fn init_tmp_config_for_bma2() {
     info!("init_tmp_config_for_bma2");
     // #################### bare metal app emu (vm1) ######################
@@ -189,6 +197,10 @@ pub fn init_tmp_config_for_bma2() {
     let _ = vm_cfg_add_vm_entry(bma_config);
 }
 
+/// Initializes temporary configuration for the first virtual machine (VM1).
+///
+/// This function configures emulated devices, passthrough devices, memory regions, and other settings
+/// for VM1. It then adds the configuration to the virtual machine manager.
 pub fn init_tmp_config_for_vm1() {
     info!("init_tmp_config_for_vm1");
 
@@ -333,6 +345,10 @@ pub fn init_tmp_config_for_vm1() {
     let _ = vm_cfg_add_vm_entry(vm1_config);
 }
 
+/// Initializes temporary configuration for the second virtual machine (VM2).
+///
+/// This function configures emulated devices, passthrough devices, memory regions, and other settings
+/// for VM2. It then adds the configuration to the virtual machine manager.
 pub fn init_tmp_config_for_vm2() {
     info!("init_tmp_config_for_vm2");
 

@@ -259,7 +259,7 @@ impl PageTable {
             l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry::from_pa(pa | pte | PTE_BLOCK));
         }
     }
-    
+
     /// unmap a 2mb page of ipa
     pub fn unmap_2mb(&self, ipa: usize) {
         let directory = Aarch64PageTableEntry::from_pa(self.directory.pa());

@@ -24,8 +24,10 @@ use super::{
     VMDtbDevConfigList,
 };
 
+/// Initializes the configuration for the manager VM (VM0).
 #[rustfmt::skip]
 pub fn mvm_config_init() {
+    // Set the configuration name for VM0
     vm_cfg_set_config_name("qemu-default");
 
     // vm0 emu

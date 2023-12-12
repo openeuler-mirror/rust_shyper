@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Board-specific configuration
+
 pub use self::platform_common::*;
 
 #[cfg(feature = "pi4")]

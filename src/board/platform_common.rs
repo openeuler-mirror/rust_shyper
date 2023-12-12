@@ -10,46 +10,57 @@
 
 use crate::arch::ArchDesc;
 
+/// Maximum number of CPUs supported by the platform
 pub const PLATFORM_CPU_NUM_MAX: usize = 8;
 
+/// Enum representing the scheduling rule for CPU cores
 pub enum SchedRule {
+    /// Round-robin scheduling
     RoundRobin,
+    /// No specific scheduling rule
     None,
 }
 
+/// Structure representing a memory region in the platform
 pub struct PlatMemRegion {
     pub base: usize,
     pub size: usize,
 }
 
+/// Configuration for the platform's memory
 pub struct PlatMemoryConfig {
     pub base: usize,
     pub regions: &'static [PlatMemRegion],
 }
 
+/// Configuration for an individual CPU core
 pub struct PlatCpuCoreConfig {
     pub name: u8,
     pub mpidr: usize,
     pub sched: SchedRule,
 }
 
+/// Configuration for the platform's CPU
 pub struct PlatCpuConfig {
     pub num: usize,
     pub core_list: &'static [PlatCpuCoreConfig],
     pub cluster_desc: ClusterDesc,
 }
 
+/// Description of a CPU cluster
 pub struct ClusterDesc {
     pub num: usize,
     pub core_num: &'static [usize],
 }
 
+/// Configuration for the entire platform, including CPU, memory, and architecture
 pub struct PlatformConfig {
     pub cpu_desc: PlatCpuConfig,
     pub mem_desc: PlatMemoryConfig,
     pub arch_desc: ArchDesc,
 }
 
+/// Trait defining operations for platform management
 pub trait PlatOperation {
     // must offer UART_0 and UART_1 address
     const UART_0_ADDR: usize;
@@ -92,10 +103,12 @@ pub trait PlatOperation {
         crate::arch::power_arch_cpu_on(arch_core_id, entry, ctx);
     }
 
+    /// Shuts down the current CPU
     fn cpu_shutdown() {
         crate::arch::power_arch_cpu_shutdown();
     }
 
+    /// Powers on secondary cores of the CPU
     fn power_on_secondary_cores() {
         use super::PLAT_DESC;
         extern "C" {
@@ -106,6 +119,7 @@ pub trait PlatOperation {
         }
     }
 
+    /// Reboots the system
     fn sys_reboot() -> ! {
         info!("Hypervisor reset...");
         crate::arch::power_arch_sys_reset();
@@ -114,6 +128,7 @@ pub trait PlatOperation {
         }
     }
 
+    /// Shuts down the system
     fn sys_shutdown() -> ! {
         info!("Hypervisor shutdown...");
         crate::arch::power_arch_sys_shutdown();
@@ -122,10 +137,16 @@ pub trait PlatOperation {
         }
     }
 
+    /// Maps a CPU ID to a CPU interface number
     fn cpuid_to_cpuif(cpuid: usize) -> usize;
 
+    /// Maps a CPU interface number to a CPU ID
     fn cpuif_to_cpuid(cpuif: usize) -> usize;
 
+    /// Maps an MPIDR value to a CPU ID
+    ///
+    /// This function does not print to the console and is used to translate
+    /// MPIDR (Multiprocessor Affinity Register) values to CPU IDs.
     // should not add any println!()
     fn mpidr2cpuid(mpidr: usize) -> usize {
         use crate::board::PLAT_DESC;
@@ -138,11 +159,19 @@ pub trait PlatOperation {
         usize::MAX
     }
 
+    /// Maps a CPU ID to an MPIDR value
+    ///
+    /// This function is used for translating a CPU ID to its corresponding
+    /// MPIDR value.
     fn cpuid2mpidr(cpuid: usize) -> usize {
         use crate::board::PLAT_DESC;
         PLAT_DESC.cpu_desc.core_list[cpuid].mpidr
     }
 
+    /// Maps a virtual MPIDR value to a virtual CPU ID
+    ///
+    /// This function is used in virtualized environments to translate
+    /// virtual MPIDR values to virtual CPU IDs.
     fn vmpidr2vcpuid(vmpidr: usize) -> usize {
         vmpidr & 0xff
     }

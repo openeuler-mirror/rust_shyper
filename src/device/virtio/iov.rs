@@ -16,33 +16,39 @@ use spin::Mutex;
 
 use crate::utils::{memcpy_safe, trace};
 
+/// Represents a Virtio I/O vector.
 #[derive(Clone)]
 pub struct VirtioIov {
     inner: Arc<Mutex<VirtioIovInner>>,
 }
 
 impl VirtioIov {
+    /// Creates a new `VirtioIov` with default inner values.
     pub fn default() -> VirtioIov {
         VirtioIov {
             inner: Arc::new(Mutex::new(VirtioIovInner::default())),
         }
     }
 
+    /// Clears the I/O vector by removing all data.
     pub fn clear(&self) {
         let mut inner = self.inner.lock();
         inner.vector.clear();
     }
 
+    /// Adds a data segment to the I/O vector.
     pub fn push_data(&self, buf: usize, len: usize) {
         let mut inner = self.inner.lock();
         inner.vector.push(VirtioIovData { buf, len });
     }
 
+    /// Retrieves the buffer address at the specified index.
     pub fn get_buf(&self, idx: usize) -> usize {
         let inner = self.inner.lock();
         inner.vector[idx].buf
     }
 
+    /// Copies data from the I/O vector to the specified buffer.
     pub fn to_buf(&self, addr: usize, len: usize) {
         let mut size = len;
         let inner = self.inner.lock();
@@ -59,6 +65,7 @@ impl VirtioIov {
         }
     }
 
+    /// Copies data from the specified buffer to the I/O vector.
     pub fn from_buf(&self, addr: usize, len: usize) {
         let mut size = len;
         let inner = self.inner.lock();
@@ -75,16 +82,19 @@ impl VirtioIov {
         }
     }
 
+    /// Retrieves the number of data segments in the I/O vector.
     pub fn num(&self) -> usize {
         let inner = self.inner.lock();
         inner.vector.len()
     }
 
+    /// Retrieves the length of the data segment at the specified index.
     pub fn get_len(&self, idx: usize) -> usize {
         let inner = self.inner.lock();
         inner.vector[idx].len
     }
 
+    /// Retrieves a pointer to the data in the I/O vector.
     pub fn get_ptr(&self, size: usize) -> &'static [u8] {
         let inner = self.inner.lock();
         // let mut iov_idx = 0;
@@ -107,6 +117,7 @@ impl VirtioIov {
         &[0]
     }
 
+    /// Writes data from the I/O vector to another I/O vector.
     pub fn write_through_iov(&self, dst: VirtioIov, remain: usize) -> usize {
         let inner = self.inner.lock();
 
@@ -186,18 +197,21 @@ impl VirtioIov {
     }
 }
 
+/// Represents a data segment in the Virtio I/O vector.
 #[derive(Debug)]
 struct VirtioIovData {
     buf: usize,
     len: usize,
 }
 
+/// Represents the inner data structure for `VirtioIov`.
 #[derive(Debug)]
 struct VirtioIovInner {
     vector: Vec<VirtioIovData>,
 }
 
 impl VirtioIovInner {
+    /// Creates a new `VirtioIovInner` with an empty vector.
     pub fn default() -> VirtioIovInner {
         VirtioIovInner { vector: Vec::new() }
     }

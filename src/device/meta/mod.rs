@@ -1,3 +1,5 @@
+//! Dispatches the creation of a meta device based on the provided arguments.
+
 use crate::kernel::Vm;
 use crate::error::{Result, ErrorKind};
 use alloc::boxed::Box;

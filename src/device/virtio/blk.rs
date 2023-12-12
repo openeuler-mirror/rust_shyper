@@ -43,6 +43,7 @@ pub const VIRTIO_BLK_S_OK: usize = 0;
 // pub const VIRTIO_BLK_S_IOERR: usize = 1;
 pub const VIRTIO_BLK_S_UNSUPP: usize = 2;
 
+/// Represents the geometry information of a block device.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct BlkGeometry {
@@ -52,6 +53,7 @@ struct BlkGeometry {
 }
 
 impl BlkGeometry {
+    /// Creates a default `BlkGeometry` instance.
     fn default() -> BlkGeometry {
         BlkGeometry {
             cylinders: 0,
@@ -61,6 +63,7 @@ impl BlkGeometry {
     }
 }
 
+/// Represents the topology information of a block device.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct BlkTopology {
@@ -75,6 +78,7 @@ struct BlkTopology {
 }
 
 impl BlkTopology {
+    /// Creates a default `BlkTopology` instance.
     fn default() -> BlkTopology {
         BlkTopology {
             physical_block_exp: 0,
@@ -85,23 +89,27 @@ impl BlkTopology {
     }
 }
 
+/// Represents a block descriptor.
 #[derive(Clone)]
 pub struct BlkDesc {
     inner: Arc<Mutex<BlkDescInner>>,
 }
 
 impl BlkDesc {
+    /// Creates a default `BlkDesc` instance.
     pub fn default() -> BlkDesc {
         BlkDesc {
             inner: Arc::new(Mutex::new(BlkDescInner::default())),
         }
     }
 
+    /// Initializes the block descriptor configuration.
     pub fn cfg_init(&self, bsize: usize) {
         let mut inner = self.inner.lock();
         inner.cfg_init(bsize);
     }
 
+    /// Gets the start address of the block descriptor.
     pub fn start_addr(&self) -> usize {
         let inner = self.inner.lock();
         &inner.capacity as *const _ as usize
@@ -122,6 +130,7 @@ impl BlkDesc {
     }
 }
 
+/// Represents the inner data structure of a block descriptor.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct BlkDescInner {
@@ -143,6 +152,7 @@ pub struct BlkDescInner {
 }
 
 impl BlkDescInner {
+    /// Creates a default `BlkDescInner` instance.
     pub fn default() -> BlkDescInner {
         BlkDescInner {
             capacity: 0,
@@ -163,6 +173,7 @@ impl BlkDescInner {
         }
     }
 
+    /// Initializes the block descriptor configuration.
     pub fn cfg_init(&mut self, bsize: usize) {
         self.capacity = bsize;
         self.size_max = BLOCKIF_SIZE_MAX as u32;
@@ -170,6 +181,7 @@ impl BlkDescInner {
     }
 }
 
+/// Represents a block I/O vector.
 #[repr(C)]
 #[derive(Clone)]
 pub struct BlkIov {
@@ -177,12 +189,14 @@ pub struct BlkIov {
     pub len: u32,
 }
 
+/// Represents a region of a block request.
 #[repr(C)]
 pub struct BlkReqRegion {
     pub start: usize,
     pub size: usize,
 }
 
+/// Represents a VirtioBlk request.
 #[derive(Clone)]
 pub struct VirtioBlkReq {
     inner: Arc<Mutex<VirtioBlkReqInner>>,
@@ -190,6 +204,7 @@ pub struct VirtioBlkReq {
 }
 
 impl VirtioBlkReq {
+    /// Creates a default `VirtioBlkReq` instance.
     pub fn default() -> VirtioBlkReq {
         VirtioBlkReq {
             inner: Arc::new(Mutex::new(VirtioBlkReqInner::default())),
@@ -221,52 +236,62 @@ impl VirtioBlkReq {
         // }
     }
 
+    /// Gets the number of requests in the request list.
     pub fn req_num(&self) -> usize {
         let list = self.req_list.lock();
         list.len()
     }
 
+    /// Gets a request node at a specified index from the request list.
     pub fn req_node(&self, idx: usize) -> VirtioBlkReqNode {
         let list = self.req_list.lock();
         list[idx].clone()
     }
 
+    /// Clears the request list.
     pub fn clear_node(&self) {
         let mut list = self.req_list.lock();
         list.clear();
     }
 
+    /// Sets the start address of the block request region.
     pub fn set_start(&self, start: usize) {
         let mut inner = self.inner.lock();
         inner.set_start(start);
     }
 
+    /// Sets the size of the block request region.
     pub fn set_size(&self, size: usize) {
         let mut inner = self.inner.lock();
         inner.set_size(size);
     }
 
+    /// Sets whether the request is mediated.
     pub fn set_mediated(&self, mediated: bool) {
         let mut inner = self.inner.lock();
         inner.mediated = mediated;
     }
 
+    /// Checks if the request is mediated.
     pub fn mediated(&self) -> bool {
         let inner = self.inner.lock();
         inner.mediated
     }
 
+    /// Gets the start address of the block request region.
     pub fn region_start(&self) -> usize {
         let inner = self.inner.lock();
         inner.region.start
     }
 
+    /// Gets the size of the block request region.
     pub fn region_size(&self) -> usize {
         let inner = self.inner.lock();
         inner.region.size
     }
 }
 
+/// Represents a node in a VirtioBlk request.
 #[repr(C)]
 #[derive(Clone)]
 pub struct VirtioBlkReqNode {
@@ -282,6 +307,7 @@ pub struct VirtioBlkReqNode {
 }
 
 impl VirtioBlkReqNode {
+    /// Creates a default `VirtioBlkReqNode` instance.
     pub fn default() -> VirtioBlkReqNode {
         VirtioBlkReqNode {
             req_type: 0,
@@ -295,6 +321,7 @@ impl VirtioBlkReqNode {
     }
 }
 
+/// Represents the inner data structure of a VirtioBlkReq.
 #[repr(C)]
 struct VirtioBlkReqInner {
     region: BlkReqRegion,
@@ -303,6 +330,7 @@ struct VirtioBlkReqInner {
 }
 
 impl VirtioBlkReqInner {
+    /// Creates a default `VirtioBlkReqInner` instance.
     pub fn default() -> VirtioBlkReqInner {
         VirtioBlkReqInner {
             region: BlkReqRegion { start: 0, size: 0 },
@@ -311,15 +339,18 @@ impl VirtioBlkReqInner {
         }
     }
 
+    /// Sets the start address of the block request region.
     pub fn set_start(&mut self, start: usize) {
         self.region.start = start;
     }
 
+    /// Sets the size of the block request region.
     pub fn set_size(&mut self, size: usize) {
         self.region.size = size;
     }
 }
 
+/// Generates a block request using the provided parameters.
 pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: usize, vm: Vm) {
     let region_start = req.region_start();
     let region_size = req.region_size();
@@ -457,6 +488,9 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
     req.clear_node();
 }
 
+/// Handles the notification for a mediated block request on the specified Virtqueue (`vq`) and Virtio block device (`blk`)
+/// associated with the virtual machine (`vm`). This function creates an asynchronous IPI task to process the mediated
+/// block request.
 pub fn virtio_mediated_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
     //     add_task_count();
     let task = AsyncTask::new(
@@ -472,6 +506,9 @@ pub fn virtio_mediated_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) ->
     true
 }
 
+/// Handles the notification for a Virtio block request on the specified Virtqueue (`vq`) and Virtio block device (`blk`)
+/// associated with the virtual machine (`vm`). This function processes the available descriptors in the Virtqueue and
+/// generates block requests accordingly. The function returns `true` upon successful handling.
 pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
     if vm.id() == 0 && active_vm_id() == 0 {
         panic!("src vm should not be 0");

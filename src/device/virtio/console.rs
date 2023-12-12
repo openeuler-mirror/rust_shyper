@@ -41,11 +41,13 @@ const VIRTIO_CONSOLE_RESIZE: usize = 5;
 const VIRTIO_CONSOLE_PORT_OPEN: usize = 6;
 const VIRTIO_CONSOLE_PORT_NAME: usize = 7;
 
+/// A wrapper structure for `ConsoleDescInner` providing a convenient and thread-safe interface.
 #[derive(Clone)]
 pub struct ConsoleDesc {
     inner: Arc<Mutex<ConsoleDescInner>>,
 }
 
+/// Holds data related to console configuration.
 pub struct ConsoleDescData {
     pub oppo_end_vmid: u16,
     pub oppo_end_ipa: u64,
@@ -57,6 +59,7 @@ pub struct ConsoleDescData {
 }
 
 impl ConsoleDesc {
+    /// Creates a new `ConsoleDesc` with default inner values.
     pub fn default() -> ConsoleDesc {
         ConsoleDesc {
             inner: Arc::new(Mutex::new(ConsoleDescInner::default())),
@@ -71,6 +74,7 @@ impl ConsoleDesc {
         inner.rows = 25;
     }
 
+    /// Returns the starting address of the console configuration.
     pub fn start_addr(&self) -> usize {
         let inner = self.inner.lock();
         &inner.cols as *const _ as usize
@@ -82,6 +86,7 @@ impl ConsoleDesc {
     }
 }
 
+/// Represents the inner data structure for `ConsoleDesc`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ConsoleDescInner {
@@ -95,6 +100,7 @@ pub struct ConsoleDescInner {
 }
 
 impl ConsoleDescInner {
+    /// Creates a new `ConsoleDescInner` with default values.
     pub fn default() -> ConsoleDescInner {
         ConsoleDescInner {
             oppo_end_vmid: 0,
@@ -107,10 +113,14 @@ impl ConsoleDescInner {
     }
 }
 
+/// Returns features supported by the console.
 pub fn console_features() -> usize {
     VIRTIO_F_VERSION_1 | VIRTIO_CONSOLE_F_SIZE
 }
 
+/// Handles notification for a Virtio console request on the specified Virtqueue (`vq`), Virtio console device (`console`), and virtual machine (`vm`).
+/// This function processes the available descriptors in the Virtqueue and performs necessary operations.
+/// Returns `true` upon successful handling.
 pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> bool {
     if vq.vq_indx() % 4 != 1 {
         // println!("console rx queue notified!");
@@ -198,6 +208,8 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
     true
 }
 
+/// Receives Virtio console data for the target VM with specified VM ID (`trgt_vmid`), console IPA (`trgt_console_ipa`), I/O vector (`tx_iov`), and length (`len`).
+/// Returns `true` upon successful reception.
 fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov, len: usize) -> bool {
     let trgt_vm = match vm(trgt_vmid as usize) {
         None => {

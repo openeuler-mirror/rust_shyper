@@ -21,6 +21,7 @@ use crate::vmm::CPIO_RAMDISK;
 
 const PI4_DTB_ADDR: usize = 0xf0000000;
 
+/// Initializes the Device Tree Blob (DTB) for the primary VM (vm0).
 pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     use fdt::*;
     unsafe {
@@ -165,6 +166,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     Ok(())
 }
 
+/// Creates the Device Tree Blob (DTB) for the secondary VM (vm1) based on the provided configuration.
 // create vm1 fdt demo
 pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     let mut fdt = FdtWriter::new()?;
@@ -231,6 +233,7 @@ pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     fdt.finish()
 }
 
+/// Creates the pinctrl node in the Device Tree for the VM based on the provided configuration.
 // rk3588 has pinctrl for using uart
 fn create_pinctrl_node(fdt: &mut FdtWriter) -> FdtWriterResult<()> {
     let pinctrl = fdt.begin_node("pinctrl")?;
@@ -251,6 +254,7 @@ fn create_pinctrl_node(fdt: &mut FdtWriter) -> FdtWriterResult<()> {
     Ok(())
 }
 
+/// Creates the memory node in the Device Tree for the VM based on the provided configuration.
 // hard code for tx2 vm1
 fn create_memory_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResult<()> {
     if config.memory_region().is_empty() {
@@ -269,6 +273,7 @@ fn create_memory_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterRe
     Ok(())
 }
 
+/// Creates the timer node in the Device Tree for the VM based on the provided configuration.
 fn create_timer_node(fdt: &mut FdtWriter, trigger_lvl: u32) -> FdtWriterResult<()> {
     let timer = fdt.begin_node("timer")?;
     fdt.property_string("compatible", "arm,armv8-timer")?;
@@ -293,6 +298,7 @@ fn create_timer_node(fdt: &mut FdtWriter, trigger_lvl: u32) -> FdtWriterResult<(
     Ok(())
 }
 
+/// Creates the CPU node in the Device Tree for the VM based on the provided configuration.
 fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResult<()> {
     let cpus = fdt.begin_node("cpus")?;
     fdt.property_u32("#size-cells", 0)?;
@@ -324,6 +330,7 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
     Ok(())
 }
 
+/// Creates the serial node in the Device Tree for the VM based on the provided configuration.
 fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> FdtWriterResult<()> {
     for dev in devs_config {
         if dev.dev_type == DtbDevType::DevSerial {
@@ -350,6 +357,7 @@ fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> Fd
     Ok(())
 }
 
+/// Creates the chosen node in the Device Tree for the VM based on the provided configuration.
 fn create_chosen_node(fdt: &mut FdtWriter, cmdline: &str, ipa: usize, size: usize) -> FdtWriterResult<()> {
     let chosen = fdt.begin_node("chosen")?;
     fdt.property_string("bootargs", cmdline)?;
@@ -359,6 +367,7 @@ fn create_chosen_node(fdt: &mut FdtWriter, cmdline: &str, ipa: usize, size: usiz
     Ok(())
 }
 
+/// Creates the GIC (Generic Interrupt Controller) node in the Device Tree for the VM based on the provided configuration.
 fn create_gic_node(fdt: &mut FdtWriter, gicc_addr: usize, gicd_addr: usize) -> FdtWriterResult<()> {
     let gic_name = format!("interrupt-controller@{:x}", gicd_addr);
     let gic = fdt.begin_node(&gic_name)?;
@@ -373,6 +382,7 @@ fn create_gic_node(fdt: &mut FdtWriter, gicc_addr: usize, gicd_addr: usize) -> F
     Ok(())
 }
 
+/// Creates the GICv3 (Generic Interrupt Controller version 3) node in the Device Tree for the VM based on the provided configuration.
 fn create_gicv3_node(fdt: &mut FdtWriter, gicr_addr: usize, gicd_addr: usize) -> FdtWriterResult<()> {
     info!("create_gicv3_node");
     let gic_name = format!("interrupt-controller@{:x}", gicd_addr);
@@ -389,6 +399,7 @@ fn create_gicv3_node(fdt: &mut FdtWriter, gicr_addr: usize, gicd_addr: usize) ->
     Ok(())
 }
 
+/// Creates a Virtio node in the Device Tree for the VM based on the provided configuration.
 fn create_virtio_node(fdt: &mut FdtWriter, name: &str, irq: usize, address: usize) -> FdtWriterResult<()> {
     let virtio = fdt.begin_node(name)?;
     fdt.property_null("dma-coherent")?;
@@ -400,6 +411,7 @@ fn create_virtio_node(fdt: &mut FdtWriter, name: &str, irq: usize, address: usiz
     Ok(())
 }
 
+/// Creates a Shyper (Sample Hypervisor) node in the Device Tree for the VM based on the provided configuration.
 fn create_shyper_node(fdt: &mut FdtWriter, name: &str, irq: usize, address: usize, len: usize) -> FdtWriterResult<()> {
     let shyper = fdt.begin_node(name)?;
     fdt.property_string("compatible", "shyper")?;

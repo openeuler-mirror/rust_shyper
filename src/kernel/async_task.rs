@@ -196,7 +196,7 @@ pub struct AsyncTask {
     pub state: Arc<Mutex<AsyncTaskState>>,
     pub task: Arc<Mutex<Pin<Box<dyn Future<Output = ()> + 'static + Send + Sync>>>>,
 }
- 
+
 impl TaskOwner for AsyncTask {
     fn owner(&self) -> usize {
         self.src_vmid

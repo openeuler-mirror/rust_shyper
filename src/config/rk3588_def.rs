@@ -27,6 +27,10 @@ use super::{
     VmEmulatedDeviceConfigList, VmImageConfig, VmMemoryConfig, VmPassthroughDeviceConfig, VmRegion,
 };
 
+/// This function provides functions for patching the flattened device tree (FDT) for VM configuration.
+///
+/// The `patch_fdt` function removes unnecessary nodes and configurations from the FDT to customize
+/// it for a specific VM setup.
 pub fn patch_fdt(fdt: &mut FdtBuf) -> Result<()> {
     // fdt.remove_node(c"/sram@10f000")?;
     // use for boot one core
@@ -74,6 +78,7 @@ pub fn patch_fdt(fdt: &mut FdtBuf) -> Result<()> {
     Ok(())
 }
 
+/// Initializes the configuration for the manager VM (VM0).
 #[rustfmt::skip]
 pub fn mvm_config_init() {
     info!("mvm_config_init() init config for VM0, which is manager VM");

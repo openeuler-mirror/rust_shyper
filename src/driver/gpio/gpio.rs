@@ -8,9 +8,12 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+/// Base address for memory-mapped I/O (MMIO).
 const MMIO_BASE: usize = 0xFE000000;
+/// Offset for GPIO Function Select 0 register within MMIO.
 const GPFSEL0: usize = MMIO_BASE + 0x200000;
 
+/// Converts GPIO alternate function number to corresponding bits.
 fn alt2bits(alt: u8) -> u8 {
     match alt {
         0 => 0b100,
@@ -23,6 +26,7 @@ fn alt2bits(alt: u8) -> u8 {
     }
 }
 
+/// Selects the alternate function for a GPIO pin.
 #[no_mangle]
 #[inline(never)]
 pub fn gpio_select_function(gpio: u8, alt: u8) {

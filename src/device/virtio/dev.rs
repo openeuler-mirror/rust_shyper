@@ -21,6 +21,8 @@ use crate::device::{VIRTIO_BLK_F_SEG_MAX, VIRTIO_BLK_F_SIZE_MAX, VIRTIO_F_VERSIO
 use crate::device::{BlkStat, NicStat};
 use crate::kernel::mem_pages_alloc;
 use crate::mm::PageFrame;
+
+/// Represents the type of a Virtio device.
 #[derive(Copy, Clone, Debug)]
 pub enum VirtioDeviceType {
     None = 0,
@@ -29,15 +31,22 @@ pub enum VirtioDeviceType {
     Console = 3,
 }
 
+/// Placeholder struct for block device configuration data.
 pub struct BlkDescData {}
 
+/// Represents different types of device descriptions.
 pub enum DevDescData {
-    // reserve blk desc
+    /// Reserved block device description.
     BlkDesc(BlkDescData),
+    /// Network device description.
     NetDesc(NetDescData),
+    /// Console device description.
     ConsoleDesc(ConsoleDescData),
+    /// No device description.
     None,
 }
+
+/// Represents various data associated with a Virtio device.
 pub struct VirtDevData {
     pub activated: bool,
     pub dev_type: VirtioDeviceType,
@@ -50,6 +59,7 @@ pub struct VirtDevData {
     // stat: reserve
 }
 
+/// Represents the status of a device.
 #[derive(Clone)]
 pub enum DevStat {
     BlkStat(BlkStat),
@@ -77,68 +87,81 @@ pub struct VirtDev {
 }
 
 impl VirtDev {
+    /// Creates a new `VirtDev` with default inner values.
     pub fn default() -> VirtDev {
         VirtDev {
             inner: Arc::new(Mutex::new(VirtDevInner::default())),
         }
     }
 
+    /// Initializes the Virtio device with the specified parameters.
     pub fn init(&self, dev_type: VirtioDeviceType, config: &VmEmulatedDeviceConfig, mediated: bool) {
         let mut inner = self.inner.lock();
         inner.init(dev_type, config, mediated);
     }
 
+    /// Retrieves the features supported by the Virtio device.
     pub fn features(&self) -> usize {
         let inner = self.inner.lock();
         inner.features
     }
 
+    /// Retrieves the generation of the Virtio device.
     pub fn generation(&self) -> usize {
         let inner = self.inner.lock();
         inner.generation
     }
 
+    /// Retrieves the device description associated with the Virtio device.
     pub fn desc(&self) -> DevDesc {
         let inner = self.inner.lock();
         inner.desc.clone()
     }
 
+    /// Retrieves the device request associated with the Virtio device.
     pub fn req(&self) -> DevReq {
         let inner = self.inner.lock();
         inner.req.clone()
     }
 
+    /// Retrieves the interrupt ID associated with the Virtio device.
     pub fn int_id(&self) -> usize {
         let inner = self.inner.lock();
         inner.int_id
     }
 
+    /// Retrieves the cache associated with the Virtio device.
     pub fn cache(&self) -> usize {
         let inner = self.inner.lock();
         return inner.cache.as_ref().unwrap().pa();
     }
 
+    /// Retrieves the status of the Virtio device.
     pub fn stat(&self) -> DevStat {
         let inner = self.inner.lock();
         inner.stat.clone()
     }
 
+    /// Checks if the Virtio device is activated.
     pub fn activated(&self) -> bool {
         let inner = self.inner.lock();
         inner.activated
     }
 
+    /// Sets the activation status of the Virtio device.
     pub fn set_activated(&self, activated: bool) {
         let mut inner = self.inner.lock();
         inner.activated = activated;
     }
 
+    /// Checks if the Virtio device is mediated.
     pub fn mediated(&self) -> bool {
         let inner = self.inner.lock();
         inner.mediated()
     }
 }
 
+/// Represents the inner data structure for `VirtDev`.
 pub struct VirtDevInner {
     activated: bool,
     dev_type: VirtioDeviceType,
@@ -152,6 +175,7 @@ pub struct VirtDevInner {
 }
 
 impl VirtDevInner {
+    /// Creates a new `VirtDevInner` with default values.
     pub fn default() -> VirtDevInner {
         VirtDevInner {
             activated: false,
@@ -166,6 +190,7 @@ impl VirtDevInner {
         }
     }
 
+    /// Checks if the Virtio device is mediated.
     pub fn mediated(&self) -> bool {
         match &self.req {
             DevReq::BlkReq(req) => req.mediated(),
@@ -173,6 +198,7 @@ impl VirtDevInner {
         }
     }
 
+    /// Initializes the Virtio device with the specified parameters.
     // virtio_dev_init
     pub fn init(&mut self, dev_type: VirtioDeviceType, config: &VmEmulatedDeviceConfig, mediated: bool) {
         self.dev_type = dev_type;

@@ -69,6 +69,7 @@ const VIRTIO_NET_HDR_F_DATA_VALID: usize = 2;
 
 const VIRTIO_NET_HDR_GSO_NONE: usize = 0;
 
+/// Represents the header structure for VirtioNet.
 #[repr(C)]
 struct VirtioNetHdr {
     pub flags: u8,
@@ -80,17 +81,20 @@ struct VirtioNetHdr {
     pub num_buffers: u16,
 }
 
+/// A cloneable wrapper for the `NetDescInner` structure.
 #[derive(Clone)]
 pub struct NetDesc {
     inner: Arc<Mutex<NetDescInner>>,
 }
 
+/// Holds data related to the network device.
 pub struct NetDescData {
     pub mac: [u8; 6],
     pub status: u16,
 }
 
 impl NetDesc {
+    /// Creates a new `NetDesc` instance with default values.
     pub fn default() -> NetDesc {
         NetDesc {
             inner: Arc::new(Mutex::new(NetDescInner::default())),
@@ -102,11 +106,13 @@ impl NetDesc {
         inner.status = status;
     }
 
+    /// Retrieves the status of the network device.
     pub fn status(&self) -> u16 {
         let inner = self.inner.lock();
         inner.status
     }
 
+    /// Initializes the configuration of the network device with the provided MAC address.
     pub fn cfg_init(&self, mac: &[usize]) {
         let mut inner = self.inner.lock();
         inner.mac[0] = mac[0] as u8;
@@ -117,6 +123,7 @@ impl NetDesc {
         inner.mac[5] = mac[5] as u8;
     }
 
+    /// Computes the offset data within the `NetDesc` structure.
     /// # SAFETY:
     /// caller must ensure offset is valid
     /// offset must valid for virtio_mmio
@@ -133,9 +140,12 @@ impl NetDesc {
     }
 }
 
+/// Constant representing the network link being up.
 pub const VIRTIO_NET_S_LINK_UP: u16 = 1;
+/// Constant representing network announcement.
 pub const VIRTIO_NET_S_ANNOUNCE: u16 = 2;
 
+/// Represents the inner data structure for `NetDesc`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct NetDescInner {
@@ -144,6 +154,7 @@ pub struct NetDescInner {
 }
 
 impl NetDescInner {
+    /// Creates a new `NetDescInner` instance with default values.
     pub fn default() -> NetDescInner {
         NetDescInner {
             mac: [0; 6],
@@ -152,6 +163,7 @@ impl NetDescInner {
     }
 }
 
+/// Represents the control header structure for VirtioNet.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 struct VirtioNetCtrlHdr {
@@ -159,6 +171,7 @@ struct VirtioNetCtrlHdr {
     command: u8,
 }
 
+/// Retrieves network features.
 pub fn net_features() -> usize {
     VIRTIO_F_VERSION_1
         | VIRTIO_NET_F_GUEST_CSUM
@@ -176,9 +189,12 @@ pub fn net_features() -> usize {
         | VIRTIO_NET_F_STATUS
 }
 
+/// Constant representing VirtioNet control announcement.
 const VIRTIO_NET_CTRL_ANNOUNCE: u8 = 3;
+/// Constant representing VirtioNet control announcement acknowledgment.
 const VIRTIO_NET_CTRL_ANNOUNCE_ACK: u8 = 0;
 
+/// Handles VirtioNet control operations.
 pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     if vq.ready() == 0 {
         error!("virtio net control queue is not ready!");
@@ -256,6 +272,8 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     true
 }
 
+/// Handles the notification from the VirtioNet device to the specified virtual queue (`vq`) in a virtual machine (`vm`).
+/// Returns `true` if the notification is successfully processed; otherwise, returns `false`.
 pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     if vq.ready() == 0 {
         error!("net virt_queue is not ready!");
@@ -379,6 +397,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     true
 }
 
+/// Handles the IPI (Inter-Processor Interrupt) message related to Ethernet.
 pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
     match msg.ipi_message {
         IpiInnerMsg::EnternetMsg(ethernet_msg) => {
@@ -425,6 +444,9 @@ pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
     }
 }
 
+/// Transmits Ethernet frames using VirtioNet.
+/// Returns a tuple with the first element indicating success (`true` if successful) and the second element
+/// representing the target virtual machine's bitmask.
 fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     // [ destination MAC - 6 ][ source MAC - 6 ][ EtherType - 2 ][ Payload ]
     if len < size_of::<VirtioNetHdr>() || len - size_of::<VirtioNetHdr>() < 6 + 6 + 2 {
@@ -467,6 +489,7 @@ fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     }
 }
 
+/// Broadcasts an Ethernet frame to all virtual machines, excluding the current one.
 fn ethernet_broadcast(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     let vm_num = vm_num();
     let cur_vm_id = active_vm_id();
@@ -486,6 +509,7 @@ fn ethernet_broadcast(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     (trgt_vmid_map != 0, trgt_vmid_map)
 }
 
+/// Sends an Ethernet frame to the specified virtual machine (`vmid`).
 fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     // println!("ethernet send to vm{}", vmid);
     let vm = match vm(vmid) {
@@ -606,10 +630,12 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     true
 }
 
+/// Determines whether the given Ethernet frame is an ARP (Address Resolution Protocol) packet.
 fn ethernet_is_arp(frame: &[u8]) -> bool {
     frame[12] == 0x8 && frame[13] == 0x6
 }
 
+/// Maps the MAC address in the Ethernet frame to the corresponding virtual machine ID.
 fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
     for vm in VM_LIST.lock().iter() {
         let vm_id = vm.id();
@@ -620,6 +646,7 @@ fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
     Err(())
 }
 
+/// Handles the VirtioNet announcement in a virtual machine (`vm`).
 pub fn virtio_net_announce(vm: Vm) {
     if let EmuDevs::VirtioNet(nic) = vm.emu_net_dev(0) {
         if let DevDesc::NetDesc(desc) = nic.dev().desc() {

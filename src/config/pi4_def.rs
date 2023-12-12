@@ -24,10 +24,13 @@ use super::{
     VmEmulatedDeviceConfigList, VmImageConfig, VmMemoryConfig, VmPassthroughDeviceConfig, VmRegion,
 };
 
+/// Initializes the configuration for the manager VM (VM0).
 #[rustfmt::skip]
 pub fn mvm_config_init() {
+    // Log initialization message for VM0 configuration
     info!("mvm_config_init() init config for VM0, which is manager VM");
 
+    // Set the configuration name for VM0
     vm_cfg_set_config_name("pi4-default");
 
     // vm0 emu
@@ -198,5 +201,6 @@ pub fn mvm_config_init() {
         vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
         ..Default::default()
     };
+    // Add VM0 entry to the configuration
     let _ = vm_cfg_add_vm_entry(mvm_config_entry);
 }

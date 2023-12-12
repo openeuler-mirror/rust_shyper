@@ -27,78 +27,108 @@ pub const VRING_USED_F_NO_NOTIFY: usize = 1;
 
 pub const DESC_QUEUE_SIZE: usize = 512;
 
+/// Represents a descriptor in a VirtIO ring buffer.
 #[repr(C, align(16))]
 #[derive(Copy, Clone)]
 struct VringDesc {
-    /*Address (guest-physical)*/
+    /// Guest-physical address of the descriptor.
     pub addr: usize,
-    /* Length */
+    /// Length of the descriptor.
     len: u32,
-    /* The flags as indicated above */
+    /// Flags indicating descriptor properties.
     flags: u16,
-    /* We chain unused descriptors via this, too */
+    /// Index of the next descriptor in the chain.
     next: u16,
 }
 
+/// Represents the available ring in a VirtIO queue.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct VringAvail {
+    /// Flags indicating the state of the available ring.
     flags: u16,
+    /// Index pointing to the next available descriptor in the ring.
     idx: u16,
+    /// Array representing the available ring.
     ring: [u16; 512],
 }
 
+/// Represents an element in the used ring of a VirtIO queue.
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct VringUsedElem {
+    /// Identifier of the descriptor.
     pub id: u32,
+    /// Length of the used descriptor.
     pub len: u32,
 }
+
+/// Represents the data associated with a VirtIO queue.
 #[derive(Copy, Clone)]
 pub struct VirtqData {
+    /// Indicates whether the VirtIO queue is ready.
     pub ready: usize,
+    /// Index of the VirtIO queue.
     pub vq_index: usize,
+    /// Number of descriptors in the queue.
     pub num: usize,
 
+    /// Last available index in the available ring.
     pub last_avail_idx: u16,
+    /// Last used index in the used ring.
     pub last_used_idx: u16,
+    /// Flags indicating the state of the used ring.
     pub used_flags: u16,
 
+    /// Guest-physical address of the descriptor table.
     pub desc_table_ipa: usize,
+    /// Guest-physical address of the available ring.
     pub avail_ipa: usize,
+    /// Guest-physical address of the used ring.
     pub used_ipa: usize,
 }
 
+/// Represents the used ring in a VirtIO queue.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct VringUsed {
+    /// Flags indicating the state of the used ring.
     flags: u16,
+    /// Index pointing to the next used descriptor in the ring.
     idx: u16,
+    /// Array representing the used ring, containing VringUsedElem elements.
     ring: [VringUsedElem; 512],
 }
 
+/// Represents a VirtIO queue trait with initialization and reset methods.
 pub trait VirtioQueue {
+    /// Initializes the VirtIO queue with the given device type.
     fn virtio_queue_init(&self, dev_type: VirtioDeviceType);
+    /// Resets the VirtIO queue at the specified index.
     fn virtio_queue_reset(&self, index: usize);
 }
 
+/// A wrapper struct representing a VirtIO queue.
 #[derive(Clone)]
 pub struct Virtq {
     inner: Arc<Mutex<VirtqInner<'static>>>,
 }
 
 impl Virtq {
+    /// Creates a new default Virtq instance.
     pub fn default() -> Virtq {
         Virtq {
             inner: Arc::new(Mutex::new(VirtqInner::default())),
         }
     }
 
+    /// Resets the VirtIO queue at the specified index.
     pub fn reset(&self, index: usize) {
         let mut inner = self.inner.lock();
         inner.reset(index);
     }
 
+    /// Pops the next available descriptor index from the available ring.
     pub fn pop_avail_desc_idx(&self, avail_idx: u16) -> Option<u16> {
         let mut inner = self.inner.lock();
         match &inner.avail {
@@ -118,6 +148,7 @@ impl Virtq {
         }
     }
 
+    /// Puts back the last popped available descriptor index.
     pub fn put_back_avail_desc_idx(&self) {
         let mut inner = self.inner.lock();
         match &inner.avail {
@@ -130,11 +161,13 @@ impl Virtq {
         }
     }
 
+    /// Checks if the available ring has available descriptors.
     pub fn avail_is_avail(&self) -> bool {
         let inner = self.inner.lock();
         inner.avail.is_some()
     }
 
+    /// Disables notifications for the used ring.
     pub fn disable_notify(&self) {
         let mut inner = self.inner.lock();
         if inner.used_flags & VRING_USED_F_NO_NOTIFY as u16 != 0 {
@@ -143,6 +176,7 @@ impl Virtq {
         inner.used_flags |= VRING_USED_F_NO_NOTIFY as u16;
     }
 
+    /// Enables notifications for the used ring.
     pub fn enable_notify(&self) {
         let mut inner = self.inner.lock();
         if inner.used_flags & VRING_USED_F_NO_NOTIFY as u16 == 0 {
@@ -151,23 +185,27 @@ impl Virtq {
         inner.used_flags &= !VRING_USED_F_NO_NOTIFY as u16;
     }
 
+    /// Checks if the available index matches the last available index.
     pub fn check_avail_idx(&self, avail_idx: u16) -> bool {
         let inner = self.inner.lock();
         inner.last_avail_idx == avail_idx
     }
 
+    /// Checks if the descriptor at the given index is writable.
     pub fn desc_is_writable(&self, idx: usize) -> bool {
         let inner = self.inner.lock();
         let desc_table = inner.desc_table.as_ref().unwrap();
         desc_table[idx].flags & VIRTQ_DESC_F_WRITE != 0
     }
 
+    /// Checks if the descriptor at the given index has a next descriptor in the chain.
     pub fn desc_has_next(&self, idx: usize) -> bool {
         let inner = self.inner.lock();
         let desc_table = inner.desc_table.as_ref().unwrap();
         desc_table[idx].flags & VIRTQ_DESC_F_NEXT != 0
     }
 
+    /// Updates the used ring with the provided information.
     pub fn update_used_ring(&self, len: u32, desc_chain_head_idx: u32) -> bool {
         let mut inner = self.inner.lock();
         let num = inner.num;
@@ -187,11 +225,13 @@ impl Virtq {
         }
     }
 
+    /// Sets the notify handler function for the VirtIO queue.
     pub fn set_notify_handler(&self, handler: fn(Virtq, VirtioMmio, Vm) -> bool) {
         let mut inner = self.inner.lock();
         inner.notify_handler = Some(handler);
     }
 
+    /// Calls the registered notify handler function.
     pub fn call_notify_handler(&self, mmio: VirtioMmio) -> bool {
         let inner = self.inner.lock();
         match inner.notify_handler {
@@ -206,6 +246,7 @@ impl Virtq {
         }
     }
 
+    /// Displays information about the descriptors in the VirtIO queue.
     pub fn show_desc_info(&self, size: usize, vm: Vm) {
         let inner = self.inner.lock();
         let desc = inner.desc_table.as_ref().unwrap();
@@ -219,6 +260,7 @@ impl Virtq {
         }
     }
 
+    /// Displays information about the available ring in the VirtIO queue.
     pub fn show_avail_info(&self, size: usize) {
         let inner = self.inner.lock();
         let avail = inner.avail.as_ref().unwrap();
@@ -228,6 +270,7 @@ impl Virtq {
         }
     }
 
+    /// Displays information about the used ring in the VirtIO queue.
     pub fn show_used_info(&self, size: usize) {
         let inner = self.inner.lock();
         let used = inner.used.as_ref().unwrap();
@@ -240,6 +283,7 @@ impl Virtq {
         }
     }
 
+    /// Displays information about the guest-physical addresses of the VirtIO queue components.
     pub fn show_addr_info(&self) {
         let inner = self.inner.lock();
         info!(
@@ -248,36 +292,43 @@ impl Virtq {
         );
     }
 
+    /// Sets the last used index for the used ring.
     pub fn set_last_used_idx(&self, last_used_idx: u16) {
         let mut inner = self.inner.lock();
         inner.last_used_idx = last_used_idx;
     }
 
+    /// Sets the number of descriptors in the VirtIO queue.
     pub fn set_num(&self, num: usize) {
         let mut inner = self.inner.lock();
         inner.num = num;
     }
 
+    /// Sets the ready state of the VirtIO queue.
     pub fn set_ready(&self, ready: usize) {
         let mut inner = self.inner.lock();
         inner.ready = ready;
     }
 
+    /// Combines the descriptor table address with the provided address using a bitwise OR operation.
     pub fn or_desc_table_addr(&self, addr: usize) {
         let mut inner = self.inner.lock();
         inner.desc_table_addr |= addr;
     }
 
+    /// Combines the available ring address with the provided address using a bitwise OR operation.
     pub fn or_avail_addr(&self, addr: usize) {
         let mut inner = self.inner.lock();
         inner.avail_addr |= addr;
     }
 
+    /// Combines the used ring address with the provided address using a bitwise OR operation.
     pub fn or_used_addr(&self, addr: usize) {
         let mut inner = self.inner.lock();
         inner.used_addr |= addr;
     }
 
+    /// Sets the descriptor table for the VirtIO queue.
     pub fn set_desc_table(&self, addr: usize) {
         let mut inner = self.inner.lock();
         if trace() && addr < 0x1000 {
@@ -286,6 +337,7 @@ impl Virtq {
         inner.desc_table = Some(unsafe { slice::from_raw_parts_mut(addr as *mut VringDesc, DESC_QUEUE_SIZE) });
     }
 
+    /// Sets the available ring for the VirtIO queue.
     pub fn set_avail(&self, addr: usize) {
         if trace() && addr < 0x1000 {
             panic!("illegal avail ring addr {:x}", addr);
@@ -294,6 +346,7 @@ impl Virtq {
         inner.avail = Some(unsafe { &mut *(addr as *mut VringAvail) });
     }
 
+    /// Sets the used ring for the VirtIO queue.
     pub fn set_used(&self, addr: usize) {
         if trace() && addr < 0x1000 {
             panic!("illegal used ring addr {:x}", addr);
@@ -302,26 +355,31 @@ impl Virtq {
         inner.used = Some(unsafe { &mut *(addr as *mut VringUsed) });
     }
 
+    /// Returns the last used index for the used ring.
     pub fn last_used_idx(&self) -> u16 {
         let inner = self.inner.lock();
         inner.last_used_idx
     }
 
+    /// Returns the descriptor table address for the VirtIO queue.
     pub fn desc_table_addr(&self) -> usize {
         let inner = self.inner.lock();
         inner.desc_table_addr
     }
 
+    /// Returns the available ring address for the VirtIO queue.
     pub fn avail_addr(&self) -> usize {
         let inner = self.inner.lock();
         inner.avail_addr
     }
 
+    /// Returns the used ring address for the VirtIO queue.
     pub fn used_addr(&self) -> usize {
         let inner = self.inner.lock();
         inner.used_addr
     }
 
+    /// Returns a pointer to the descriptor table for the VirtIO queue.
     pub fn desc_table(&self) -> usize {
         let inner = self.inner.lock();
         match &inner.desc_table {
@@ -330,6 +388,7 @@ impl Virtq {
         }
     }
 
+    /// Returns the address of the available ring for the VirtIO queue.
     pub fn avail(&self) -> usize {
         let inner = self.inner.lock();
         match &inner.avail {
@@ -338,6 +397,7 @@ impl Virtq {
         }
     }
 
+    /// Returns the address of the used ring for the VirtIO queue.
     pub fn used(&self) -> usize {
         let inner = self.inner.lock();
         match &inner.used {
@@ -346,62 +406,73 @@ impl Virtq {
         }
     }
 
+    /// Returns the ready state of the VirtIO queue.
     pub fn ready(&self) -> usize {
         let inner = self.inner.lock();
         inner.ready
     }
 
+    /// Returns the VirtIO queue index.
     pub fn vq_indx(&self) -> usize {
         let inner = self.inner.lock();
         inner.vq_index
     }
 
+    /// Returns the number of descriptors in the VirtIO queue.
     pub fn num(&self) -> usize {
         let inner = self.inner.lock();
         inner.num
     }
 
+    /// Returns the guest-physical address of the descriptor at the specified index.
     pub fn desc_addr(&self, idx: usize) -> usize {
         let inner = self.inner.lock();
         let desc_table = inner.desc_table.as_ref().unwrap();
         desc_table[idx].addr
     }
 
+    /// Returns the flags of the descriptor at the specified index.
     pub fn desc_flags(&self, idx: usize) -> u16 {
         let inner = self.inner.lock();
         let desc_table = inner.desc_table.as_ref().unwrap();
         desc_table[idx].flags
     }
 
+    /// Returns the 'next' field of the descriptor at the specified index.
     pub fn desc_next(&self, idx: usize) -> u16 {
         let inner = self.inner.lock();
         let desc_table = inner.desc_table.as_ref().unwrap();
         desc_table[idx].next
     }
 
+    /// Returns the length of the descriptor at the specified index.
     pub fn desc_len(&self, idx: usize) -> u32 {
         let inner = self.inner.lock();
         let desc_table = inner.desc_table.as_ref().unwrap();
         desc_table[idx].len
     }
 
+    /// Returns the flags of the available ring.
     pub fn avail_flags(&self) -> u16 {
         let inner = self.inner.lock();
         let avail = inner.avail.as_ref().unwrap();
         avail.flags
     }
 
+    /// Returns the index of the available ring.
     pub fn avail_idx(&self) -> u16 {
         let inner = self.inner.lock();
         let avail = inner.avail.as_ref().unwrap();
         avail.idx
     }
 
+    /// Returns the last available index in the VirtIO queue.
     pub fn last_avail_idx(&self) -> u16 {
         let inner = self.inner.lock();
         inner.last_avail_idx
     }
 
+    /// Returns the index of the used ring.
     pub fn used_idx(&self) -> u16 {
         let inner = self.inner.lock();
         let used = inner.used.as_ref().unwrap();
@@ -409,25 +480,40 @@ impl Virtq {
     }
 }
 
+/// Represents the inner state of a VirtIO queue.
 pub struct VirtqInner<'a> {
+    /// The ready state of the VirtIO queue.
     ready: usize,
+    /// The index of the VirtIO queue.
     vq_index: usize,
+    /// The number of descriptors in the VirtIO queue.
     num: usize,
+    /// Optional reference to the descriptor table.
     desc_table: Option<&'a mut [VringDesc]>,
+    /// Optional reference to the available ring.
     avail: Option<&'a mut VringAvail>,
+    /// Optional reference to the used ring.
     used: Option<&'a mut VringUsed>,
+    /// The last available index in the VirtIO queue.
     last_avail_idx: u16,
+    /// The last used index in the VirtIO queue.
     last_used_idx: u16,
+    /// Flags for the used ring.
     used_flags: u16,
 
+    /// Guest-physical address of the descriptor table.
     desc_table_addr: usize,
+    /// Guest-physical address of the available ring.
     avail_addr: usize,
+    /// Guest-physical address of the used ring.
     used_addr: usize,
 
+    /// Optional function to handle VirtIO queue notifications.
     notify_handler: Option<fn(Virtq, VirtioMmio, Vm) -> bool>,
 }
 
 impl VirtqInner<'_> {
+    /// Creates a new default instance of `VirtqInner`.
     pub fn default() -> Self {
         VirtqInner {
             ready: 0,
@@ -448,7 +534,7 @@ impl VirtqInner<'_> {
         }
     }
 
-    // virtio_queue_reset
+    /// Resets the VirtIO queue to its initial state.
     pub fn reset(&mut self, index: usize) {
         self.ready = 0;
         self.vq_index = index;

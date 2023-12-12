@@ -30,6 +30,7 @@ use crate::utils::{bit_extract, bit_get, bitmap_find_nth, ptr_read_write};
 use super::gicv3::*;
 
 #[derive(Clone)]
+/// GICv3 interrupt struct
 struct VgicInt {
     inner: Arc<Mutex<VgicIntInner>>,
     pub lock: Arc<Mutex<()>>,
@@ -308,6 +309,7 @@ impl VgicIntInner {
     }
 }
 
+/// VGIC Distributor
 struct Vgicd {
     ctlr: u32,
     typer: u32,
@@ -338,6 +340,7 @@ impl Sgis {
     }
 }
 
+/// VGIC Redistributor
 struct Vgicr {
     inner: Arc<Mutex<VgicrInner>>,
     pub lock: Arc<Mutex<()>>,
@@ -392,6 +395,7 @@ impl VgicrInner {
     }
 }
 
+/// VGIC CPU Private data
 struct VgicCpuPriv {
     vigcr: Vgicr,
     // gich: GicHypervisorInterfaceBlock,
@@ -427,6 +431,7 @@ impl VgicCpuPriv {
     }
 }
 
+/// VGIC general struct
 pub struct Vgic {
     vgicd: Mutex<Vgicd>,
     cpu_priv: Mutex<Vec<VgicCpuPriv>>,
@@ -1841,6 +1846,7 @@ const VGICD_REG_OFFSET_PREFIX_ICACTIVER: usize = 0x7;
 const VGICD_REG_OFFSET_PREFIX_ICFGR: usize = 0x18;
 const VGICD_REG_OFFSET_PREFIX_SGIR: usize = 0x1e;
 
+/// emulated interrupt controller handler
 pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     let offset = emu_ctx.address & 0xffff;
 
@@ -1955,6 +1961,7 @@ pub fn vgicd_emu_access_is_vaild(emu_ctx: &EmuContext) -> bool {
     true
 }
 
+/// partial passthrough interrupt controller handler
 pub fn partial_passthrough_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     if !vgicd_emu_access_is_vaild(emu_ctx) {
         return false;
@@ -2054,6 +2061,7 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
     save_vcpu_gic(current_cpu().active_vcpu.clone(), trgt_vcpu);
 }
 
+/// emulated interrupt controller initialize
 pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
     let vgic_cpu_num = vm.config().cpu_num();
     vm.init_intc_mode(true);

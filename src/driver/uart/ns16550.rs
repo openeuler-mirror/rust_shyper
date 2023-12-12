@@ -13,6 +13,7 @@ use tock_registers::register_bitfields;
 use tock_registers::register_structs;
 use tock_registers::registers::*;
 
+/// Register bitfields for an 8-bit unsigned integer.
 register_bitfields! {
     u8,
 
@@ -274,6 +275,7 @@ register_bitfields! {
     ],
 }
 
+/// Register struct representing the UART registers.
 register_structs! {
     /// Representation of the UART registers.
     #[allow(non_snake_case)]
@@ -304,6 +306,7 @@ impl super::UartOperation for Ns16550Mmio32 {
         self.ISR_FCR.write(ISR_FCR::EN_FIFO::Mode16550);
     }
 
+    /// Sends a byte through the UART device.
     #[inline]
     fn send(&self, byte: u8) {
         while !self.LSR.is_set(LSR::THRE) {

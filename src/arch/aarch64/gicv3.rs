@@ -345,6 +345,7 @@ impl GicDistributor {
             .set(prev | GICD_CTLR_ARE_NS_BIT as u32 | GICD_CTLR_ENNS_BIT as u32);
     }
 
+    /// send software generated interrupt to a cpu
     pub fn send_sgi(&self, cpu_target: usize, sgi_num: usize) {
         if sgi_num < GIC_SGIS_NUM {
             let mpidr = Platform::cpuid_to_cpuif(cpu_target) & MPIDR_AFF_MSK;
@@ -362,12 +363,14 @@ impl GicDistributor {
         }
     }
 
+    /// get priority of `int_id`
     pub fn prio(&self, int_id: usize) -> usize {
         let idx = (int_id * GIC_PRIO_BITS) / 32;
         let off = (int_id * GIC_PRIO_BITS) % 32;
         ((self.IPRIORITYR[idx].get() >> off) & 0xff) as usize
     }
 
+    /// set priority of `int_id` to `prio`
     pub fn set_prio(&self, int_id: usize, prio: u8) {
         let idx = ((int_id) * GIC_PRIO_BITS) / 32;
         let off = (int_id * GIC_PRIO_BITS) % 32;
@@ -482,6 +485,7 @@ impl GicDistributor {
         pend | act
     }
 
+    /// set route attribute of `int_id`
     pub fn set_route(&self, int_id: usize, route: usize) {
         if gic_is_priv(int_id) {
             return;
@@ -934,6 +938,7 @@ impl GicHypervisorInterface {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+/// GIC state struct
 pub struct GicState {
     pub ctlr: u32,
     pub pmr: u32,
@@ -978,7 +983,7 @@ impl Default for GicState {
     }
 }
 
-impl crate::arch::InterruptContextTriat for GicState {
+impl crate::arch::InterruptContextTrait for GicState {
     fn save_state(&mut self) {
         self.hcr = ICH_HCR_EL2::read();
         // save VMCR_EL2: save and restore the virtual machine view of the GIC state.
