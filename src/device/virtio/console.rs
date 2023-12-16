@@ -20,7 +20,7 @@ use crate::device::VirtioIov;
 use crate::kernel::{active_vm, vm_if_set_mem_map_bit, vm_ipa2pa};
 use crate::kernel::vm;
 use crate::kernel::Vm;
-use crate::utils::{round_down, trace};
+use crate::utils::round_down;
 
 pub const VIRTQUEUE_CONSOLE_MAX_SIZE: usize = 64;
 
@@ -74,15 +74,6 @@ impl ConsoleDesc {
     pub fn start_addr(&self) -> usize {
         let inner = self.inner.lock();
         &inner.cols as *const _ as usize
-    }
-
-    pub fn offset_data(&self, offset: usize) -> u32 {
-        let start_addr = self.start_addr();
-        if trace() && start_addr + offset < 0x1000 {
-            debug!("value addr is {}", start_addr + offset);
-        }
-
-        unsafe { *((start_addr + offset) as *const u32) }
     }
 
     pub fn target_console(&self) -> (u16, u64) {

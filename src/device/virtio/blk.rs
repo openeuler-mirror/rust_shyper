@@ -107,13 +107,12 @@ impl BlkDesc {
         &inner.capacity as *const _ as usize
     }
 
-    pub fn offset_data(&self, offset: usize) -> u32 {
+    /// ### SAFETY:
+    /// caller must ensure offset is valid
+    /// offset must valid for virtio_mmio
+    pub unsafe fn offset_data(&self, offset: usize) -> u32 {
         let start_addr = self.start_addr();
-        if trace() && start_addr + offset < 0x1000 {
-            panic!("illegal addr {:x}", start_addr + offset);
-        }
-
-        unsafe { *((start_addr + offset) as *const u32) }
+        *((start_addr + offset) as *const u32)
     }
 }
 

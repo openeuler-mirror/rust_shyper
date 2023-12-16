@@ -637,10 +637,12 @@ fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize,
             }
             VIRTIO_MMIO_CONFIG..=0x1ff => match mmio.dev().desc() {
                 super::DevDesc::BlkDesc(blk_desc) => {
-                    value = blk_desc.offset_data(offset - VIRTIO_MMIO_CONFIG);
+                    // SAFETY: offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
+                    value = unsafe { blk_desc.offset_data(offset - VIRTIO_MMIO_CONFIG) };
                 }
                 super::DevDesc::NetDesc(net_desc) => {
-                    value = net_desc.offset_data(offset - VIRTIO_MMIO_CONFIG);
+                    // SAFETY: offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
+                    value = unsafe { net_desc.offset_data(offset - VIRTIO_MMIO_CONFIG) };
                 }
                 _ => {
                     panic!("unknow desc type");
@@ -691,7 +693,9 @@ pub fn emu_virtio_mmio_init(vm: Vm, emu_dev_id: usize, mediated: bool) -> bool {
 }
 
 pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
-    // println!("emu_virtio_mmio_handler active_vcpu addr {:x}", unsafe { *(&current_cpu().active_vcpu as *const _ as *const usize) });
+    trace!("emu_virtio_mmio_handler active_vcpu addr {:x}", unsafe {
+        *(&current_cpu().active_vcpu as *const _ as *const usize)
+    });
     let vm = match active_vm() {
         Some(vm) => vm,
         None => {
@@ -712,22 +716,13 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
     let offset = addr - vm.config().emulated_device_list()[emu_dev_id].base_ipa;
     let write = emu_ctx.write;
 
-    // if vm.vm_id() == 1 && emu_dev_id == 2 {
-    //     println!("### emu_virtio_mmio_handler offset {:x} ###", offset);
-    // }
     if offset == VIRTIO_MMIO_QUEUE_NOTIFY && write {
         mmio.set_irt_stat(VIRTIO_MMIO_INT_VRING);
-        // let q_sel = mmio.q_sel();
-        // if q_sel as usize != current_cpu().get_gpr(emu_ctx.reg) {
-        // println!("{} {}", q_sel as usize, current_cpu().get_gpr(emu_ctx.reg));
-        // }
-        // println!("in VIRTIO_MMIO_QUEUE_NOTIFY");
 
         if !mmio.notify_handler(current_cpu().get_gpr(emu_ctx.reg)) {
             error!("Failed to handle virtio mmio request!");
         }
     } else if offset == VIRTIO_MMIO_INTERRUPT_STATUS && !write {
-        // println!("in VIRTIO_MMIO_INTERRUPT_STATUS");
         let idx = emu_ctx.reg;
         let val = mmio.irt_stat() as usize;
         current_cpu().set_gpr(idx, val);
@@ -739,13 +734,10 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
     } else if (VIRTIO_MMIO_MAGIC_VALUE..=VIRTIO_MMIO_GUEST_FEATURES_SEL).contains(&offset)
         || offset == VIRTIO_MMIO_STATUS
     {
-        // println!("in virtio_mmio_prologue_access");
         virtio_mmio_prologue_access(mmio, emu_ctx, offset, write);
     } else if (VIRTIO_MMIO_QUEUE_SEL..=VIRTIO_MMIO_QUEUE_USED_HIGH).contains(&offset) {
-        // println!("in virtio_mmio_queue_access");
         virtio_mmio_queue_access(mmio, emu_ctx, offset, write);
     } else if (VIRTIO_MMIO_CONFIG_GENERATION..=VIRTIO_MMIO_REGS_END).contains(&offset) {
-        // println!("in virtio_mmio_cfg_access");
         virtio_mmio_cfg_access(mmio, emu_ctx, offset, write);
     } else {
         error!(

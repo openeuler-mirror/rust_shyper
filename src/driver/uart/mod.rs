@@ -24,12 +24,15 @@ trait UartOperation {
     fn send(&self, byte: u8);
 }
 
-use crate::board::{PlatOperation, Platform};
+use crate::{
+    board::{PlatOperation, Platform},
+    utils::device_ref::DeviceRef,
+};
 
 const UART_BASE: usize = Platform::HYPERVISOR_UART_BASE;
 
-const UART: &dyn UartOperation = &Uart::<UART_BASE>;
-
+// SAFETY: the reference of unart is a MMIO address
+const UART: DeviceRef<Uart> = unsafe { DeviceRef::new(UART_BASE as *const Uart) };
 pub fn putc(byte: u8) {
     if byte == b'\n' {
         putc(b'\r');

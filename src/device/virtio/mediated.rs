@@ -18,7 +18,6 @@ use crate::kernel::{
     IpiInnerMsg, set_front_io_task_state, vm, vm_ipa2pa, VM_LIST,
 };
 use crate::kernel::IpiMessage;
-use crate::utils::trace;
 
 pub static MEDIATED_BLK_LIST: Mutex<Vec<MediatedBlk>> = Mutex::new(Vec::new());
 
@@ -67,7 +66,7 @@ pub fn mediated_blk_list_get(idx: usize) -> MediatedBlk {
 pub fn mediated_blk_list_get_from_pa(pa: usize) -> Option<MediatedBlk> {
     let list = MEDIATED_BLK_LIST.lock();
     for blk in &*list {
-        if blk.base_addr == pa {
+        if blk.content as usize == pa {
             return Some(blk.clone());
         }
     }
@@ -76,16 +75,25 @@ pub fn mediated_blk_list_get_from_pa(pa: usize) -> Option<MediatedBlk> {
 
 #[derive(Clone)]
 pub struct MediatedBlk {
-    pub base_addr: usize,
-    pub avail: bool, // mediated blk will not be removed after append
+    content: *mut MediatedBlkContent,
+    avail: bool, // mediated blk will not be removed after append
 }
 
+// Safety: MediatedBlk is only used in VM0 and VM0 is only one core when muti-vm is supported
+unsafe impl Send for MediatedBlk {}
+
 impl MediatedBlk {
-    pub fn content(&self) -> &mut MediatedBlkContent {
-        if trace() && self.base_addr < 0x1000 {
-            panic!("illeagal addr {:x}", self.base_addr);
+    // SAFETY: addr must be a valid MMIO address of virtio-blk config
+    pub unsafe fn from_addr(addr: usize) -> Self {
+        Self {
+            content: unsafe { &mut *(addr as *mut MediatedBlkContent) },
+            avail: true,
         }
-        unsafe { &mut *(self.base_addr as *mut MediatedBlkContent) }
+    }
+
+    fn content(&self) -> &'static mut MediatedBlkContent {
+        // SAFETY: content is a valid pointer after `from_addr`
+        unsafe { &mut *self.content }
     }
 
     pub fn dma_block_max(&self) -> usize {
@@ -158,10 +166,9 @@ pub struct MediatedBlkReq {
 pub fn mediated_dev_append(_class_id: usize, mmio_ipa: usize) -> Result<usize, ()> {
     let vm = active_vm().unwrap();
     let blk_pa = vm_ipa2pa(vm.clone(), mmio_ipa);
-    let mediated_blk = MediatedBlk {
-        base_addr: blk_pa,
-        avail: true,
-    };
+    // TODO: check weather the blk_pa is valid
+    // SAFETY:blk_pa is valid MMIO address of virtio-blk config
+    let mediated_blk = unsafe { MediatedBlk::from_addr(blk_pa) };
     mediated_blk.set_nreq(0);
 
     let cache_pa = vm_ipa2pa(vm, mediated_blk.cache_ipa());

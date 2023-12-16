@@ -1034,6 +1034,7 @@ impl GicState {
     }
 }
 
+// SAFETY: GICD & GICR are GICv3 mmio device regions
 pub static GICD: DeviceRef<GicDistributor> = unsafe { DeviceRef::new(Platform::GICD_BASE as *const GicDistributor) };
 pub static GICC: GicCpuInterface = GicCpuInterface;
 pub static GICH: GicHypervisorInterface = GicHypervisorInterface;

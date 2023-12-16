@@ -197,8 +197,6 @@ impl Virtq {
         match inner.notify_handler {
             Some(handler) => {
                 drop(inner);
-                // println!("call_notify_handler");
-                // println!("handler addr {:x}", unsafe { *(&handler as *const _ as *const usize) });
                 handler(self.clone(), mmio, active_vm().unwrap())
             }
             None => {

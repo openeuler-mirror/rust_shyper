@@ -22,6 +22,11 @@ impl<T> DeviceRef<'_, T> {
             _maker: PhantomData,
         }
     }
+
+    #[inline(always)]
+    pub fn addr(&self) -> usize {
+        self.ptr.as_ptr() as usize
+    }
 }
 
 impl<T> Clone for DeviceRef<'_, T> {

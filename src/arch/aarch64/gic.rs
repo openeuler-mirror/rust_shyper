@@ -544,6 +544,7 @@ impl crate::arch::InterruptContextTriat for GicState {
     }
 }
 
+// SAFETY: they are GICv2 mmio device regions
 pub static GICD: DeviceRef<GicDistributor> = unsafe { DeviceRef::new(Platform::GICD_BASE as *const GicDistributor) };
 pub static GICC: DeviceRef<GicCpuInterface> = unsafe { DeviceRef::new(Platform::GICC_BASE as *const GicCpuInterface) };
 pub static GICH: DeviceRef<GicHypervisorInterface> =
