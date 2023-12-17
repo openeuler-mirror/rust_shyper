@@ -80,11 +80,11 @@ build: cargo
 
 doc-pre:
 	cargo doc ${CARGO_FLAGS}
-	sudo cp -r target/aarch64/doc/* /var/www/html
+# sudo cp -r target/aarch64/doc/* /var/www/html
 
 # This target is created for passing env variable ${BOARD} to MAKE
 doc:
-	$(MAKE) doc-pre BOARD=qemu
+	$(MAKE) doc-pre BOARD=qemu FEATURES=doc
 
 cargo:
 	cargo ${CARGO_ACTION} ${CARGO_FLAGS}

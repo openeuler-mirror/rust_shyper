@@ -59,39 +59,90 @@ use vmm::{vm_init, vmm_boot_vm};
 
 use crate::kernel::{cpu_sched_init, iommu_init};
 
+#[cfg(feature = "doc")]
 #[macro_use]
-mod macros;
-
+pub mod macros;
 #[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod arch;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod board;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod config;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod device;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod driver;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod kernel;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod mm;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod panic;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod utils;
+#[allow(dead_code)]
+#[cfg(feature = "doc")]
+pub mod vmm;
+
+#[cfg(feature = "doc")]
+pub mod error;
+#[cfg(feature = "doc")]
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+#[macro_use]
+#[cfg(not(feature = "doc"))]
+mod macros;
+#[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod arch;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod board;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod config;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod device;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod driver;
+#[cfg(not(feature = "doc"))]
+mod error;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod kernel;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod mm;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod panic;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod utils;
 #[allow(dead_code)]
+#[cfg(not(feature = "doc"))]
 mod vmm;
-
-mod error;
+#[cfg(not(feature = "doc"))]
+mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
 
 // use lib::{BitAlloc, BitAlloc256};
 
 pub static SYSTEM_FDT: spin::Once<alloc::vec::Vec<u8>> = spin::Once::new();
-
-mod built_info {
-    include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
 
 fn print_built_info() {
     println!(
