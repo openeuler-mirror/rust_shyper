@@ -95,26 +95,22 @@ fn print_built_info() {
     );
 }
 
+// Only core 0 will execute this function
 #[no_mangle]
-pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
-    // #[cfg(feature="qemu")]
-    // board::Platform::parse_dtb(dtb);
+pub fn init(dtb: *mut fdt::myctypes::c_void) {
+    print_built_info();
 
-    if cpu_id == 0 {
-        print_built_info();
-
-        #[cfg(feature = "pi4")]
-        {
-            crate::driver::gpio_select_function(0, 4);
-            crate::driver::gpio_select_function(1, 4);
-        }
-
-        heap_init();
-        kernel::logger_init().unwrap();
-        mem_init();
-        init_vm0_dtb(dtb).unwrap();
-        iommu_init();
+    #[cfg(feature = "pi4")]
+    {
+        crate::driver::gpio_select_function(0, 4);
+        crate::driver::gpio_select_function(1, 4);
     }
+
+    heap_init();
+    kernel::logger_init().unwrap();
+    mem_init();
+    init_vm0_dtb(dtb).unwrap();
+    iommu_init();
     cpu_init();
     interrupt_init();
     timer_init();
@@ -123,9 +119,6 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();
 
-    if cpu_id != 0 {
-        crate::kernel::cpu_idle();
-    }
     vm_init();
     info!(
         "{} Hypervisor init ok\n\nStart booting Monitor VM ...",
@@ -138,11 +131,15 @@ pub fn init(cpu_id: usize, dtb: *mut fdt::myctypes::c_void) {
     }
 }
 
+// Other cores will execute this function
 pub fn secondary_init(mpidr: usize) {
     cpu_init();
     interrupt_init();
     timer_init();
     cpu_sched_init();
+
+    #[cfg(not(feature = "secondary_start"))]
+    crate::utils::barrier();
     use crate::arch::guest_cpu_on;
     guest_cpu_on(mpidr);
     loop {

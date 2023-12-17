@@ -353,10 +353,8 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
         drop(cpu_if_list);
         let mpidr = Platform::cpuid2mpidr(cpu_idx);
 
-        use crate::arch::BOOT_STACK;
         let entry_point = crate::arch::_secondary_start as usize;
-        let stack = unsafe { &BOOT_STACK as *const _ as usize + 4096 * 2 * cpu_idx as usize };
-        r = power_arch_cpu_on(mpidr, entry_point, stack);
+        r = power_arch_cpu_on(mpidr, entry_point, cpu_idx);
         debug!(
             "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
             mpidr, entry_point
@@ -442,10 +440,8 @@ pub fn psci_vm_maincpu_on(vmpidr: usize, entry: usize, ctx: usize, vm_id: usize)
 
         let mpidr = Platform::cpuid2mpidr(cpu_idx);
 
-        use crate::arch::BOOT_STACK;
         let entry_point = crate::arch::_secondary_start as usize;
-        let stack = unsafe { &BOOT_STACK as *const _ as usize + 4096 * 2 * cpu_idx as usize };
-        r = power_arch_cpu_on(mpidr, entry_point, stack);
+        r = power_arch_cpu_on(mpidr, entry_point, cpu_idx);
         debug!(
             "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
             mpidr, entry_point

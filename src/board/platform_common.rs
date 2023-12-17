@@ -99,10 +99,10 @@ pub trait PlatOperation {
     fn power_on_secondary_cores() {
         use super::PLAT_DESC;
         extern "C" {
-            fn _image_start();
+            fn _secondary_start();
         }
         for i in 1..PLAT_DESC.cpu_desc.num {
-            Self::cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _image_start as usize, 0);
+            Self::cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _secondary_start as usize, i);
         }
     }
 

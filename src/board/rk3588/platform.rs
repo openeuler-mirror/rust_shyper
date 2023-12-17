@@ -69,7 +69,7 @@ impl PlatOperation for Rk3588Platform {
     }
 }
 
-pub static PLAT_DESC: PlatformConfig = PlatformConfig {
+pub const PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
         num: 8,
         core_list: &[

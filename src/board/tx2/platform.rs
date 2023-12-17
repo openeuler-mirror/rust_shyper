@@ -54,7 +54,7 @@ impl PlatOperation for Tx2Platform {
     }
 }
 
-pub static PLAT_DESC: PlatformConfig = PlatformConfig {
+pub const PLAT_DESC: PlatformConfig = PlatformConfig {
     cpu_desc: PlatCpuConfig {
         num: 4,
         core_list: &[
