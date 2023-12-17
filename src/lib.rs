@@ -60,36 +60,36 @@ use vmm::{vm_init, vmm_boot_vm};
 use crate::kernel::{cpu_sched_init, iommu_init};
 
 #[macro_use]
-pub mod macros;
+mod macros;
 
 #[allow(dead_code)]
-pub mod arch;
+mod arch;
 #[allow(dead_code)]
-pub mod board;
+mod board;
 #[allow(dead_code)]
-pub mod config;
+mod config;
 #[allow(dead_code)]
-pub mod device;
+mod device;
 #[allow(dead_code)]
-pub mod driver;
+mod driver;
 #[allow(dead_code)]
-pub mod kernel;
+mod kernel;
 #[allow(dead_code)]
-pub mod mm;
+mod mm;
 #[allow(dead_code)]
-pub mod panic;
+mod panic;
 #[allow(dead_code)]
-pub mod utils;
+mod utils;
 #[allow(dead_code)]
-pub mod vmm;
+mod vmm;
 
-pub mod error;
+mod error;
 
 // use lib::{BitAlloc, BitAlloc256};
 
 pub static SYSTEM_FDT: spin::Once<alloc::vec::Vec<u8>> = spin::Once::new();
 
-pub mod built_info {
+mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
