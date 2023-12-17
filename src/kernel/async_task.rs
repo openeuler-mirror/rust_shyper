@@ -26,32 +26,6 @@ use crate::device::{
 use crate::kernel::{active_vm_id, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiType, vm};
 use crate::utils::{memcpy_safe, sleep, trace};
 
-pub static TASK_IPI_COUNT: Mutex<usize> = Mutex::new(0);
-pub static TASK_COUNT: Mutex<usize> = Mutex::new(0);
-
-pub fn add_task_ipi_count() {
-    let mut count = TASK_IPI_COUNT.lock();
-    *count += 1;
-}
-
-pub fn add_task_count() {
-    let mut count = TASK_COUNT.lock();
-    if *count % 100 == 0 {
-        trace!("task count {}, ipi count {}", *count, get_task_ipi_count());
-    }
-    *count += 1;
-}
-
-pub fn get_task_ipi_count() -> usize {
-    let count = TASK_IPI_COUNT.lock();
-    *count
-}
-
-pub fn get_task_count() -> usize {
-    let count = TASK_COUNT.lock();
-    *count
-}
-
 #[derive(Clone, Copy, Debug)]
 pub enum AsyncTaskState {
     Pending,

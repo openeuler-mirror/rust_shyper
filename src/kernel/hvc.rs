@@ -10,6 +10,7 @@
 
 use alloc::collections::BTreeMap;
 use core::mem::size_of;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use spin::Mutex;
 
@@ -24,7 +25,7 @@ use crate::utils::{memcpy_safe, trace};
 #[cfg(feature = "unilib")]
 use crate::utils::unilib::*;
 use crate::vmm::{get_vm_id, vmm_boot_vm, vmm_list_vm, vmm_reboot_vm, vmm_remove_vm};
-pub static VM_STATE_FLAG: Mutex<usize> = Mutex::new(0);
+pub static VM_STATE_FLAG: AtomicUsize = AtomicUsize::new(0);
 
 pub static SHARE_MEM_LIST: Mutex<BTreeMap<usize, usize>> = Mutex::new(BTreeMap::new());
 // If succeed, return 0.
@@ -295,7 +296,7 @@ fn hvc_vmm_handler(event: usize, x0: usize, _x1: usize) -> Result<usize, ()> {
         }
         HVC_VMM_VM_REMOVE => {
             vmm_remove_vm(x0);
-            *VM_STATE_FLAG.lock() = 0;
+            VM_STATE_FLAG.store(0, Ordering::Relaxed);
             Ok(HVC_FINISH)
         }
         _ => {

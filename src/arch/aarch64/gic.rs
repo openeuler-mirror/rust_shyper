@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::collections::BTreeSet;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use spin::Mutex;
 use tock_registers::*;
@@ -55,7 +56,7 @@ pub const GICD_TYPER_CPUNUM_OFF: usize = 5;
 // pub const GICD_TYPER_CPUNUM_LEN: usize = 3;
 pub const GICD_TYPER_CPUNUM_MSK: usize = 0b11111;
 
-pub static GIC_LRS_NUM: Mutex<usize> = Mutex::new(0);
+pub static GIC_LRS_NUM: AtomicUsize = AtomicUsize::new(0);
 
 static GICD_LOCK: Mutex<()> = Mutex::new(());
 
@@ -610,10 +611,9 @@ pub fn gicc_get_current_irq() -> Option<usize> {
 }
 
 pub fn gic_lrs() -> usize {
-    *GIC_LRS_NUM.lock()
+    GIC_LRS_NUM.load(Ordering::Relaxed)
 }
 
 pub fn set_gic_lrs(lrs: usize) {
-    let mut gic_lrs = GIC_LRS_NUM.lock();
-    *gic_lrs = lrs;
+    GIC_LRS_NUM.store(lrs, Ordering::Relaxed);
 }

@@ -233,7 +233,7 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         // update ctrl queue used ring
         if vm.id() != 0 {
             let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            if *VM_STATE_FLAG.lock() == 1 {
+            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
                 debug!("vm1 virtio net ctrl write memory in 0x{:x}", used_addr);
             }
             vm_if_set_mem_map_bit(vm.clone(), used_addr);
@@ -294,7 +294,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
 
         if vm.id() != 0 {
             let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            if *VM_STATE_FLAG.lock() == 1 {
+            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
                 debug!("vm1 virtio net write memory in 0x{:x}", used_addr);
             }
             vm_if_set_mem_map_bit(vm.clone(), used_addr);
@@ -545,7 +545,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
 
         if vmid != 0 {
             let mut addr = round_down(dst, PAGE_SIZE);
-            if *VM_STATE_FLAG.lock() == 1 {
+            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
                 debug!("A: vm0 virtio net write vm1 memory in 0x{:x}", addr);
             }
             while addr <= round_down(dst + desc_len, PAGE_SIZE) {
@@ -588,7 +588,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
 
     if vmid != 0 {
         let used_addr = vm_ipa2pa(vm.clone(), rx_vq.used_addr());
-        if *VM_STATE_FLAG.lock() == 1 {
+        if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
             debug!("B: vm0 virtio net write vm1 memory in 0x{:x}", used_addr);
         }
         vm_if_set_mem_map_bit(vm.clone(), used_addr);

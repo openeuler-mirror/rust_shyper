@@ -10,6 +10,7 @@
 
 use core::fmt;
 use core::mem::size_of;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::collections::BTreeSet;
 
@@ -140,7 +141,7 @@ pub const GICD_TYPER_CPUNUM_MSK: usize = ((1 << GICD_TYPER_CPUNUM_LEN) - 1) << (
 const GICD_TYPER_ITLINESNUM_LEN: usize = 0b11111;
 pub const ICC_CTLR_EOIMODE_BIT: usize = 0x1 << 1;
 
-pub static GIC_LRS_NUM: Mutex<usize> = Mutex::new(0);
+pub static GIC_LRS_NUM: AtomicUsize = AtomicUsize::new(0);
 
 static GICD_LOCK: Mutex<()> = Mutex::new(());
 static GICR_LOCK: Mutex<()> = Mutex::new(());
@@ -1102,12 +1103,11 @@ pub fn gicc_get_current_irq() -> Option<usize> {
 }
 
 pub fn gic_lrs() -> usize {
-    *GIC_LRS_NUM.lock()
+    GIC_LRS_NUM.load(Ordering::Relaxed)
 }
 
 pub fn set_gic_lrs(lrs: usize) {
-    let mut gic_lrs = GIC_LRS_NUM.lock();
-    *gic_lrs = lrs;
+    GIC_LRS_NUM.store(lrs, Ordering::Relaxed);
 }
 
 pub fn gic_set_icfgr(int_id: usize, cfg: u8) {
