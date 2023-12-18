@@ -120,10 +120,16 @@ impl NetDesc {
     /// ### SAFETY:
     /// caller must ensure offset is valid
     /// offset must valid for virtio_mmio
-    pub unsafe fn offset_data(&self, offset: usize) -> u32 {
+    pub unsafe fn offset_data(&self, offset: usize, width: usize) -> usize {
         let inner = self.inner.lock();
         let start_addr = &inner.mac[0] as *const _ as usize;
-        *((start_addr + offset) as *const u32)
+        match width {
+            1 => unsafe { *((start_addr + offset) as *const u8) as usize },
+            2 => unsafe { *((start_addr + offset) as *const u16) as usize },
+            4 => unsafe { *((start_addr + offset) as *const u32) as usize },
+            8 => unsafe { *((start_addr + offset) as *const u64) as usize },
+            _ => 0,
+        }
     }
 }
 

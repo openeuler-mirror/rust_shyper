@@ -631,18 +631,19 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
 fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize, write: bool) {
     if !write {
         let value;
+        let width = emu_ctx.width;
         match offset {
             VIRTIO_MMIO_CONFIG_GENERATION => {
-                value = mmio.dev().generation() as u32;
+                value = mmio.dev().generation();
             }
             VIRTIO_MMIO_CONFIG..=0x1ff => match mmio.dev().desc() {
                 super::DevDesc::BlkDesc(blk_desc) => {
                     // SAFETY: offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
-                    value = unsafe { blk_desc.offset_data(offset - VIRTIO_MMIO_CONFIG) };
+                    value = unsafe { blk_desc.offset_data(offset - VIRTIO_MMIO_CONFIG, width) };
                 }
                 super::DevDesc::NetDesc(net_desc) => {
                     // SAFETY: offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
-                    value = unsafe { net_desc.offset_data(offset - VIRTIO_MMIO_CONFIG) };
+                    value = unsafe { net_desc.offset_data(offset - VIRTIO_MMIO_CONFIG, width) };
                 }
                 _ => {
                     panic!("unknow desc type");
@@ -654,8 +655,7 @@ fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize,
             }
         }
         let idx = emu_ctx.reg;
-        let val = value as usize;
-        current_cpu().set_gpr(idx, val);
+        current_cpu().set_gpr(idx, value);
     } else {
         error!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
     }
