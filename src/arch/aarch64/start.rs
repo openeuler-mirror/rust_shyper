@@ -74,9 +74,6 @@ pub unsafe extern "C" fn _start() -> ! {
         mrs x0, mpidr_el1
         bl  {cpu_map_self}
 
-        // set EL2 pgtable
-        msr ttbr0_el2, x0
-
         bl {init_sysregs} // here, enable cache and MMU, then switch the stack
 
         // set real sp pointer
@@ -148,9 +145,6 @@ pub unsafe extern "C" fn _secondary_start() -> ! {
         // map cpu page table
         mrs x0, mpidr_el1
         bl  {cpu_map_self}
-
-        // set EL2 pgtable
-        msr ttbr0_el2, x0
 
         bl {init_sysregs} // here, enable cache and MMU, then switch the stack
 

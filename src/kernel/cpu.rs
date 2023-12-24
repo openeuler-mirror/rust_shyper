@@ -13,7 +13,7 @@ use core::ptr;
 
 use spin::Mutex;
 
-use crate::arch::{PAGE_SIZE, PTE_PER_PAGE, set_current_cpu, pt_map_banked_cpu};
+use crate::arch::{PAGE_SIZE, set_current_cpu};
 use crate::arch::ContextFrame;
 use crate::arch::ContextFrameTrait;
 // use core::ops::{Deref, DerefMut};
@@ -27,21 +27,6 @@ pub const CPU_MASTER: usize = 0;
 pub const CPU_STACK_SIZE: usize = PAGE_SIZE * 128;
 pub const CONTEXT_GPR_NUM: usize = 31;
 pub const CPU_STACK_OFFSET: usize = offset_of!(Cpu, stack);
-
-#[repr(C)]
-#[repr(align(4096))]
-#[derive(Copy, Clone, Debug, Eq)]
-pub struct CpuPt {
-    pub lvl1: [usize; PTE_PER_PAGE],
-    pub lvl2: [usize; PTE_PER_PAGE],
-    pub lvl3: [usize; PTE_PER_PAGE],
-}
-
-impl PartialEq for CpuPt {
-    fn eq(&self, other: &Self) -> bool {
-        self.lvl1 == other.lvl1 && self.lvl2 == other.lvl2 && self.lvl3 == other.lvl3
-    }
-}
 
 #[derive(Copy, Clone, Debug, Eq)]
 pub enum CpuState {
@@ -104,9 +89,18 @@ fn cpu_if_init() {
     }
 }
 
-#[repr(C)]
-#[repr(align(4096))]
-// #[derive(Clone)]
+#[repr(C, align(4096))]
+struct CpuStack([u8; CPU_STACK_SIZE]);
+
+impl core::ops::Deref for CpuStack {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[repr(C, align(4096))]
 pub struct Cpu {
     pub id: usize,
     pub cpu_state: CpuState,
@@ -116,8 +110,7 @@ pub struct Cpu {
     pub sched: SchedType,
     pub vcpu_array: VcpuArray,
     pub current_irq: usize,
-    pub cpu_pt: CpuPt,
-    pub stack: [u8; CPU_STACK_SIZE],
+    stack: CpuStack,
 }
 
 impl Cpu {
@@ -130,12 +123,7 @@ impl Cpu {
             sched: SchedType::None,
             vcpu_array: VcpuArray::new(),
             current_irq: 0,
-            cpu_pt: CpuPt {
-                lvl1: [0; PTE_PER_PAGE],
-                lvl2: [0; PTE_PER_PAGE],
-                lvl3: [0; PTE_PER_PAGE],
-            },
-            stack: [0; CPU_STACK_SIZE],
+            stack: CpuStack([0; CPU_STACK_SIZE]),
         }
     }
 
@@ -315,15 +303,9 @@ pub fn cpu_idle() -> ! {
 
 pub static mut CPU_LIST: [Cpu; PLATFORM_CPU_NUM_MAX] = [const { Cpu::default() }; PLATFORM_CPU_NUM_MAX];
 
-#[no_mangle]
-// #[link_section = ".text.boot"]
-pub extern "C" fn cpu_map_self(mpidr: usize) -> usize {
+pub extern "C" fn cpu_map_self(mpidr: usize) {
     let cpu_id = Platform::mpidr2cpuid(mpidr);
     let cpu = unsafe { &mut CPU_LIST[cpu_id] };
     cpu.id = cpu_id;
-
-    let lvl1_addr = pt_map_banked_cpu(cpu);
     set_current_cpu(cpu as *const _ as u64);
-
-    lvl1_addr
 }

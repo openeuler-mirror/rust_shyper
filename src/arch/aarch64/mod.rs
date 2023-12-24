@@ -17,7 +17,6 @@ pub use self::gic::*;
 pub use self::gicv3::*;
 pub use self::interface::*;
 pub use self::interrupt::*;
-pub use self::mmu::*;
 pub use self::page_table::*;
 pub use self::psci::*;
 pub use self::smc::*;

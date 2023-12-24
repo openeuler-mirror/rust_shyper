@@ -15,9 +15,7 @@ use spin::Mutex;
 
 use crate::arch::ArchPageTableEntryTrait;
 use crate::arch::WORD_SIZE;
-use crate::kernel::Cpu;
 use crate::kernel::mem_page_alloc;
-use crate::utils::{memcpy_safe, memset_safe};
 use crate::utils::round_up;
 use crate::mm::PageFrame;
 
@@ -107,16 +105,6 @@ pub fn pt_lvl2_idx(va: usize) -> usize {
 
 pub fn pt_lvl3_idx(va: usize) -> usize {
     (va >> LVL3_SHIFT) & (PTE_PER_PAGE - 1)
-}
-
-pub fn pt_map_banked_cpu(cpu: &mut Cpu) -> usize {
-    let addr = unsafe { &super::LVL1_PAGE_TABLE as *const _ } as usize;
-
-    memcpy_safe(&(cpu.cpu_pt.lvl1) as *const _ as *mut u8, addr as *mut u8, PAGE_SIZE);
-    memset_safe(&(cpu.cpu_pt.lvl2) as *const _ as *mut u8, 0, PAGE_SIZE);
-    memset_safe(&(cpu.cpu_pt.lvl3) as *const _ as *mut u8, 0, PAGE_SIZE);
-
-    &(cpu.cpu_pt.lvl1) as *const _ as usize
 }
 
 #[repr(transparent)]
