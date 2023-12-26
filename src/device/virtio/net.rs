@@ -117,7 +117,7 @@ impl NetDesc {
         inner.mac[5] = mac[5] as u8;
     }
 
-    /// ### SAFETY:
+    /// # SAFETY:
     /// caller must ensure offset is valid
     /// offset must valid for virtio_mmio
     pub unsafe fn offset_data(&self, offset: usize, width: usize) -> usize {

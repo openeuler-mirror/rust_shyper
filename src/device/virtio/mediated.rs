@@ -79,11 +79,12 @@ pub struct MediatedBlk {
     avail: bool, // mediated blk will not be removed after append
 }
 
-// Safety: MediatedBlk is only used in VM0 and VM0 is only one core when muti-vm is supported
+// SAFETY: MediatedBlk is only used in VM0 and VM0 is only one core when muti-vm is supported
 unsafe impl Send for MediatedBlk {}
 
 impl MediatedBlk {
-    // SAFETY: addr must be a valid MMIO address of virtio-blk config
+    /// # Safety:
+    /// addr must be a valid MMIO address of virtio-blk config
     pub unsafe fn from_addr(addr: usize) -> Self {
         Self {
             content: unsafe { &mut *(addr as *mut MediatedBlkContent) },

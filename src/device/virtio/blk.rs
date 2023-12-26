@@ -107,7 +107,7 @@ impl BlkDesc {
         &inner.capacity as *const _ as usize
     }
 
-    /// ### SAFETY:
+    /// # Safety:
     /// caller must ensure offset is valid
     /// offset must valid for virtio_mmio
     pub unsafe fn offset_data(&self, offset: usize, width: usize) -> usize {
@@ -541,6 +541,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                         error!("virtio_blk_notify_handler: failed to get vreq");
                         return false;
                     }
+                    // SAFETY: vreq_addr is checked
                     let vreq = unsafe { &mut *(vreq_addr as *mut VirtioBlkReqNode) };
                     req_node.req_type = vreq.req_type;
                     req_node.sector = vreq.sector;
@@ -583,6 +584,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                     error!("virtio_blk_notify_handler: vm[{}] failed to vstatus", vm.id());
                     return false;
                 }
+                // SAFETY: vstatus_addr is checked
                 let vstatus = unsafe { &mut *(vstatus_addr as *mut u8) };
                 if req_node.req_type > 1 && req_node.req_type != VIRTIO_BLK_T_GET_ID as u32 {
                     *vstatus = VIRTIO_BLK_S_UNSUPP as u8;

@@ -16,11 +16,12 @@ use alloc::vec::Vec;
 
 use spin::Mutex;
 
-use crate::{arch::GICH, kernel::IpiInitcMessage};
+use crate::arch::{GICH, MPIDR_EL1};
+use crate::arch::aarch64::regs::ReadableReg;
 use crate::board::{Platform, PlatOperation, PLAT_DESC};
 use crate::device::EmuContext;
 use crate::device::EmuDevs;
-use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, cpuid2mpidr};
+use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, cpuid2mpidr, IpiInitcMessage};
 use crate::kernel::{active_vm, active_vm_id};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm};
@@ -1662,9 +1663,7 @@ fn vgicr_emul_pidr_access(emu_ctx: &EmuContext, vgicr_id: usize) {
 fn vgic_int_vcpu_is_target(vcpu: &Vcpu, interrupt: &VgicInt) -> bool {
     let pri = gic_is_priv(interrupt.id() as usize);
     let local = pri && (interrupt.phys_redist() as usize == vcpu.phys_id());
-    let mut res: u64;
-    mrs!(res, MPIDR_EL1);
-    let routed_here = !pri && (interrupt.phys_route() as usize ^ (res as usize & MPIDR_AFF_MSK)) == 0;
+    let routed_here = !pri && (interrupt.phys_route() as usize ^ (MPIDR_EL1::read() as usize & MPIDR_AFF_MSK)) == 0;
     let any = !pri && vgic_broadcast(interrupt.clone());
 
     local || routed_here || any
@@ -1675,10 +1674,8 @@ fn vgic_int_has_other_target(interrupt: VgicInt) -> bool {
     if pri {
         return false;
     }
-    let mut res: u64;
-    mrs!(res, MPIDR_EL1);
 
-    let routed_here = !pri && (interrupt.phys_route() as usize ^ (res as usize & MPIDR_AFF_MSK)) == 0;
+    let routed_here = !pri && (interrupt.phys_route() as usize ^ (MPIDR_EL1::read() as usize & MPIDR_AFF_MSK)) == 0;
     let route_valid = interrupt.phys_route() as usize != GICD_IROUTER_INV;
     let any = !pri && vgic_broadcast(interrupt.clone());
 

@@ -20,11 +20,20 @@ use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 
 use crate::arch::traits::InterruptController;
-use crate::arch::IntCtrl;
+use crate::arch::aarch64::regs::{WriteableReg, ReadableReg};
+use crate::arch::{
+    isb, IntCtrl, ICC_SGI1R_EL1, ICH_HCR_EL2, ICH_VTR_EL2, ICC_SRE_EL2, ICC_SRE_EL1, ICH_VMCR_EL2, ICH_AP0R2_EL2,
+    ICH_AP0R1_EL2, ICH_AP0R0_EL2, ICH_AP1R0_EL2, ICH_AP1R1_EL2, ICH_AP1R2_EL2, ICC_PMR_EL1, ICC_BPR1_EL1, ICC_CTLR_EL1,
+    ICH_ELRSR_EL2, ICC_IGRPEN1_EL1, ICC_DIR_EL1, ICC_EOIR1_EL1, ICH_LR0_EL2, ICH_LR1_EL2, ICH_LR2_EL2, ICH_LR3_EL2,
+    ICH_LR4_EL2, ICH_LR5_EL2, ICH_LR6_EL2, ICH_LR7_EL2, ICH_LR8_EL2, ICH_LR9_EL2, ICH_LR10_EL2, ICH_LR11_EL2,
+    ICH_LR12_EL2, ICH_LR13_EL2, ICH_LR14_EL2, ICH_LR15_EL2, ICH_EISR_EL2, ICH_MISR_EL2,
+};
 use crate::board::{Platform, PlatOperation};
 use crate::utils::bit_extract;
 use crate::kernel::current_cpu;
 use crate::utils::device_ref::DeviceRef;
+
+use super::ICC_IAR1_EL1;
 
 pub const MPIDR_AFF_MSK: usize = 0xffff; //we are only supporting 2 affinity levels
 
@@ -341,8 +350,14 @@ impl GicDistributor {
             /* We only support two affinity levels */
             let sgi = ((((mpidr) >> 8) & 0xff) << GICC_SGIR_AFF1_OFFSET) //aff1
                 | (1 << (mpidr & 0xff))  //aff0
-                | ((sgi_num) << GICC_SGIR_SGIINTID_OFF); //sgi_num
-            msr!(ICC_SGI1R_EL1, sgi as u64);
+                | ((sgi_num) << GICC_SGIR_SGIINTID_OFF);
+            // SAFETY:
+            // AFF1 [23:16]
+            // TargetList [15:0]
+            // INTID [27:24]
+            unsafe {
+                ICC_SGI1R_EL1::write(sgi as u64);
+            }
         }
     }
 
@@ -753,54 +768,88 @@ pub struct GicCpuInterface;
 
 impl core::fmt::Display for GicCpuInterface {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "ICC_SRE_EL2:{:016x}", mrs!(ICC_SRE_EL2, "x"))?;
-        writeln!(f, "ICC_PMR_EL1:{:016x}", mrs!(ICC_PMR_EL1, "x"))?;
-        writeln!(f, "ICC_BPR1_EL1:{:016x}", mrs!(ICC_BPR1_EL1, "x"))?;
-        writeln!(f, "ICC_CTLR_EL1:{:016x}", mrs!(ICC_CTLR_EL1, "x"))?;
-        writeln!(f, "ICH_HCR_EL2:{:016x}", mrs!(ICH_HCR_EL2, "x"))?;
-        writeln!(f, "ICC_IGRPEN1_EL1:{:016x}", mrs!(ICC_IGRPEN1_EL1, "x"))?;
+        writeln!(f, "ICC_SRE_EL2:{:016x}", ICC_SRE_EL2::read())?;
+        writeln!(f, "ICC_PMR_EL1:{:016x}", ICC_PMR_EL1::read())?;
+        writeln!(f, "ICC_BPR1_EL1:{:016x}", ICC_BPR1_EL1::read())?;
+        writeln!(f, "ICC_CTLR_EL1:{:016x}", ICC_CTLR_EL1::read())?;
+        writeln!(f, "ICH_HCR_EL2:{:016x}", ICH_HCR_EL2::read())?;
+        writeln!(f, "ICC_IGRPEN1_EL1:{:016x}", ICC_IGRPEN1_EL1::read())?;
         Ok(())
     }
 }
 
 impl GicCpuInterface {
     fn init(&self) {
-        msr!(ICC_SRE_EL2, 0b1, "x");
-
+        // SAFETY:
+        // Set the SRE[0] bit to 1 to enable Group 1 interrupts.
         unsafe {
-            core::arch::asm!("isb");
+            ICC_SRE_EL2::write(0b1);
         }
+
+        isb();
 
         for i in 0..gich_lrs_num() {
             GICH.set_lr(i, 0);
         }
 
-        let pmr = mrs!(ICC_PMR_EL1, "x");
-        msr!(ICC_PMR_EL1, 0xff, "x");
-        msr!(ICC_BPR1_EL1, 0x0, "x");
-        msr!(ICC_CTLR_EL1, ICC_CTLR_EOIMODE_BIT, "x");
-        let hcr = mrs!(ICH_HCR_EL2) as usize;
-        msr!(ICH_HCR_EL2, hcr | GICH_HCR_LRENPIE_BIT);
-        msr!(ICC_IGRPEN1_EL1, GICC_IGRPEN_EL1_ENB_BIT, "x");
+        let pmr = ICC_PMR_EL1::read();
+        // SAFETY:
+        // Set the priority mask[7:0] to 0xff means min prio.
+        unsafe {
+            ICC_PMR_EL1::write(0xff);
+        }
+        // SAFETY:
+        // Set the binary point[2:0] to 0x0
+        unsafe {
+            ICC_BPR1_EL1::write(0x0);
+        }
+        // SAFETY:
+        // Set the EOImode[1] to 1
+        unsafe {
+            ICC_CTLR_EL1::write(ICC_CTLR_EOIMODE_BIT);
+        }
+        let hcr = ICH_HCR_EL2::read();
+        // SAFETY:
+        // change the LRENPIE[2] to 1 to enable List Register Entry Not Present Interrupt
+        unsafe {
+            ICH_HCR_EL2::write(hcr | GICH_HCR_LRENPIE_BIT);
+        }
+        // SAFETY:
+        // Set the EnableGrp1[0] to 1 to enable Group 1 interrupts.
+        unsafe {
+            ICC_IGRPEN1_EL1::write(GICC_IGRPEN_EL1_ENB_BIT);
+        }
 
         //set ICH_VMCR_EL2:Interrupt Controller Virtual Machine Control Register Enables the hypervisor to save and restore the virtual machine view of the GIC state.
-        let mut ich_vmcr = (pmr & GICH_PMR_MASK as u32) << GICH_VMCR_VPMR_SHIFT as u32;
-        ich_vmcr |= GICH_VMCR_VENG1 as u32 | GICH_VMCR_VEOIM as u32;
-        msr!(ICH_VMCR_EL2, ich_vmcr, "x");
+        let mut ich_vmcr = (pmr & GICH_PMR_MASK) << GICH_VMCR_VPMR_SHIFT;
+        ich_vmcr |= GICH_VMCR_VENG1 | GICH_VMCR_VEOIM;
+        // SAFETY:
+        // Set the VPMR[31:24] to the saved value pmr.
+        // Set the VENG1[1] to 1 to enable Group 1 virtual interrupts.
+        // Set the VEOIM[9] to 1 to enable the virtual End of Interrupt Register.
+        unsafe {
+            ICH_VMCR_EL2::write(ich_vmcr);
+        }
     }
 
     pub fn iar(&self) -> u32 {
-        let mut iarc: u32;
-        mrs!(iarc, ICC_IAR1_EL1, "x");
-        iarc
+        ICC_IAR1_EL1::read() as u32
     }
 
     pub fn set_eoir(&self, eoir: u32) {
-        msr!(ICC_EOIR1_EL1, eoir, "x");
+        // SAFETY:
+        // Any INTID[23:0] can't trigger side effects.
+        unsafe {
+            ICC_EOIR1_EL1::write(eoir as usize);
+        }
     }
 
     pub fn set_dir(&self, dir: u32) {
-        msr!(ICC_DIR_EL1, dir, "x");
+        // SAFETY:
+        // Any INTID[23:0] can't trigger side effects.
+        unsafe {
+            ICC_DIR_EL1::write(dir as usize);
+        }
     }
 }
 
@@ -808,78 +857,76 @@ pub struct GicHypervisorInterface;
 
 impl GicHypervisorInterface {
     pub fn hcr(&self) -> usize {
-        let hcrc: usize;
-        mrs!(hcrc, ICH_HCR_EL2);
-        hcrc
+        ICH_HCR_EL2::read()
     }
 
     pub fn set_hcr(&self, hcr: usize) {
-        msr!(ICH_HCR_EL2, hcr)
+        // SAFETY:
+        // Any value can't trigger side effects.
+        unsafe {
+            ICH_HCR_EL2::write(hcr);
+        }
     }
 
     // These registers can be used to locate a usable List register when the hypervisor is delivering an interrupt to a Guest OS.
     pub fn elrsr(&self) -> usize {
-        let elrsrc: usize;
-        mrs!(elrsrc, ICH_ELRSR_EL2);
-        elrsrc
+        ICH_ELRSR_EL2::read()
     }
 
     pub fn eisr(&self) -> u32 {
-        let eisrc: u32;
-        mrs!(eisrc, ICH_EISR_EL2, "x");
-        eisrc
+        ICH_EISR_EL2::read() as u32
     }
 
     pub fn lr(&self, lr_idx: usize) -> usize {
-        let lrc: usize;
         match lr_idx {
-            0 => mrs!(lrc, ICH_LR0_EL2),
-            1 => mrs!(lrc, ICH_LR1_EL2),
-            2 => mrs!(lrc, ICH_LR2_EL2),
-            3 => mrs!(lrc, ICH_LR3_EL2),
-            4 => mrs!(lrc, ICH_LR4_EL2),
-            5 => mrs!(lrc, ICH_LR5_EL2),
-            6 => mrs!(lrc, ICH_LR6_EL2),
-            7 => mrs!(lrc, ICH_LR7_EL2),
-            8 => mrs!(lrc, ICH_LR8_EL2),
-            9 => mrs!(lrc, ICH_LR9_EL2),
-            10 => mrs!(lrc, ICH_LR10_EL2),
-            11 => mrs!(lrc, ICH_LR11_EL2),
-            12 => mrs!(lrc, ICH_LR12_EL2),
-            13 => mrs!(lrc, ICH_LR13_EL2),
-            14 => mrs!(lrc, ICH_LR14_EL2),
-            15 => mrs!(lrc, ICH_LR15_EL2),
-            _ => lrc = 0,
-        };
-        lrc
+            0 => ICH_LR0_EL2::read(),
+            1 => ICH_LR1_EL2::read(),
+            2 => ICH_LR2_EL2::read(),
+            3 => ICH_LR3_EL2::read(),
+            4 => ICH_LR4_EL2::read(),
+            5 => ICH_LR5_EL2::read(),
+            6 => ICH_LR6_EL2::read(),
+            7 => ICH_LR7_EL2::read(),
+            8 => ICH_LR8_EL2::read(),
+            9 => ICH_LR9_EL2::read(),
+            10 => ICH_LR10_EL2::read(),
+            11 => ICH_LR11_EL2::read(),
+            12 => ICH_LR12_EL2::read(),
+            13 => ICH_LR13_EL2::read(),
+            14 => ICH_LR14_EL2::read(),
+            15 => ICH_LR15_EL2::read(),
+            _ => panic!("gic: trying to read inexistent list register"),
+        }
     }
 
     // Indicates which maintenance interrupts are asserted.
     pub fn misr(&self) -> u32 {
-        let misrc: u32;
-        mrs!(misrc, ICH_MISR_EL2, "x");
-        misrc
+        ICH_MISR_EL2::read() as u32
     }
 
     pub fn set_lr(&self, lr_idx: usize, val: usize) {
-        match lr_idx {
-            0 => msr!(ICH_LR0_EL2, val),
-            1 => msr!(ICH_LR1_EL2, val),
-            2 => msr!(ICH_LR2_EL2, val),
-            3 => msr!(ICH_LR3_EL2, val),
-            4 => msr!(ICH_LR4_EL2, val),
-            5 => msr!(ICH_LR5_EL2, val),
-            6 => msr!(ICH_LR6_EL2, val),
-            7 => msr!(ICH_LR7_EL2, val),
-            8 => msr!(ICH_LR8_EL2, val),
-            9 => msr!(ICH_LR9_EL2, val),
-            10 => msr!(ICH_LR10_EL2, val),
-            11 => msr!(ICH_LR11_EL2, val),
-            12 => msr!(ICH_LR12_EL2, val),
-            13 => msr!(ICH_LR13_EL2, val),
-            14 => msr!(ICH_LR14_EL2, val),
-            15 => msr!(ICH_LR15_EL2, val),
-            _ => panic!("gic: trying to write inexistent list register"),
+        // SAFETY:
+        // Any value can't trap undefined exception.
+        unsafe {
+            match lr_idx {
+                0 => ICH_LR0_EL2::write(val),
+                1 => ICH_LR1_EL2::write(val),
+                2 => ICH_LR2_EL2::write(val),
+                3 => ICH_LR3_EL2::write(val),
+                4 => ICH_LR4_EL2::write(val),
+                5 => ICH_LR5_EL2::write(val),
+                6 => ICH_LR6_EL2::write(val),
+                7 => ICH_LR7_EL2::write(val),
+                8 => ICH_LR8_EL2::write(val),
+                9 => ICH_LR9_EL2::write(val),
+                10 => ICH_LR10_EL2::write(val),
+                11 => ICH_LR11_EL2::write(val),
+                12 => ICH_LR12_EL2::write(val),
+                13 => ICH_LR13_EL2::write(val),
+                14 => ICH_LR14_EL2::write(val),
+                15 => ICH_LR15_EL2::write(val),
+                _ => panic!("gic: trying to write inexistent list register"),
+            }
         }
     }
 }
@@ -907,7 +954,7 @@ pub struct GicState {
 
 impl Default for GicState {
     fn default() -> Self {
-        let nr_prio = (((mrs!(ICH_VTR_EL2) >> GICH_VTR_PRIBITS_OFF) & ((1 << GICH_VTR_PRIBITS_LEN) - 1)) + 1) as u32;
+        let nr_prio = (((ICH_VTR_EL2::read() >> GICH_VTR_PRIBITS_OFF) & ((1 << GICH_VTR_PRIBITS_LEN) - 1)) + 1) as u32;
 
         GicState {
             ctlr: GICC_CTLR_EOIMODE_BIT as u32,
@@ -932,9 +979,9 @@ impl Default for GicState {
 
 impl crate::arch::InterruptContextTriat for GicState {
     fn save_state(&mut self) {
-        mrs!(self.hcr, ICH_HCR_EL2, "x");
+        self.hcr = ICH_HCR_EL2::read();
         // save VMCR_EL2: save and restore the virtual machine view of the GIC state.
-        mrs!(self.vmcr, ICH_VMCR_EL2, "x");
+        self.vmcr = ICH_VMCR_EL2::read() as u32;
         // save ICH_AP1Rn_EL2: Provides information about Group 1 virtual active priorities for EL2.
         // if some bit set 1:There is a Group 1 interrupt active with this priority level which has not undergone priority drop.
         self.save_aprn_regs();
@@ -943,23 +990,35 @@ impl crate::arch::InterruptContextTriat for GicState {
             self.lr[i] = GICH.lr(i);
         }
         // save ICC_SRE_EL1: EL1`s systregister use
-        mrs!(self.sre_el1, ICC_SRE_EL1, "x");
-        let icc_sre_el2_enable = mrs!(ICC_SRE_EL2, "x");
-        msr!(ICC_SRE_EL2, icc_sre_el2_enable & !GICC_SRE_EL2_ENABLE as u32, "x");
+        self.sre_el1 = ICC_SRE_EL1::read() as u32;
+        // SAFETY: change the value of ICC_SRE_EL2 without GICC_SRE_EL2_ENABLE_bit
+        unsafe { ICC_SRE_EL2::write(ICC_SRE_EL2::read() & !GICC_SRE_EL2_ENABLE) }
     }
 
     fn restore_state(&self) {
         // make EL2 can use sysrem register
-        msr!(ICC_SRE_EL2, 0b1001, "x");
-        // restore ICC_SRE_EL1 for EL1
-        msr!(ICC_SRE_EL1, 0x1, "x");
+        // SAFETY:
+        // Set Enable[3] bit to 1, and set the SRE[0] bits to 1
+        // And other bits set to 0
         unsafe {
-            core::arch::asm!("isb");
+            ICC_SRE_EL2::write(0b1001);
         }
-        // restore HCR
-        msr!(ICH_HCR_EL2, self.hcr, "x");
-        // restore ICH_VMCR_EL2
-        msr!(ICH_VMCR_EL2, self.vmcr, "x");
+        // restore ICC_SRE_EL1 for EL1
+        // SAFETY:
+        // Set the SRE[0] bits to 1
+        // And other bits set to 0
+        unsafe {
+            ICC_SRE_EL1::write(0x1);
+        }
+        isb();
+        // SAFETY:
+        // The value is saved last time
+        unsafe {
+            // restore HCR
+            ICH_HCR_EL2::write(self.hcr);
+            // restore ICH_VMCR_EL2
+            ICH_VMCR_EL2::write(self.vmcr as usize);
+        }
         // restore aprn
         self.restore_aprn_regs();
         // restore lr
@@ -971,18 +1030,18 @@ impl crate::arch::InterruptContextTriat for GicState {
 
 impl GicState {
     fn save_apr2(&mut self) {
-        mrs!(self.apr0[2], ICH_AP0R2_EL2, "x");
-        mrs!(self.apr1[2], ICH_AP1R2_EL2, "x");
+        self.apr0[2] = ICH_AP0R2_EL2::read() as u32;
+        self.apr1[2] = ICH_AP1R2_EL2::read() as u32;
     }
 
     fn save_apr1(&mut self) {
-        mrs!(self.apr0[1], ICH_AP0R1_EL2, "x");
-        mrs!(self.apr1[1], ICH_AP1R1_EL2, "x");
+        self.apr0[1] = ICH_AP0R1_EL2::read() as u32;
+        self.apr1[1] = ICH_AP1R1_EL2::read() as u32;
     }
 
     fn save_apr0(&mut self) {
-        mrs!(self.apr0[0], ICH_AP0R0_EL2, "x");
-        mrs!(self.apr1[0], ICH_AP1R0_EL2, "x");
+        self.apr0[0] = ICH_AP0R0_EL2::read() as u32;
+        self.apr1[0] = ICH_AP1R0_EL2::read() as u32;
     }
 
     fn save_aprn_regs(&mut self) {
@@ -1004,17 +1063,19 @@ impl GicState {
     }
 
     fn restore_aprn_regs(&self) {
-        let restore_apr2 = || {
-            msr!(ICH_AP0R2_EL2, self.apr0[2], "x");
-            msr!(ICH_AP1R2_EL2, self.apr1[2], "x");
+        // SAFETY:
+        // All value is saved last time
+        let restore_apr2 = || unsafe {
+            ICH_AP0R2_EL2::write(self.apr0[2] as usize);
+            ICH_AP1R2_EL2::write(self.apr1[2] as usize);
         };
-        let restore_apr1 = || {
-            msr!(ICH_AP0R1_EL2, self.apr0[1], "x");
-            msr!(ICH_AP1R1_EL2, self.apr1[1], "x");
+        let restore_apr1 = || unsafe {
+            ICH_AP0R1_EL2::write(self.apr0[1] as usize);
+            ICH_AP1R1_EL2::write(self.apr1[1] as usize);
         };
-        let restore_apr0 = || {
-            msr!(ICH_AP0R0_EL2, self.apr0[0], "x");
-            msr!(ICH_AP1R0_EL2, self.apr1[0], "x");
+        let restore_apr0 = || unsafe {
+            ICH_AP0R0_EL2::write(self.apr0[0] as usize);
+            ICH_AP1R0_EL2::write(self.apr1[0] as usize);
         };
         match self.nr_prio {
             7 => {
@@ -1043,9 +1104,7 @@ pub static GICR: DeviceRef<GicRedistributor> =
 
 #[inline(always)]
 pub fn gich_lrs_num() -> usize {
-    let mut vtr: u32;
-    mrs!(vtr, ICH_VTR_EL2, "x");
-    ((vtr & GICH_VTR_MSK as u32) + 1) as usize
+    (ICH_VTR_EL2::read() & GICH_VTR_MSK) + 1
 }
 
 #[inline(always)]

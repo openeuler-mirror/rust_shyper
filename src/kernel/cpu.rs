@@ -15,6 +15,7 @@ use spin::Mutex;
 
 use crate::arch::{PAGE_SIZE, set_current_cpu};
 use crate::arch::ContextFrame;
+use crate::arch::wfi;
 use crate::arch::ContextFrameTrait;
 // use core::ops::{Deref, DerefMut};
 use crate::arch::{cpu_interrupt_unmask, current_cpu_arch};
@@ -127,7 +128,10 @@ impl Cpu {
         }
     }
 
-    pub fn set_ctx(&mut self, ctx: *mut ContextFrame) {
+    /// # Safety:
+    /// The caller must ensure that the `ctx` is valid.
+    /// ctx must be aligned to 8 bytes
+    pub unsafe fn set_ctx(&mut self, ctx: *mut ContextFrame) {
         self.ctx = ctx;
     }
 
@@ -235,6 +239,7 @@ impl Cpu {
 }
 
 pub fn current_cpu() -> &'static mut Cpu {
+    // SAFETY: the value of current_cpu_arch() is valid setted by cpu_map_self at boot_stage
     unsafe { &mut *(current_cpu_arch() as *mut Cpu) }
 }
 
@@ -277,7 +282,10 @@ pub fn cpu_init() {
     current_cpu().cpu_state = state;
     let sp = current_cpu().stack.as_ptr() as usize + CPU_STACK_SIZE;
     let size = core::mem::size_of::<ContextFrame>();
-    current_cpu().set_ctx((sp - size) as *mut _);
+    // SAFETY: Sp is valid when boot_stage setting
+    unsafe {
+        current_cpu().set_ctx((sp - size) as *mut _);
+    }
     info!("Core {} init ok", cpu_id);
 
     if cfg!(not(feature = "secondary_start")) {
@@ -296,8 +304,7 @@ pub fn cpu_idle() -> ! {
     current_cpu().cpu_state = state;
     cpu_interrupt_unmask();
     loop {
-        // TODO: replace it with an Arch function `arch_idle`
-        cortex_a::asm::wfi();
+        wfi();
     }
 }
 

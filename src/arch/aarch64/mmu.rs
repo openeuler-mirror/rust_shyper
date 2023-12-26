@@ -12,6 +12,7 @@ use tock_registers::*;
 use tock_registers::interfaces::*;
 
 use crate::utils::{memset_safe, bit_extract};
+use crate::arch::{at, isb};
 
 use super::interface::*;
 
@@ -275,7 +276,8 @@ pub fn gva2ipa(gva: usize) -> Result<usize, ()> {
     use cortex_a::registers::PAR_EL1;
 
     let par = PAR_EL1.get();
-    arm_at!("s1e1r", gva);
+    at::s1e1r(gva);
+    isb();
     let tmp = PAR_EL1.get();
     PAR_EL1.set(par);
 

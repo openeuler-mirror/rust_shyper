@@ -12,7 +12,8 @@ use core::arch::global_asm;
 
 use tock_registers::interfaces::*;
 
-use crate::arch::{ContextFrameTrait, data_abort_handler, hvc_handler, smc_handler, sysreg_handler};
+use crate::arch::{ContextFrameTrait, data_abort_handler, hvc_handler, smc_handler, sysreg_handler, isb, at, HPFAR_EL2};
+use crate::arch::aarch64::regs::ReadableReg;
 use crate::arch::{gicc_clear_current_irq, gicc_get_current_irq};
 use crate::arch::ContextFrame;
 use crate::kernel::{active_vm_id, current_cpu};
@@ -42,9 +43,7 @@ fn exception_far() -> usize {
 
 #[inline(always)]
 fn exception_hpfar() -> usize {
-    let hpfar: u64;
-    mrs!(hpfar, HPFAR_EL2);
-    hpfar as usize
+    HPFAR_EL2::read() as usize
 }
 
 #[allow(non_upper_case_globals)]
@@ -67,7 +66,8 @@ fn translate_far_to_hpfar(far: usize) -> Result<usize, ()> {
     use cortex_a::registers::PAR_EL1;
 
     let par = PAR_EL1.get();
-    arm_at!("s1e1r", far);
+    at::s1e1r(far);
+    isb();
     let tmp = PAR_EL1.get();
     PAR_EL1.set(par);
     if (tmp & PAR_EL1::F::TranslationAborted.value) != 0 {
@@ -183,7 +183,7 @@ extern "C" fn current_el_spx_synchronous() {
 }
 
 #[no_mangle]
-extern "C" fn current_el_spx_irq(ctx: *mut ContextFrame) {
+extern "C" fn current_el_spx_irq(ctx: &mut ContextFrame) {
     lower_aarch64_irq(ctx);
 }
 
@@ -193,8 +193,10 @@ extern "C" fn current_el_spx_serror() {
 }
 
 #[no_mangle]
-extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
-    current_cpu().set_ctx(ctx);
+extern "C" fn lower_aarch64_synchronous(ctx: &mut ContextFrame) {
+    unsafe {
+        current_cpu().set_ctx(ctx);
+    }
     match exception_class() {
         0x24 => {
             data_abort_handler();
@@ -208,7 +210,7 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
         0x16 => {
             hvc_handler();
         }
-        _ => unsafe {
+        _ => {
             debug!(
                 "x0 {:x}, x1 {:x}, x29 {:x}",
                 (*ctx).gpr(0),
@@ -223,14 +225,16 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
                 exception_fault_addr(),
                 (*ctx).exception_pc()
             );
-        },
+        }
     }
     current_cpu().clear_ctx();
 }
 
 #[no_mangle]
-extern "C" fn lower_aarch64_irq(ctx: *mut ContextFrame) {
-    current_cpu().set_ctx(ctx);
+extern "C" fn lower_aarch64_irq(ctx: &mut ContextFrame) {
+    unsafe {
+        current_cpu().set_ctx(ctx);
+    }
     if let Some(id) = gicc_get_current_irq() {
         if id >= 1022 {
             return;

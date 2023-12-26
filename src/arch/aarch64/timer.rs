@@ -11,6 +11,8 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use tock_registers::interfaces::*;
+use crate::arch::{CNTHP_TVAL_EL2, CNTHP_CTL_EL2};
+use crate::arch::aarch64::regs::WriteableReg;
 
 const CTL_IMASK: usize = 1 << 1;
 
@@ -20,17 +22,27 @@ pub static TIMER_SLICE: AtomicUsize = AtomicUsize::new(0); // ms
 pub fn timer_arch_set(num: usize) {
     let slice = TIMER_SLICE.load(Ordering::Relaxed);
     let val = slice * num;
-    msr!(CNTHP_TVAL_EL2, val);
+    // SAFETY:
+    // Set timer value
+    unsafe {
+        CNTHP_TVAL_EL2::write(val);
+    }
 }
 
 pub fn timer_arch_enable_irq() {
-    let val = 1;
-    msr!(CNTHP_CTL_EL2, val, "x");
+    // SAFETY:
+    // Enable[0] timer interrupt
+    unsafe {
+        CNTHP_CTL_EL2::write(1);
+    }
 }
 
 pub fn timer_arch_disable_irq() {
-    let val = 2;
-    msr!(CNTHP_CTL_EL2, val, "x");
+    // SAFETY:
+    // MASK[1] timer interrupt
+    unsafe {
+        CNTHP_CTL_EL2::write(2);
+    }
 }
 
 pub fn timer_arch_get_counter() -> usize {
@@ -49,6 +61,11 @@ pub fn timer_arch_init() {
 
     let ctl = 0x3 & (1 | !CTL_IMASK);
     let tval = slice * 10;
-    msr!(CNTHP_CTL_EL2, ctl);
-    msr!(CNTHP_TVAL_EL2, tval);
+    // SAFETY:
+    // Set timer value
+    // init timer with enable but mask
+    unsafe {
+        CNTHP_CTL_EL2::write(ctl);
+        CNTHP_TVAL_EL2::write(tval);
+    }
 }

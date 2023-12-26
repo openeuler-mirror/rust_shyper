@@ -11,7 +11,7 @@ pub struct DeviceRef<'a, T> {
 impl<T> DeviceRef<'_, T> {
     /// Create a new `DeviceRef` from a raw pointer
     ///
-    /// ## Safety
+    /// # Safety
     ///
     /// - `ptr` must be aligned, non-null, and dereferencable as `T`.
     /// - `*ptr` must be valid for the program duration.

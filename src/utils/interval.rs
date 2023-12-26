@@ -82,7 +82,7 @@ impl Iterator for IntervalIter {
             if old <= 0 && self.sum > 0 {
                 last.write(pos);
             } else if old > 0 && self.sum <= 0 {
-                // Safety: `old > 0` implies `last` was initialized in the branch above
+                // SAFETY: `old > 0` implies `last` was initialized in the branch above
                 let left = unsafe { last.assume_init() };
                 return Some(Interval { left, right: pos });
             }

@@ -190,9 +190,7 @@ fn ipi_send(target_id: usize, msg: IpiMessage) -> bool {
     let mut cpu_if_list = CPU_IF_LIST.lock();
     cpu_if_list[target_id].msg_queue.push(msg);
     drop(cpu_if_list);
-    unsafe {
-        core::arch::asm!("dsb ishst");
-    }
+    crate::arch::dsb::ishst();
     interrupt_cpu_ipi_send(target_id, crate::arch::IntCtrl::IRQ_IPI);
 
     true

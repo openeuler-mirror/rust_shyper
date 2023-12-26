@@ -359,6 +359,7 @@ pub fn get_vm_id(id_ipa: usize) -> bool {
         error!("illegal id_pa {:x}", id_pa);
         return false;
     }
+    // SAFETY: id_pa is a valid address checked by shyper.ko
     unsafe {
         *(id_pa as *mut usize) = vm.id();
     }
