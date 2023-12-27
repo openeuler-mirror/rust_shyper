@@ -78,14 +78,6 @@ build: cargo
 	${OBJDUMP} --demangle -d ${TARGET_DIR}/${IMAGE} > ${TARGET_DIR}/t.txt
 	${OBJCOPY} ${TARGET_DIR}/${IMAGE} -O binary ${TARGET_DIR}/${IMAGE}.bin
 
-doc-pre:
-	cargo doc ${CARGO_FLAGS}
-# sudo cp -r target/aarch64/doc/* /var/www/html
-
-# This target is created for passing env variable ${BOARD} to MAKE
-doc:
-	$(MAKE) doc-pre BOARD=qemu FEATURES=doc
-
 cargo:
 	cargo ${CARGO_ACTION} ${CARGO_FLAGS}
 
@@ -147,3 +139,6 @@ clean:
 
 clippy: CARGO_ACTION = clippy
 clippy: cargo
+
+doc:
+	$(MAKE) cargo CARGO_ACTION=doc FEATURES=doc,$(FEATURES)

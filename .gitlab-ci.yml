@@ -36,4 +36,5 @@ build:
           - rk3588-noeth
   script:
     - make clippy
+    - make doc
     - make
