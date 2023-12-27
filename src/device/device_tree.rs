@@ -21,6 +21,10 @@ use crate::vmm::CPIO_RAMDISK;
 
 const PI4_DTB_ADDR: usize = 0xf0000000;
 
+pub unsafe fn fdt_total_size(dtb: *mut fdt::myctypes::c_void) -> usize {
+    core::ptr::read_unaligned((dtb as usize + 4) as *const u32).to_be() as usize
+}
+
 /// Initializes the Device Tree Blob (DTB) for the primary VM (vm0).
 /// # Safety:
 /// Dtb is a valid pointer to a device tree blob
