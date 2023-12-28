@@ -23,7 +23,7 @@ use spin::Mutex;
 // use crate::board::*;
 use crate::device::{EmuDeviceType, mediated_blk_free, mediated_blk_request};
 use crate::kernel::{active_vm, vm, Vm, vm_ipa2pa, VM_NUM_MAX, VmType};
-use crate::utils::{BitAlloc, BitAlloc16, memcpy_safe};
+use crate::utils::{BitAlloc, BitAlloc16, memcpy};
 use crate::vmm::vmm_init_gvm;
 
 /// The maximum length of a VM name.
@@ -691,7 +691,8 @@ pub fn vm_cfg_remove_vm_entry(vm_id: usize) {
 /* Generate a new VM Config Entry, set basic value */
 pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
     let config_pa = vm_ipa2pa(active_vm().unwrap(), config_ipa);
-    // SAFETY: config_pa is from user space, it is checked by shyper.ko
+    // SAFETY: config_pa is from user space, it is checked by shyper.ko firstly.
+    // And in the function, vm_ipa2pa, it is checked whether the config_pa is in the memory region of the VM.
     let [vm_name_ipa, _vm_name_length, vm_type, cmdline_ipa, _cmdline_length, kernel_load_ipa, device_tree_load_ipa, ramdisk_load_ipa] =
         unsafe { *(config_pa as *const _) };
     info!("\n\nStart to prepare configuration for new VM");
@@ -702,6 +703,7 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
         error!("illegal vm_name_ipa {:x}", vm_name_ipa);
         return Err(());
     }
+    // SAFETY: We have checked the vm_name_pa is in the memory region of the VM by vm_ipa2pa.
     let vm_name_str = unsafe { CStr::from_ptr(vm_name_pa as *const _) }
         .to_string_lossy()
         .to_string();
@@ -712,6 +714,7 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
         error!("illegal cmdline_ipa {:x}", cmdline_ipa);
         return Err(());
     }
+    // SAFETY: We have checked the cmdline_pa is in the memory region of the VM by vm_ipa2pa.
     let cmdline_str = unsafe { CStr::from_ptr(cmdline_pa as *const _) }
         .to_string_lossy()
         .to_string();
@@ -799,6 +802,8 @@ pub fn vm_cfg_add_emu_dev(
         error!("illegal emulated device name_ipa {:x}", name_ipa);
         return Err(());
     }
+    // SAFETY:
+    // We have checked the name_pa is in the memory region of the VM by vm_ipa2pa.
     let name_str = unsafe { CStr::from_ptr(name_pa as *const _) }
         .to_string_lossy()
         .to_string();
@@ -809,11 +814,16 @@ pub fn vm_cfg_add_emu_dev(
         return Err(());
     }
     let cfg_list = vec![0_usize; CFG_MAX_NUM];
-    memcpy_safe(
-        &cfg_list[0] as *const _ as *const u8,
-        cfg_list_pa as *mut u8,
-        CFG_MAX_NUM * 8, // sizeof(usize) / sizeof(u8)
-    );
+    // SAFETY:
+    // We have both read and write access to the src and dst memory regions.
+    // The copied size will not exceed the memory region.
+    unsafe {
+        memcpy(
+            &cfg_list[0] as *const _ as *const u8,
+            cfg_list_pa as *mut u8,
+            CFG_MAX_NUM * 8, // sizeof(usize) / sizeof(u8)
+        );
+    }
 
     info!(
         concat!(
@@ -913,11 +923,16 @@ pub fn vm_cfg_add_passthrough_device_irqs(vmid: usize, irqs_base_ipa: usize, irq
     }
     let mut irqs = vec![0_usize; irqs_length];
     if irqs_length > 0 {
-        memcpy_safe(
-            &irqs[0] as *const _ as *const u8,
-            irqs_base_pa as *mut u8,
-            irqs_length * 8, // sizeof(usize) / sizeof(u8)
-        );
+        // SAFETY:
+        // We have both read and write access to the src and dst memory regions.
+        // The copied size will not exceed the memory region.
+        unsafe {
+            memcpy(
+                &irqs[0] as *const _ as *const u8,
+                irqs_base_pa as *mut u8,
+                irqs_length * 8, // sizeof(usize) / sizeof(u8)
+            );
+        }
     }
     debug!("      irqs {:?}", irqs);
 
@@ -949,11 +964,16 @@ pub fn vm_cfg_add_passthrough_device_streams_ids(
     }
     let mut streams_ids = vec![0_usize, streams_ids_length];
     if streams_ids_length > 0 {
-        memcpy_safe(
-            &streams_ids[0] as *const _ as *const u8,
-            streams_ids_base_pa as *mut u8,
-            streams_ids_length * 8, // sizeof(usize) / sizeof(u8)
-        );
+        // SAFETY:
+        // We have both read and write access to the src and dst memory regions.
+        // The copied size will not exceed the memory region.
+        unsafe {
+            memcpy(
+                &streams_ids[0] as *const _ as *const u8,
+                streams_ids_base_pa as *mut u8,
+                streams_ids_length * 8, // sizeof(usize) / sizeof(u8)
+            );
+        }
     }
     debug!("      get streams_ids {:?}", streams_ids);
 
@@ -987,6 +1007,7 @@ pub fn vm_cfg_add_dtb_dev(
         error!("illegal dtb_dev name ipa {:x}", name_ipa);
         return Err(());
     }
+    // SAFETY: We have checked the name_pa is in the memory region of the VM by vm_ipa2pa.
     let dtb_dev_name_str = unsafe { CStr::from_ptr(name_pa as *const _) }
         .to_string_lossy()
         .to_string();
@@ -1002,11 +1023,16 @@ pub fn vm_cfg_add_dtb_dev(
 
     if irq_list_length > 0 {
         let tmp_dtb_irq_list = [0_usize, irq_list_length];
-        memcpy_safe(
-            &tmp_dtb_irq_list[0] as *const _ as *const u8,
-            irq_list_pa as *mut u8,
-            irq_list_length * 8, // sizeof(usize) / sizeof(u8)
-        );
+        // SAFETY:
+        // We have both read and write access to the src and dst memory regions.
+        // The copied size will not exceed the memory region.
+        unsafe {
+            memcpy(
+                &tmp_dtb_irq_list[0] as *const _ as *const u8,
+                irq_list_pa as *mut u8,
+                irq_list_length * 8, // sizeof(usize) / sizeof(u8)
+            );
+        }
         for i in 0..irq_list_length {
             dtb_irq_list.push(tmp_dtb_irq_list[i]);
         }
@@ -1114,6 +1140,7 @@ pub fn vm_cfg_upload_kernel_image(
         error!("illegal cache ipa {:x}", cache_ipa);
         return Err(());
     }
+    // SAFETY: We have checked the cache_pa is in the memory region of the VM by vm_ipa2pa.
     let src = unsafe { core::slice::from_raw_parts_mut((cache_pa) as *mut u8, load_size) };
 
     // Get kernel image load pa.
@@ -1126,6 +1153,9 @@ pub fn vm_cfg_upload_kernel_image(
         return Err(());
     }
     // Copy from user space.
+    // SAFETY:
+    // We have checked the load_pa is in the memory region of the VM by vm_cfg_finish_configuration.
+    // And the load_offset and load_size will not exceed the kernel image size.
     let dst = unsafe { core::slice::from_raw_parts_mut((load_pa + load_offset) as *mut u8, load_size) };
     dst.copy_from_slice(src);
     Ok(0)
@@ -1158,6 +1188,7 @@ pub fn vm_cfg_upload_device_tree(
         return Err(());
     }
 
+    // SAFETY: We have checked the cache_pa is in the memory region of the VM by vm_ipa2pa.
     let src = unsafe { core::slice::from_raw_parts(cache_pa as *mut u8, load_size) };
     let mut dst = cfg.fdt_overlay.lock();
     dst.extend_from_slice(src);

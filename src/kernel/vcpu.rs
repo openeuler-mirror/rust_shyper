@@ -17,7 +17,7 @@ use crate::arch::{ContextFrame, ContextFrameTrait, GicContext, VmContext, timer_
 use crate::board::PlatOperation;
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
-use crate::utils::memcpy_safe;
+use crate::utils::memcpy;
 
 use super::{CpuState, Vm, VmType};
 
@@ -111,13 +111,16 @@ impl Vcpu {
             None => {
                 error!("save_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
             }
-            Some(ctx) => {
-                memcpy_safe(
+            // SAFETY:
+            // We have both read and write access to the src and dst memory regions.
+            // The copied size will not exceed the memory region.
+            Some(ctx) => unsafe {
+                memcpy(
                     &(inner.vcpu_ctx) as *const _ as *const u8,
                     ctx as *const u8,
                     size_of::<ContextFrame>(),
                 );
-            }
+            },
         }
     }
 
@@ -127,13 +130,16 @@ impl Vcpu {
             None => {
                 error!("restore_cpu_ctx: cpu{} ctx is NULL", current_cpu().id);
             }
-            Some(ctx) => {
-                memcpy_safe(
+            // SAFETY:
+            // We have both read and write access to the src and dst memory regions.
+            // The copied size will not exceed the memory region.
+            Some(ctx) => unsafe {
+                memcpy(
                     ctx as *const u8,
                     &(inner.vcpu_ctx) as *const _ as *const u8,
                     size_of::<ContextFrame>(),
                 );
-            }
+            },
         }
     }
 
@@ -296,11 +302,16 @@ static IDLE_THREAD: spin::Lazy<IdleThread> = spin::Lazy::new(|| {
 pub fn run_idle_thread() {
     trace!("Core {} idle", current_cpu().id);
     current_cpu().cpu_state = CpuState::CpuIdle;
-    crate::utils::memcpy_safe(
-        current_cpu().ctx as *const u8,
-        &(IDLE_THREAD.ctx) as *const _ as *const u8,
-        core::mem::size_of::<ContextFrame>(),
-    );
+    // SAFETY:
+    // We have both read and write access to the src and dst memory regions.
+    // The copied size will not exceed the memory region.
+    unsafe {
+        crate::utils::memcpy(
+            current_cpu().ctx as *const u8,
+            &(IDLE_THREAD.ctx) as *const _ as *const u8,
+            core::mem::size_of::<ContextFrame>(),
+        );
+    }
 }
 
 pub struct VcpuInnerMut {
@@ -356,6 +367,7 @@ pub fn vcpu_run(announce: bool) -> ! {
     extern "C" {
         fn context_vm_entry(ctx: usize) -> !;
     }
+    // SAFETY: `Cpu` maintains the underlying `ctx`.
     unsafe {
         context_vm_entry(current_cpu().ctx as usize);
     }

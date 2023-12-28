@@ -436,13 +436,22 @@ impl VmContext {
         }
     }
 
-    pub fn fpsimd_save_context(&self) {
+    pub fn fpsimd_save_context(&mut self) {
+        // SAFETY:
+        // We use the address of fpsimd to save the all floating point register
+        // eg. Q0-Q31, FPSR, FPCR
+        // And the address is valid
+        // And the value of fpsimd will be changed.
         unsafe {
             fpsimd_save_ctx(&self.fpsimd as *const _ as usize);
         }
     }
 
     pub fn fpsimd_restore_context(&self) {
+        // SAFETY:
+        // We use the address of fpsimd to restore the all floating point register
+        // eg. Q0-Q31, FPSR, FPCR
+        // And the address is valid
         unsafe {
             fpsimd_restore_ctx(&self.fpsimd as *const _ as usize);
         }

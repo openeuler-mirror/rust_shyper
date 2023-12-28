@@ -77,7 +77,11 @@ pub fn power_arch_vm_shutdown_secondary_cores(vm: Vm) {
     }
 }
 
-pub fn power_arch_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
+/// # Safety:
+/// It attempts to power on the CPU specified by the mpidr parameter.
+/// The entry is the vaild entry point of the CPU to be powered on.
+/// The ctx here is the cpu_idx.
+pub unsafe fn power_arch_cpu_on(mpidr: usize, entry: usize, ctx: usize) -> usize {
     use crate::kernel::CPU_IF_LIST;
 
     let cpu_idx = Platform::mpidr2cpuid(mpidr);
@@ -97,11 +101,17 @@ pub fn power_arch_cpu_shutdown() {
     cpu_idle();
 }
 
-pub fn power_arch_sys_reset() {
+/// # Safety:
+/// It attempts to reset the system.
+/// So the caller must ensure that the system can be reset.
+pub unsafe fn power_arch_sys_reset() {
     smc_call(PSCI_SYSTEM_RESET, 0, 0, 0);
 }
 
-pub fn power_arch_sys_shutdown() {
+/// # Safety:
+/// It attempts to shutdown the system.
+/// So the caller must ensure that the system can be shutdown.
+pub unsafe fn power_arch_sys_shutdown() {
     smc_call(PSCI_SYSTEM_OFF, 0, 0, 0);
 }
 
@@ -178,7 +188,7 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
         },
         #[cfg(feature = "tx2")]
         TEGRA_SIP_GET_ACTMON_CLK_COUNTERS => {
-            let result = smc_call(fid, x1, x2, x3);
+            let result = unsafe { smc_call(fid, x1, x2, x3) };
             // println!("x1 0x{:x}, x2 0x{:x}, x3 0x{:x}", x1, x2, x3);
             // println!(
             //     "result.0 0x{:x}, result.1 0x{:x}, result.2 0x{:x}",
@@ -354,7 +364,13 @@ pub fn psci_guest_cpu_on(vmpidr: usize, entry: usize, ctx: usize) -> usize {
         let mpidr = Platform::cpuid2mpidr(cpu_idx);
 
         let entry_point = crate::arch::_secondary_start as usize;
-        r = power_arch_cpu_on(mpidr, entry_point, cpu_idx);
+        // SAFETY:
+        // It attempts to power on the CPU specified by the mpidr parameter.
+        // The entry is the address of function _secondary_start.
+        // The ctx here is the cpu_idx.
+        unsafe {
+            r = power_arch_cpu_on(mpidr, entry_point, cpu_idx);
+        }
         debug!(
             "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
             mpidr, entry_point
@@ -441,7 +457,11 @@ pub fn psci_vm_maincpu_on(vmpidr: usize, entry: usize, ctx: usize, vm_id: usize)
         let mpidr = Platform::cpuid2mpidr(cpu_idx);
 
         let entry_point = crate::arch::_secondary_start as usize;
-        r = power_arch_cpu_on(mpidr, entry_point, cpu_idx);
+        // SAFETY:
+        // It attempts to power on the CPU specified by the mpidr parameter.
+        // The entry is the address of function _secondary_start.
+        // The ctx here is the cpu_idx.
+        r = unsafe { power_arch_cpu_on(mpidr, entry_point, cpu_idx) };
         debug!(
             "start to power_arch_cpu_on! mpidr={:X}, entry_point={:X}",
             mpidr, entry_point

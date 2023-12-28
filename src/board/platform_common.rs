@@ -99,7 +99,11 @@ pub trait PlatOperation {
     const DISK_PARTITION_3_SIZE: usize = usize::MAX;
     const DISK_PARTITION_4_SIZE: usize = usize::MAX;
 
-    fn cpu_on(arch_core_id: usize, entry: usize, ctx: usize) {
+    /// # Safety:
+    /// The caller must ensure that the arch_core_id is in the range of the cpu_desc.core_list
+    /// The entry must be a valid address with executable permission
+    /// The ctx must be a valid cpu_idx
+    unsafe fn cpu_on(arch_core_id: usize, entry: usize, ctx: usize) {
         crate::arch::power_arch_cpu_on(arch_core_id, entry, ctx);
     }
 
@@ -115,21 +119,34 @@ pub trait PlatOperation {
             fn _secondary_start();
         }
         for i in 1..PLAT_DESC.cpu_desc.num {
-            Self::cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _secondary_start as usize, i);
+            // SAFETY:
+            // We iterate all the cores except the primary core so the arch_core_id must be valid.
+            // Entry is a valid address with executable permission.
+            // The 'i' is a valid cpu_idx for ctx.
+            unsafe {
+                Self::cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _secondary_start as usize, i);
+            }
         }
     }
 
     /// Reboots the system
-    fn sys_reboot() -> ! {
+    /// # Safety:
+    /// The caller must ensure that the system can be reboot
+    unsafe fn sys_reboot() -> ! {
         info!("Hypervisor reset...");
-        crate::arch::power_arch_sys_reset();
+        // SAFETY: We are ready to reset the system when rebooting.
+        unsafe {
+            crate::arch::power_arch_sys_reset();
+        }
         loop {
             core::hint::spin_loop();
         }
     }
 
     /// Shuts down the system
-    fn sys_shutdown() -> ! {
+    /// # Safety:
+    /// The caller must ensure that the system can be shutdown
+    unsafe fn sys_shutdown() -> ! {
         info!("Hypervisor shutdown...");
         crate::arch::power_arch_sys_shutdown();
         loop {

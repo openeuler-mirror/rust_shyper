@@ -21,7 +21,7 @@ use crate::kernel::{
     current_cpu, interrupt_vm_inject, ipi_send_msg, IpiHvcMsg, IpiInnerMsg, IpiMessage, IpiType, ivc_update_mq, vm,
     vm_if_get_cpu_id, vm_if_ivc_arg, vm_if_ivc_arg_ptr, vm_if_set_ivc_arg_ptr, VM_NUM_MAX,
 };
-use crate::utils::{memcpy_safe, trace};
+use crate::utils::{memcpy, trace};
 #[cfg(feature = "unilib")]
 use crate::utils::unilib::*;
 use crate::vmm::{get_vm_id, vmm_boot_vm, vmm_list_vm, vmm_reboot_vm, vmm_remove_vm};
@@ -387,43 +387,52 @@ pub fn hvc_send_msg_to_vm(vm_id: usize, guest_msg: &HvcGuestMsg) -> bool {
     }
     let (fid, event) = match guest_msg {
         HvcGuestMsg::Default(msg) => {
-            memcpy_safe(
-                target_addr as *const u8,
-                msg as *const _ as *const u8,
-                size_of::<HvcDefaultMsg>(),
-            );
+            // SAFETY:
+            // We have both read and write access to the src and dst memory regions.
+            // The copied size will not exceed the memory region.
+            unsafe {
+                memcpy(
+                    target_addr as *const u8,
+                    msg as *const _ as *const u8,
+                    size_of::<HvcDefaultMsg>(),
+                );
+            }
             (msg.fid, msg.event)
         }
-        HvcGuestMsg::Migrate(msg) => {
-            memcpy_safe(
-                target_addr as *const u8,
-                msg as *const _ as *const u8,
-                size_of::<HvcMigrateMsg>(),
-            );
-            (msg.fid, msg.event)
+        HvcGuestMsg::Migrate(_msg) => {
+            todo!()
         }
         HvcGuestMsg::Manage(msg) => {
-            memcpy_safe(
-                target_addr as *const u8,
-                msg as *const _ as *const u8,
-                size_of::<HvcManageMsg>(),
-            );
+            // SAFETY:
+            // We have both read and write access to the src and dst memory regions.
+            // The copied size will not exceed the memory region.
+            unsafe {
+                memcpy(
+                    target_addr as *const u8,
+                    msg as *const _ as *const u8,
+                    size_of::<HvcManageMsg>(),
+                );
+            }
             (msg.fid, msg.event)
         }
         #[cfg(feature = "unilib")]
         HvcGuestMsg::UniLib(msg) => {
-            memcpy_safe(
-                target_addr as *const u8,
-                msg as *const _ as *const u8,
-                size_of::<HvcUniLibMsg>(),
-            );
+            // SAFETY:
+            // We have both read and write access to the src and dst memory regions.
+            // The copied size will not exceed the memory region.
+            unsafe {
+                memcpy(
+                    target_addr as *const u8,
+                    msg as *const _ as *const u8,
+                    size_of::<HvcUniLibMsg>(),
+                );
+            }
             (msg.fid, msg.event)
         }
     };
 
     let cpu_trgt = vm_if_get_cpu_id(vm_id);
     if cpu_trgt != current_cpu().id {
-        // println!("cpu {} send hvc msg to cpu {}", current_cpu().id, cpu_trgt);
         let ipi_msg = IpiHvcMsg {
             src_vmid: 0,
             trgt_vmid: vm_id,

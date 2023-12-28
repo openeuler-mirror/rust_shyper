@@ -157,11 +157,16 @@ pub fn vm_if_copy_mem_map(vm_id: usize) {
     let mut vm_if = VM_IF_LIST[vm_id].lock();
     let mem_map_cache = vm_if.mem_map_cache.clone();
     let map = vm_if.mem_map.as_mut().unwrap();
-    memcpy_safe(
-        mem_map_cache.as_ref().unwrap().pa() as *const u8,
-        map.slice() as *const _ as *const u8,
-        size_of::<u64>() * map.vec_len(),
-    );
+    // SAFETY:
+    // We have both read and write access to the src and dst memory regions.
+    // The copied size will not exceed the memory region.
+    unsafe {
+        memcpy(
+            mem_map_cache.as_ref().unwrap().pa() as *const u8,
+            map.slice() as *const _ as *const u8,
+            size_of::<u64>() * map.vec_len(),
+        );
+    }
     // clear bitmap after copy
     map.clear();
 }

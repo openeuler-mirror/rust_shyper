@@ -14,7 +14,7 @@ use spin::Mutex;
 
 use crate::arch::PAGE_SIZE;
 use crate::utils::{BitAlloc, BitAlloc4K, BitAlloc64K, BitMap};
-use crate::utils::memset_safe;
+use crate::utils::memset;
 
 use super::AllocError;
 
@@ -126,8 +126,13 @@ impl HeapRegion {
         }
 
         let addr = self.region.base + bit * PAGE_SIZE;
-        memset_safe(addr as *mut u8, 0, size * PAGE_SIZE);
-        debug!("mem heap alloc alocate {:x}, size {:x}", addr, size * PAGE_SIZE);
+        // SAFETY:
+        // The addr is writable for the Hypervisor in EL2.
+        // The 'c' is a valid value of type u8 without overflow.
+        unsafe {
+            memset(addr as *mut u8, 0, size * PAGE_SIZE);
+            debug!("mem heap alloc alocate {:x}, size {:x}", addr, size * PAGE_SIZE);
+        }
         Ok(addr)
     }
 

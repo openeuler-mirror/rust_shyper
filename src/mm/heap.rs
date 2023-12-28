@@ -26,6 +26,8 @@ pub static HEAP_ALLOCATOR: LockedHeap<32> = LockedHeap::empty();
 
 /// Initialize heap allocator
 pub fn heap_init() {
+    // SAFEFY:
+    // HEAP_REGION is aligned and HEAP_SIZE is a multiple of PAGE_SIZE
     unsafe {
         println!(
             "init buddy system, heap start from {:x}",

@@ -268,7 +268,7 @@ impl SmmuV2 {
     fn new() -> Self {
         let smmu_base_addr = PLAT_DESC.arch_desc.smmu_desc.base;
 
-        // SAFETY: the reference of glb_rs0 is a MMIO address
+        // SAFETY: The reference of glb_rs0 is a MMIO address
         let glb_rs0 = unsafe { &*(smmu_base_addr as *const SmmuGlbRS0) };
         /* IDR1 */
         let idr1 = glb_rs0.IDR1.get() as usize;
@@ -278,7 +278,7 @@ impl SmmuV2 {
             0x10000
         };
 
-        // SAFETY: the reference of glb_rs1 is a MMIO address
+        // SAFETY: The reference of glb_rs1 is a MMIO address
         let glb_rs1 = unsafe { &*((smmu_base_addr + page_size) as *const SmmuGlbRS1) };
         let mut r = Self {
             glb_rs0,
@@ -309,7 +309,7 @@ impl SmmuV2 {
         let context_bank_num = bit_extract(idr1, SMMUV2_IDR1_NUMCB_OFF, SMMUV2_IDR1_NUMCB_LEN);
         let context_base = smmu_base_addr + num_pages * page_size;
         for i in 0..context_bank_num {
-            // SAFETY: the reference of Context bank is a MMIO address
+            // SAFETY: The reference of Context bank is a MMIO address
             self.context_bank
                 .push(unsafe { DeviceRef::new((context_base + page_size * i) as *const _) });
         }

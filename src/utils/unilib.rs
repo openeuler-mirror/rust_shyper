@@ -240,7 +240,10 @@ pub fn unilib_fs_open(path_start_ipa: usize, path_length: usize, flags: usize) -
 
     // Copy path to unilib_fs buf, see UnilibFSCfg.
     let path_pa = vm_ipa2pa(active_vm().unwrap(), path_start_ipa);
-    memcpy_safe(fs_cfg.get_buf(), path_pa as *mut u8, path_length);
+    // SAFETY:
+    // We have both read and write access to the src and dst memory regions.
+    // The copied size will not exceed the memory region.
+    memcpy(fs_cfg.get_buf(), path_pa as *mut u8, path_length);
     // Add end '\0' for path buf.
     unsafe {
         *((fs_cfg.get_buf() as usize + path_length) as *mut u8) = 0u8;
@@ -355,7 +358,10 @@ pub fn unilib_fs_read(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, ()
         return Ok(res as usize);
     }
     let buf_pa = vm_ipa2pa(vm, buf_ipa);
-    memcpy_safe(buf_pa as *mut u8, fs_cfg.get_buf(), fs_cfg.value());
+    // Safety:
+    // We have both read and write access to the src and dst memory regions.
+    // The copied size will not exceed the memory region.
+    memcpy(buf_pa as *mut u8, fs_cfg.get_buf(), fs_cfg.value());
     Ok(fs_cfg.value())
 }
 
@@ -387,7 +393,10 @@ pub fn unilib_fs_write(fd: usize, buf_ipa: usize, len: usize) -> Result<usize, (
         }
     };
     let buf_pa = vm_ipa2pa(vm.clone(), buf_ipa);
-    memcpy_safe(fs_cfg.get_buf(), buf_pa as *mut u8, len);
+    // Safety:
+    // We have both read and write access to the src and dst memory regions.
+    // The copied size will not exceed the memory region.
+    memcpy(fs_cfg.get_buf(), buf_pa as *mut u8, len);
 
     fs_cfg.prepare_for_request();
 
@@ -488,7 +497,10 @@ pub fn unilib_fs_unlink(path_start_ipa: usize, path_length: usize) -> Result<usi
 
     // Copy path to unilib_fs buf, see UnilibFSCfg.
     let path_pa = vm_ipa2pa(active_vm().unwrap(), path_start_ipa);
-    memcpy_safe(fs_cfg.get_buf(), path_pa as *mut u8, path_length);
+    // Safety:
+    // We have both read and write access to the src and dst memory regions.
+    // The copied size will not exceed the memory region.
+    memcpy(fs_cfg.get_buf(), path_pa as *mut u8, path_length);
     // Add end '\0' for path buf.
     unsafe {
         *((fs_cfg.get_buf() as usize + path_length) as *mut u8) = 0u8;

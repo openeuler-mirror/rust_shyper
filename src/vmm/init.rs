@@ -104,6 +104,9 @@ pub fn vmm_load_image(vm: Vm, bin: &[u8]) {
         if trace() && vm.pa_start(idx) + offset < 0x1000 {
             panic!("illegal addr {:x}", vm.pa_start(idx) + offset);
         }
+        // SAFETY:
+        // The 'vm.pa_start(idx) + offset' is in range of our memory configuration.
+        // The 'size' is the length of Image binary.
         let dst = unsafe { core::slice::from_raw_parts_mut((vm.pa_start(idx) + offset) as *mut u8, size) };
         dst.clone_from_slice(bin);
         return;
@@ -146,6 +149,8 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                         fn _binary_vm0img_start();
                         fn _binary_vm0img_size();
                     }
+                    // SAFETY:
+                    // The '_binary_vm0img_start' and '_binary_vm0img_size' are valid from linker script.
                     let vm0image = unsafe {
                         core::slice::from_raw_parts(
                             _binary_vm0img_start as usize as *const u8,
@@ -170,6 +175,8 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                         fn _binary_vm0img_start();
                         fn _binary_vm0img_size();
                     }
+                    // SAFETY:
+                    // The '_binary_vm0img_start' and '_binary_vm0img_size' are valid from linker script.
                     let vm0image = unsafe {
                         core::slice::from_raw_parts(
                             _binary_vm0img_start as usize as *const u8,
@@ -185,6 +192,8 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                         fn _binary_vm0img_start();
                         fn _binary_vm0img_size();
                     }
+                    // SAFETY:
+                    // The '_binary_vm0img_start' and '_binary_vm0img_size' are valid from linker script.
                     let vm0image = unsafe {
                         core::slice::from_raw_parts(
                             _binary_vm0img_start as usize as *const u8,
@@ -216,6 +225,10 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             let offset = config.device_tree_load_ipa() - config.memory_region()[0].ipa_start;
             debug!("MVM[{}] dtb addr 0x{:x}", vm_id, vm.pa_start(0) + offset);
             vm.set_dtb((vm.pa_start(0) + offset) as *mut fdt::myctypes::c_void);
+            // SAFETY:
+            // Offset is computed from config.device_tree_load_ipa() and config.memory_region()[0].ipa_start which are both valid.
+            // The 'vm.pa_start(0) + offset' is in range of our memory configuration.
+            // The 'vm.dtb' have been set to vm.pa_start(0) + offset which is in range of our memory configuration.
             unsafe {
                 let src = SYSTEM_FDT.get().unwrap();
                 let len = src.len();
@@ -237,6 +250,9 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                         overlay.len()
                     );
                     if overlay.is_empty() {
+                        // SAFETY:
+                        // The 'target' is in range of our memory configuration.
+                        // The 'src' is a temporary buffer and is valid.
                         unsafe {
                             core::ptr::copy_nonoverlapping(dtb.as_ptr(), target, dtb.len());
                         }
@@ -250,6 +266,9 @@ pub fn vmm_init_image(vm: Vm) -> bool {
                         };
                         overlay.clear();
                         overlay.shrink_to_fit();
+                        // SAFETY:
+                        // The 'target' is in range of our memory configuration.
+                        // The 'buf' is a vaild value from stack.
                         unsafe {
                             core::ptr::copy_nonoverlapping(buf.as_ptr(), target, buf.len());
                         }
@@ -275,6 +294,9 @@ pub fn vmm_init_image(vm: Vm) -> bool {
         info!("VM {} use ramdisk CPIO_RAMDISK", vm_id);
         let offset = config.ramdisk_load_ipa() - config.memory_region()[0].ipa_start;
         let len = CPIO_RAMDISK.len();
+        // SAFETY:
+        // The 'vm.pa_start(0) + offset' is in range of our memory configuration.
+        // The 'len' is the length of CPIO_RAMDISK binary.
         let dst = unsafe { core::slice::from_raw_parts_mut((vm.pa_start(0) + offset) as *mut u8, len) };
         dst.clone_from_slice(CPIO_RAMDISK);
     }
@@ -427,7 +449,7 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
 fn vmm_init_passthrough_device(vm: Vm) -> bool {
     for region in vm.config().passthrough_device_regions() {
         // TODO: specify the region property more accurately.
-        // 'dev_property' in a device region means cacheable here.
+        // The 'dev_property' in a device region means cacheable here.
         if region.dev_property {
             vm.pt_map_range(region.ipa, region.length, region.pa, PTE_S2_DEVICE, true);
         } else {
@@ -463,6 +485,9 @@ fn vmm_init_iommu_device(vm: Vm) -> bool {
     true
 }
 
+/// # Safety:
+/// This function is unsafe because it trusts the caller to pass a valid pointer to a valid dtb.
+/// So the caller must ensure that the vm.dtb() have configured correctly before calling this function.
 pub unsafe fn vmm_setup_fdt(vm: Vm) {
     use fdt::*;
     let config = vm.config();

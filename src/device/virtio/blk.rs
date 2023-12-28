@@ -18,7 +18,7 @@ use crate::kernel::{
     active_vm_id, add_async_task, async_blk_id_req, async_blk_io_req, async_ipi_req, AsyncTask, AsyncTaskData,
     AsyncTaskState, IoAsyncMsg, IoIdAsyncMsg, IpiMediatedMsg, push_used_info, Vm, vm_ipa2pa,
 };
-use crate::utils::{memcpy_safe, trace};
+use crate::utils::{memcpy, trace};
 
 pub const VIRTQUEUE_BLK_MAX_SIZE: usize = 256;
 pub const VIRTQUEUE_NET_MAX_SIZE: usize = 256;
@@ -116,8 +116,8 @@ impl BlkDesc {
     }
 
     /// # Safety:
-    /// caller must ensure offset is valid
-    /// offset must valid for virtio_mmio
+    /// Caller must ensure offset is valid
+    /// Offset must valid for virtio_mmio
     pub unsafe fn offset_data(&self, offset: usize, width: usize) -> usize {
         let start_addr = self.start_addr();
         match width {
@@ -404,7 +404,12 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                         if trace() && (data_bg < 0x1000 || cache_ptr < 0x1000) {
                             panic!("illegal des addr {:x}, src addr {:x}", data_bg, cache_ptr);
                         }
-                        memcpy_safe(data_bg as *mut u8, cache_ptr as *mut u8, len);
+                        // SAFETY:
+                        // We have both read and write access to the src and dst memory regions.
+                        // The copied size will not exceed the memory region.
+                        unsafe {
+                            memcpy(data_bg as *mut u8, cache_ptr as *mut u8, len);
+                        }
                     }
                     cache_ptr += len;
                 }
@@ -421,7 +426,12 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                         if trace() && (data_bg < 0x1000 || cache_ptr < 0x1000) {
                             panic!("illegal des addr {:x}, src addr {:x}", cache_ptr, data_bg);
                         }
-                        memcpy_safe(cache_ptr as *mut u8, data_bg as *mut u8, len);
+                        // SAFETY:
+                        // We have both read and write access to the src and dst memory regions.
+                        // The copied size will not exceed the memory region.
+                        unsafe {
+                            memcpy(cache_ptr as *mut u8, data_bg as *mut u8, len);
+                        }
                     }
                     cache_ptr += len;
                 }
@@ -456,7 +466,12 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
                 if trace() && (data_bg < 0x1000) {
                     panic!("illegal des addr {:x}", cache_ptr);
                 }
-                memcpy_safe(data_bg as *mut u8, name, 20);
+                // SAFETY:
+                // We have both read and write access to the src and dst memory regions.
+                // The copied size will not exceed the memory region.
+                unsafe {
+                    memcpy(data_bg as *mut u8, name, 20);
+                }
                 let task = AsyncTask::new(
                     AsyncTaskData::AsyncNoneTask(IoIdAsyncMsg {
                         vq: vq.clone(),
@@ -578,7 +593,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                         error!("virtio_blk_notify_handler: failed to get vreq");
                         return false;
                     }
-                    // SAFETY: vreq_addr is checked
+                    // SAFETY: 'vreq_addr' is checked
                     let vreq = unsafe { &mut *(vreq_addr as *mut VirtioBlkReqNode) };
                     req_node.req_type = vreq.req_type;
                     req_node.sector = vreq.sector;
@@ -621,7 +636,7 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                     error!("virtio_blk_notify_handler: vm[{}] failed to vstatus", vm.id());
                     return false;
                 }
-                // SAFETY: vstatus_addr is checked
+                // SAFETY: 'vstatus_addr' is checked
                 let vstatus = unsafe { &mut *(vstatus_addr as *mut u8) };
                 if req_node.req_type > 1 && req_node.req_type != VIRTIO_BLK_T_GET_ID as u32 {
                     *vstatus = VIRTIO_BLK_S_UNSUPP as u8;

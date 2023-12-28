@@ -125,8 +125,8 @@ impl NetDesc {
 
     /// Computes the offset data within the `NetDesc` structure.
     /// # SAFETY:
-    /// caller must ensure offset is valid
-    /// offset must valid for virtio_mmio
+    /// Caller must ensure offset is valid
+    /// Offset must valid for virtio_mmio
     pub unsafe fn offset_data(&self, offset: usize, width: usize) -> usize {
         let inner = self.inner.lock();
         let start_addr = &inner.mac[0] as *const _ as usize;

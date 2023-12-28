@@ -24,7 +24,7 @@ use crate::device::{
     VirtioMmio, Virtq,
 };
 use crate::kernel::{active_vm_id, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiType, vm};
-use crate::utils::{memcpy_safe, sleep, trace};
+use crate::utils::{memcpy, sleep, trace};
 
 #[derive(Clone, Copy, Debug)]
 pub enum AsyncTaskState {
@@ -294,7 +294,12 @@ pub async fn async_blk_io_req() {
                     if cache_ptr < 0x1000 || data_bg < 0x1000 {
                         panic!("illegal des addr {:x}, src addr {:x}", cache_ptr, data_bg);
                     }
-                    memcpy_safe(cache_ptr as *mut u8, data_bg as *mut u8, len);
+                    // SAFETY:
+                    // We have both read and write access to the src and dst memory regions.
+                    // The copied size will not exceed the memory region.
+                    unsafe {
+                        memcpy(cache_ptr as *mut u8, data_bg as *mut u8, len);
+                    }
                     cache_ptr += len;
                 }
                 mediated_blk_write(msg.blk_id, msg.sector, msg.count);
@@ -434,11 +439,14 @@ pub fn finish_async_task(ipi: bool) {
                     if trace() && (data_bg < 0x1000 || cache_ptr < 0x1000) {
                         panic!("illegal des addr {:x}, src addr {:x}", data_bg, cache_ptr);
                     }
-                    memcpy_safe(data_bg as *mut u8, cache_ptr as *mut u8, len);
-                    // sum |= check_sum(data_bg, len);
+                    // SAFETY:
+                    // We have both read and write access to the src and dst memory regions.
+                    // The copied size will not exceed the memory region.
+                    unsafe {
+                        memcpy(data_bg as *mut u8, cache_ptr as *mut u8, len);
+                    }
                     cache_ptr += len;
                 }
-                // println!("read check_sum is {:x}", sum);
             }
 
             update_used_info(args.vq.clone(), task.src_vmid);

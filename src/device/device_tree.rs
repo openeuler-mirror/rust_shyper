@@ -22,18 +22,17 @@ use crate::vmm::CPIO_RAMDISK;
 const PI4_DTB_ADDR: usize = 0xf0000000;
 
 /// Initializes the Device Tree Blob (DTB) for the primary VM (vm0).
-pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
+/// # Safety:
+/// Dtb is a valid pointer to a device tree blob
+pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     use fdt::*;
-    unsafe {
-        info!("fdt {dtb:p} has original size {}", fdt_size(dtb));
-    };
+    info!("fdt {dtb:p} has original size {}", fdt_size(dtb));
     #[cfg(feature = "tx2")]
-    unsafe {
+    {
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         let r = fdt_del_mem_rsv(dtb, 0);
         assert_eq!(r, 0);
-        // fdt_add_mem_rsv(fdt, 0x80000000, 0x10000000);
         fdt_clear_initrd(dtb);
         let r = fdt_remove_node(dtb, "/cpus/cpu-map/cluster0/core0\0".as_ptr());
         assert_eq!(r, 0);
@@ -45,8 +44,6 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         assert_eq!(r, 0);
         let r = fdt_disable_node(dtb, "/sdhci@3460000\0".as_ptr());
         assert_eq!(r, 0);
-        // fdt_disable_node(dtb, "iommu@12000000\0".as_ptr());
-        // assert_eq!(r, 0);
         let r = fdt_disable_node(dtb, "/sdhci@3440000\0".as_ptr());
         assert_eq!(r, 0);
         let r = fdt_disable_node(dtb, "/serial@c280000\0".as_ptr());
@@ -88,7 +85,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
     #[cfg(feature = "pi4")]
-    unsafe {
+    {
         use crate::utils::round_up;
         use crate::arch::PAGE_SIZE;
         let pi_fdt = PI4_DTB_ADDR as *mut fdt::myctypes::c_void;
@@ -98,7 +95,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
     #[cfg(feature = "qemu")]
-    unsafe {
+    {
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
@@ -159,7 +156,7 @@ pub fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     {
         use fdt::binding::Fdt;
         use crate::alloc::borrow::ToOwned;
-        let mut fdt = unsafe { Fdt::from_ptr(dtb as *const u8) }.to_owned();
+        let mut fdt = Fdt::from_ptr(dtb as *const u8).to_owned();
         crate::config::patch_fdt(&mut fdt)?;
         SYSTEM_FDT.call_once(move || fdt.into_inner());
     }

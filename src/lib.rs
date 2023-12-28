@@ -163,7 +163,7 @@ fn print_built_info() {
 
 // Only core 0 will execute this function
 #[no_mangle]
-pub fn init(dtb: *mut fdt::myctypes::c_void) {
+pub fn init(dtb: &mut fdt::myctypes::c_void) {
     print_built_info();
 
     #[cfg(feature = "pi4")]
@@ -175,7 +175,12 @@ pub fn init(dtb: *mut fdt::myctypes::c_void) {
     heap_init();
     kernel::logger_init().unwrap();
     mem_init();
-    init_vm0_dtb(dtb).unwrap();
+    // SAFETY:
+    // DTB is saved value from boot_stage
+    // And it is passed by bootloader
+    unsafe {
+        init_vm0_dtb(dtb).unwrap();
+    }
     iommu_init();
     cpu_init();
     interrupt_init();

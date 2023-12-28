@@ -35,7 +35,7 @@ use crate::{
 /// The base address for the UART device.
 const UART_BASE: usize = Platform::HYPERVISOR_UART_BASE;
 
-// SAFETY: the reference of unart is a MMIO address
+// SAFETY: The reference of unart is a MMIO address
 const UART: DeviceRef<Uart> = unsafe { DeviceRef::new(UART_BASE as *const Uart) };
 
 /// Sends a byte to the UART device, replacing '\n' with '\r\n'.

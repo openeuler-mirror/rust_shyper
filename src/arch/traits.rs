@@ -31,7 +31,7 @@ pub trait ArchPageTableEntryTrait {
     fn to_pa(&self) -> usize;
     fn valid(&self) -> bool;
     fn entry(&self, index: usize) -> Self;
-    fn set_entry(&self, index: usize, value: Self);
+    unsafe fn set_entry(&self, index: usize, value: Self);
     fn make_table(frame_pa: usize) -> Self;
 }
 

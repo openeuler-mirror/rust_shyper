@@ -598,7 +598,12 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                         error!("virtio_mmio_queue_access: invalid desc_table_addr");
                         return;
                     }
-                    virtq.set_desc_table(desc_table_addr);
+                    // SAFETY:
+                    // The 'desc_table_addr' is valid MMIO address of virtio-blk config
+                    // And it is checked by vm_ipa2pa to gurantee that it is in the range of vm config memory
+                    unsafe {
+                        virtq.set_desc_table(desc_table_addr);
+                    }
                 }
                 Err(_) => {
                     panic!(
@@ -626,7 +631,12 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                         error!("virtio_mmio_queue_access: invalid avail_addr");
                         return;
                     }
-                    virtq.set_avail(avail_addr);
+                    // SAFETY:
+                    // The 'avail_addr' is valid MMIO address of virtio-blk config
+                    // And it is checked by vm_ipa2pa to gurantee that it is in the range of vm config memory
+                    unsafe {
+                        virtq.set_avail(avail_addr);
+                    }
                 }
                 Err(_) => {
                     panic!(
@@ -654,7 +664,12 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                         error!("virtio_mmio_queue_access: invalid used_addr");
                         return;
                     }
-                    virtq.set_used(used_addr);
+                    // SAFETY:
+                    // The 'used_addr' is valid MMIO address of virtio-blk config
+                    // And it is checked by vm_ipa2pa to gurantee that it is in the range of vm config memory
+                    unsafe {
+                        virtq.set_used(used_addr);
+                    }
                 }
                 Err(_) => {
                     panic!(
@@ -681,11 +696,11 @@ fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize,
             }
             VIRTIO_MMIO_CONFIG..=0x1ff => match mmio.dev().desc() {
                 super::DevDesc::BlkDesc(blk_desc) => {
-                    // SAFETY: offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
+                    // SAFETY: Offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
                     value = unsafe { blk_desc.offset_data(offset - VIRTIO_MMIO_CONFIG, width) };
                 }
                 super::DevDesc::NetDesc(net_desc) => {
-                    // SAFETY: offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
+                    // SAFETY: Offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
                     value = unsafe { net_desc.offset_data(offset - VIRTIO_MMIO_CONFIG, width) };
                 }
                 _ => {

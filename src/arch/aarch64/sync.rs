@@ -87,7 +87,10 @@ pub fn smc_handler() {
 
     if !smc_guest_handler(fid, x1, x2, x3) {
         if active_vm_id() == 0 {
-            let res = smc_call(fid, x1, x2, x3);
+            // SAFETY:
+            // We just forward the SMC call to the ATF directly.
+            // The args are from lower EL, so it is safe to call the ATF.
+            let res = unsafe { smc_call(fid, x1, x2, x3) };
             current_cpu().set_gpr(0, res.0);
             current_cpu().set_gpr(1, res.1);
             current_cpu().set_gpr(2, res.2);

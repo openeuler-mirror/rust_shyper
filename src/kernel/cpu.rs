@@ -14,8 +14,9 @@ use core::ptr;
 use spin::Mutex;
 
 use crate::arch::{PAGE_SIZE, set_current_cpu};
+
 use crate::arch::ContextFrame;
-use crate::arch::wfi;
+use crate::arch::{wfi, isb};
 use crate::arch::ContextFrameTrait;
 // use core::ops::{Deref, DerefMut};
 use crate::arch::{cpu_interrupt_unmask, current_cpu_arch};
@@ -222,8 +223,10 @@ impl Cpu {
         let vttbr = (next_vcpu.vm_id() << 48) | next_vcpu.vm_pt_dir();
         // println!("vttbr {:#x}", vttbr);
         // TODO: replace the arch related expr
+        // SAFETY: 'vttbr' is saved in the vcpu struct when last scheduled
         unsafe {
-            core::arch::asm!("msr VTTBR_EL2, {0}", "isb", in(reg) vttbr);
+            core::arch::asm!("msr VTTBR_EL2, {0}", in(reg) vttbr);
+            isb();
         }
     }
 
@@ -246,7 +249,7 @@ impl Cpu {
 }
 
 pub fn current_cpu() -> &'static mut Cpu {
-    // SAFETY: the value of current_cpu_arch() is valid setted by cpu_map_self at boot_stage
+    // SAFETY: The value of current_cpu_arch() is valid setted by cpu_map_self at boot_stage
     unsafe { &mut *(current_cpu_arch() as *mut Cpu) }
 }
 

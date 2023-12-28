@@ -10,7 +10,6 @@
 
 use crate::arch::PAGE_SIZE;
 use crate::kernel::{mem_heap_free, mem_heap_alloc, AllocError};
-use crate::utils::{memset_safe, trace};
 
 #[derive(Debug)]
 /// PageFrame struct represents a page frame, consisting of physical address and page number.
@@ -35,27 +34,6 @@ impl PageFrame {
 
     pub fn pa(&self) -> usize {
         self.pa
-    }
-
-    /// memset the page frame to all zero.
-    pub fn zero(&self) {
-        memset_safe(self.pa as *mut u8, 0, PAGE_SIZE);
-    }
-
-    /// Get the slice of the page frame.
-    pub fn as_slice<T>(&self) -> &'static [T] {
-        if trace() && self.pa() < 0x1000 {
-            panic!("illegal addr {:x}", self.pa());
-        }
-        unsafe { core::slice::from_raw_parts(self.pa as *const T, PAGE_SIZE / core::mem::size_of::<T>()) }
-    }
-
-    /// Get the mutable slice of the page frame.
-    pub fn as_mut_slice<T>(&self) -> &'static mut [T] {
-        if trace() && self.pa() < 0x1000 {
-            panic!("illegal addr {:x}", self.pa());
-        }
-        unsafe { core::slice::from_raw_parts_mut(self.pa as *mut T, PAGE_SIZE / core::mem::size_of::<T>()) }
     }
 }
 

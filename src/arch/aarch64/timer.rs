@@ -23,8 +23,7 @@ pub static TIMER_SLICE: AtomicUsize = AtomicUsize::new(0); // ms
 pub fn timer_arch_set(num: usize) {
     let slice = TIMER_SLICE.load(Ordering::Relaxed);
     let val = slice * num;
-    // SAFETY:
-    // Set timer value
+    // SAFETY: Set timer value
     unsafe {
         CNTHP_TVAL_EL2::write(val);
     }
@@ -32,8 +31,7 @@ pub fn timer_arch_set(num: usize) {
 
 /// Enable timer interrupt
 pub fn timer_arch_enable_irq() {
-    // SAFETY:
-    // Enable[0] timer interrupt
+    // SAFETY: Enable[0] timer interrupt
     unsafe {
         CNTHP_CTL_EL2::write(1);
     }
@@ -41,8 +39,7 @@ pub fn timer_arch_enable_irq() {
 
 /// Disable timer interrupt
 pub fn timer_arch_disable_irq() {
-    // SAFETY:
-    // MASK[1] timer interrupt
+    // SAFETY: MASK[1] timer interrupt
     unsafe {
         CNTHP_CTL_EL2::write(2);
     }
@@ -69,7 +66,7 @@ pub fn timer_arch_init() {
     let tval = slice * 10;
     // SAFETY:
     // Set timer value
-    // init timer with enable but mask
+    // Init timer with enable but mask
     unsafe {
         CNTHP_CTL_EL2::write(ctl);
         CNTHP_TVAL_EL2::write(tval);

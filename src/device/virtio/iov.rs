@@ -14,7 +14,7 @@ use core::slice::from_raw_parts;
 
 use spin::Mutex;
 
-use crate::utils::{memcpy_safe, trace};
+use crate::utils::{memcpy, trace};
 
 /// Represents a Virtio I/O vector.
 #[derive(Clone)]
@@ -56,10 +56,20 @@ impl VirtioIov {
             let offset = len - size;
             let dst = addr + offset;
             if iov_data.len >= size {
-                memcpy_safe(dst as *const u8, iov_data.buf as *const u8, size);
+                // SAFETY:
+                // We have both read and write access to the src and dst memory regions.
+                // The copied size will not exceed the memory region.
+                unsafe {
+                    memcpy(dst as *const u8, iov_data.buf as *const u8, size);
+                }
                 break;
             } else {
-                memcpy_safe(dst as *const u8, iov_data.buf as *const u8, iov_data.len);
+                // SAFETY:
+                // We have both read and write access to the src and dst memory regions.
+                // The copied size will not exceed the memory region.
+                unsafe {
+                    memcpy(dst as *const u8, iov_data.buf as *const u8, iov_data.len);
+                }
                 size -= iov_data.len;
             }
         }
@@ -73,10 +83,20 @@ impl VirtioIov {
             let offset = len - size;
             let src = addr + offset;
             if iov_data.len >= size {
-                memcpy_safe(iov_data.buf as *const u8, src as *const u8, size);
+                // SAFETY:
+                // We have both read and write access to the src and dst memory regions.
+                // The copied size will not exceed the memory region.
+                unsafe {
+                    memcpy(iov_data.buf as *const u8, src as *const u8, size);
+                }
                 break;
             } else {
-                memcpy_safe(iov_data.buf as *const u8, src as *const u8, iov_data.len);
+                // SAFETY:
+                // We have both read and write access to the src and dst memory regions.
+                // The copied size will not exceed the memory region.
+                unsafe {
+                    memcpy(iov_data.buf as *const u8, src as *const u8, iov_data.len);
+                }
                 size -= iov_data.len;
             }
         }
@@ -105,6 +125,8 @@ impl VirtioIov {
                 if trace() && iov_data.buf + idx < 0x1000 {
                     panic!("illegal addr {:x}", iov_data.buf + idx);
                 }
+                // SAFETY:
+                // The 'iov_data.buf' is a valid address, and iov_data.len is the length of the buffer.
                 return unsafe { from_raw_parts((iov_data.buf + idx) as *const u8, 14) };
             } else {
                 idx -= iov_data.len;
@@ -127,12 +149,7 @@ impl VirtioIov {
         let mut src_ptr = inner.vector[0].buf;
         let mut dst_vlen_remain = dst.get_len(0);
         let mut src_vlen_remain = inner.vector[0].len;
-        // let mut len = remain.clone();
         let mut remain = remain;
-        // println!(
-        //     "dst_vlen_remain {}, src_vlen_remain {}, remain {}",
-        //     dst_vlen_remain, src_vlen_remain, remain
-        // );
 
         while remain > 0 {
             if dst_iov_idx == dst.num() || src_iov_idx == inner.vector.len() {
@@ -145,7 +162,12 @@ impl VirtioIov {
                 if trace() && (dst_ptr < 0x1000 || src_ptr < 0x1000) {
                     panic!("illegal des addr {:x}, src addr {:x}", dst_ptr, src_ptr);
                 }
-                memcpy_safe(dst_ptr as *const u8, src_ptr as *const u8, written);
+                // SAFETY:
+                // We have both read and write access to the src and dst memory regions.
+                // The copied size will not exceed the memory region.
+                unsafe {
+                    memcpy(dst_ptr as *const u8, src_ptr as *const u8, written);
+                }
                 src_iov_idx += 1;
                 if src_iov_idx < inner.vector.len() {
                     src_ptr = inner.vector[src_iov_idx].buf;
@@ -153,17 +175,17 @@ impl VirtioIov {
                     dst_ptr += written;
                     dst_vlen_remain -= written;
                 }
-                // if dst_vlen_remain == 0 {
-                //     dst_iov_idx += 1;
-                //     dst_ptr = dst.get_buf(dst_iov_idx);
-                //     dst_vlen_remain = dst.get_len(dst_iov_idx);
-                // }
             } else {
                 written = dst_vlen_remain;
                 if trace() && (dst_ptr < 0x1000 || src_ptr < 0x1000) {
                     panic!("illegal des addr {:x}, src addr {:x}", dst_ptr, src_ptr);
                 }
-                memcpy_safe(dst_ptr as *const u8, src_ptr as *const u8, written);
+                // SAFETY:
+                // We have both read and write access to the src and dst memory regions.
+                // The copied size will not exceed the memory region.
+                unsafe {
+                    memcpy(dst_ptr as *const u8, src_ptr as *const u8, written);
+                }
                 dst_iov_idx += 1;
                 if dst_iov_idx < dst.num() {
                     dst_ptr = dst.get_buf(dst_iov_idx);
@@ -179,19 +201,8 @@ impl VirtioIov {
                     }
                 }
             }
-            // if remain < written {
-            //     println!("remain {} less than writter {}", remain, written);
-            //     return 1;
-            // }
             remain -= written;
         }
-        // unsafe {
-        //     let slice = core::slice::from_raw_parts(dst.get_buf(0) as *const u8, len as usize);
-        //     use alloc::string::String;
-        //     let s = String::from_utf8_lossy(slice);
-        //     println!("receive data:{}", s);
-        //     println!("");
-        // }
 
         remain
     }

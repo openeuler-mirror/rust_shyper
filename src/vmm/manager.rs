@@ -29,7 +29,7 @@ use crate::kernel::HVC_CONFIG;
 use crate::kernel::HVC_CONFIG_UPLOAD_KERNEL_IMAGE;
 use crate::kernel::HVC_VMM;
 use crate::kernel::HVC_VMM_REBOOT_VM;
-use crate::utils::{bit_extract, memcpy_safe, memset_safe};
+use crate::utils::{bit_extract, memcpy, memset};
 use crate::vmm::{vmm_cpu_assign_vcpu, vmm_boot, vmm_init_image, vmm_setup_config, vmm_cpu_remove_vcpu};
 
 #[derive(Copy, Clone)]
@@ -290,7 +290,11 @@ pub fn vmm_reboot() {
     if vm.id() == 0 {
         vmm_shutdown_secondary_vm();
         use crate::board::{PlatOperation, Platform};
-        Platform::sys_reboot();
+        // SAFETY:
+        // Here we are ready to reboot the system.
+        unsafe {
+            Platform::sys_reboot();
+        }
     }
 
     // Reset GVM.
@@ -314,7 +318,11 @@ pub fn vmm_reboot() {
             vm.pa_start(idx),
             vm.pa_length(idx)
         );
-        memset_safe(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        // SAFETY:
+        // The 'vm_pa_region' is writable for the Hypervisor in EL2.
+        unsafe {
+            memset(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        }
     }
 
     // Reset image.
@@ -359,7 +367,7 @@ pub fn get_vm_id(id_ipa: usize) -> bool {
         error!("illegal id_pa {:x}", id_pa);
         return false;
     }
-    // SAFETY: id_pa is a valid address checked by shyper.ko
+    // SAFETY: The 'id_pa' is a valid address checked by shyper.ko
     unsafe {
         *(id_pa as *mut usize) = vm.id();
     }
@@ -391,6 +399,9 @@ pub fn vmm_list_vm(vm_info_ipa: usize) -> Result<usize, ()> {
         return Err(());
     }
 
+    // SAFETY:
+    // The 'vm_info_pa' is a valid address checked by shyper.ko
+    // And we have checked the vm_info_pa by vm_ipa2pa to make sure it is in range of vm memory.
     let vm_info = unsafe { &mut *(vm_info_pa as *mut VMInfoList) };
 
     // Get VM num.
@@ -414,11 +425,16 @@ pub fn vmm_list_vm(vm_info_ipa: usize) -> Result<usize, ()> {
         vm_info.info_list[idx].vm_state = vm_state as u32;
 
         let vm_name_u8: Vec<u8> = vm_cfg.vm_name().as_bytes().to_vec();
-        memcpy_safe(
-            vm_info.info_list[idx].vm_name.as_ptr(),
-            vm_name_u8.as_ptr(),
-            NAME_MAX_LEN,
-        );
+        // SAFETY:
+        // We have both read and write access to the src and dst memory regions.
+        // The copied size will not exceed the memory region.
+        unsafe {
+            memcpy(
+                vm_info.info_list[idx].vm_name.as_ptr(),
+                vm_name_u8.as_ptr(),
+                NAME_MAX_LEN,
+            );
+        }
         vm_info.info_list[idx].vm_name[vm_name_u8.len()] = 0;
     }
     Ok(0)

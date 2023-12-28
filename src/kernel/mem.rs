@@ -11,7 +11,7 @@
 use crate::arch::PAGE_SIZE;
 use crate::board::*;
 use crate::kernel::mem_shared_mem_init;
-use crate::utils::{memset_safe, round_up};
+use crate::utils::{memset, round_up};
 use crate::mm::PageFrame;
 
 use super::mem_region::*;
@@ -55,7 +55,12 @@ pub fn mem_heap_region_init() {
     ) / PAGE_SIZE;
 
     info!("init memory, please waiting...");
-    memset_safe(base as *mut u8, 0, size as usize * PAGE_SIZE);
+    // SAFETY:
+    // The region is writable for the Hypervisor in EL2.
+    // The 'c' is a valid value of type u8 without overflow.
+    unsafe {
+        memset(base as *mut u8, 0, size as usize * PAGE_SIZE);
+    }
     // core::intrinsics::volatile_set_memory(ptr, 0, size as usize * PAGE_SIZE);
 
     let mut heap_lock = HEAP_REGION.lock();
@@ -134,7 +139,12 @@ pub enum AllocError {
 
 fn mem_heap_reset() {
     let heap = HEAP_REGION.lock();
-    memset_safe(heap.region.base as *mut u8, 0, heap.region.size * PAGE_SIZE);
+    // SAFETY:
+    // The 'heap_region' is writable for the Hypervisor in EL2.
+    // The 'c' is a valid value of type u8 without overflow.
+    unsafe {
+        memset(heap.region.base as *mut u8, 0, heap.region.size * PAGE_SIZE);
+    }
 }
 
 /// alloc some page from heap region

@@ -22,7 +22,7 @@ use crate::kernel::{active_vcpu_id, current_cpu, restore_vcpu_gic, save_vcpu_gic
 use crate::kernel::{active_vm, active_vm_id, active_vm_ncpu};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm};
-use crate::utils::{bit_extract, bit_get, bit_set, bitmap_find_nth, ptr_read_write};
+use crate::utils::{bit_extract, bit_get, bit_set, bitmap_find_nth};
 
 use super::gic::*;
 #[derive(Clone)]
@@ -1950,14 +1950,14 @@ pub fn partial_passthrough_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext
     if !vgicd_emu_access_is_vaild(emu_ctx) {
         return false;
     }
-    let offset = emu_ctx.address & 0xfff;
     if emu_ctx.write {
-        // todo: add offset match
-        let val = current_cpu().get_gpr(emu_ctx.reg);
-        ptr_read_write(Platform::GICD_BASE + offset, emu_ctx.width, val, false);
+        // SAFETY: Emu_ctx.address is writeable in EL2
+        unsafe {
+            emu_ctx.write(current_cpu().get_gpr(emu_ctx.reg));
+        }
     } else {
-        let res = ptr_read_write(Platform::GICD_BASE + offset, emu_ctx.width, 0, true);
-        current_cpu().set_gpr(emu_ctx.reg, res);
+        // SAFETY: Emu_ctx.address is readable in EL2
+        current_cpu().set_gpr(emu_ctx.reg, unsafe { emu_ctx.read() });
     }
 
     true

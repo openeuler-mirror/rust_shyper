@@ -161,7 +161,6 @@ extern "C" fn current_el_sp0_synchronous() {
 
 #[no_mangle]
 extern "C" fn current_el_sp0_irq() {
-    // lower_aarch64_irq(ctx);
     panic!("current_el_sp0_irq");
 }
 

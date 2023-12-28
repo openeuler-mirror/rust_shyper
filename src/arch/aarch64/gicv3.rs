@@ -785,8 +785,7 @@ impl core::fmt::Display for GicCpuInterface {
 
 impl GicCpuInterface {
     fn init(&self) {
-        // SAFETY:
-        // Set the SRE[0] bit to 1 to enable Group 1 interrupts.
+        // SAFETY: Set the SRE[0] bit to 1 to enable Group 1 interrupts.
         unsafe {
             ICC_SRE_EL2::write(0b1);
         }
@@ -798,34 +797,29 @@ impl GicCpuInterface {
         }
 
         let pmr = ICC_PMR_EL1::read();
-        // SAFETY:
-        // Set the priority mask[7:0] to 0xff means min prio.
+        // SAFETY: Set the priority mask[7:0] to 0xff means min prio.
         unsafe {
             ICC_PMR_EL1::write(0xff);
         }
-        // SAFETY:
-        // Set the binary point[2:0] to 0x0
+        // SAFETY: Set the binary point[2:0] to 0x0
         unsafe {
             ICC_BPR1_EL1::write(0x0);
         }
-        // SAFETY:
-        // Set the EOImode[1] to 1
+        // SAFETY: Set the EOImode[1] to 1
         unsafe {
             ICC_CTLR_EL1::write(ICC_CTLR_EOIMODE_BIT);
         }
         let hcr = ICH_HCR_EL2::read();
-        // SAFETY:
-        // change the LRENPIE[2] to 1 to enable List Register Entry Not Present Interrupt
+        // SAFETY: Change the LRENPIE[2] to 1 to enable List Register Entry Not Present Interrupt
         unsafe {
             ICH_HCR_EL2::write(hcr | GICH_HCR_LRENPIE_BIT);
         }
-        // SAFETY:
-        // Set the EnableGrp1[0] to 1 to enable Group 1 interrupts.
+        // SAFETY: Set the EnableGrp1[0] to 1 to enable Group 1 interrupts.
         unsafe {
             ICC_IGRPEN1_EL1::write(GICC_IGRPEN_EL1_ENB_BIT);
         }
 
-        //set ICH_VMCR_EL2:Interrupt Controller Virtual Machine Control Register Enables the hypervisor to save and restore the virtual machine view of the GIC state.
+        //Set ICH_VMCR_EL2:Interrupt Controller Virtual Machine Control Register Enables the hypervisor to save and restore the virtual machine view of the GIC state.
         let mut ich_vmcr = (pmr & GICH_PMR_MASK) << GICH_VMCR_VPMR_SHIFT;
         ich_vmcr |= GICH_VMCR_VENG1 | GICH_VMCR_VEOIM;
         // SAFETY:
@@ -842,16 +836,14 @@ impl GicCpuInterface {
     }
 
     pub fn set_eoir(&self, eoir: u32) {
-        // SAFETY:
-        // Any INTID[23:0] can't trigger side effects.
+        // SAFETY: Any INTID[23:0] can't trigger side effects.
         unsafe {
             ICC_EOIR1_EL1::write(eoir as usize);
         }
     }
 
     pub fn set_dir(&self, dir: u32) {
-        // SAFETY:
-        // Any INTID[23:0] can't trigger side effects.
+        // SAFETY: Any INTID[23:0] can't trigger side effects.
         unsafe {
             ICC_DIR_EL1::write(dir as usize);
         }
@@ -866,8 +858,7 @@ impl GicHypervisorInterface {
     }
 
     pub fn set_hcr(&self, hcr: usize) {
-        // SAFETY:
-        // Any value can't trigger side effects.
+        // SAFETY: Any value can't trigger side effects.
         unsafe {
             ICH_HCR_EL2::write(hcr);
         }
@@ -910,8 +901,7 @@ impl GicHypervisorInterface {
     }
 
     pub fn set_lr(&self, lr_idx: usize, val: usize) {
-        // SAFETY:
-        // Any value can't trap undefined exception.
+        // SAFETY: Any value can't trap undefined exception.
         unsafe {
             match lr_idx {
                 0 => ICH_LR0_EL2::write(val),
@@ -1017,8 +1007,7 @@ impl crate::arch::InterruptContextTrait for GicState {
             ICC_SRE_EL1::write(0x1);
         }
         isb();
-        // SAFETY:
-        // The value is saved last time
+        // SAFETY: The value is saved last time
         unsafe {
             // restore HCR
             ICH_HCR_EL2::write(self.hcr);
@@ -1069,8 +1058,7 @@ impl GicState {
     }
 
     fn restore_aprn_regs(&self) {
-        // SAFETY:
-        // All value is saved last time
+        // SAFETY: All value is saved last time
         let restore_apr2 = || unsafe {
             ICH_AP0R2_EL2::write(self.apr0[2] as usize);
             ICH_AP1R2_EL2::write(self.apr1[2] as usize);

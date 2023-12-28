@@ -17,7 +17,7 @@ use crate::kernel::{
 };
 use crate::kernel::vm_if_reset;
 use crate::vmm::VmmEvent;
-use crate::utils::memset_safe;
+use crate::utils::memset;
 
 pub fn vmm_remove_vm(vm_id: usize) {
     if vm_id == 0 {
@@ -39,7 +39,11 @@ pub fn vmm_remove_vm(vm_id: usize) {
     vm_if_reset(vm_id);
     // free mem
     for idx in 0..vm.region_num() {
-        memset_safe(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        // SAFETY:
+        // The 'vm_pa_region' is writable for the Hypervisor in EL2.
+        unsafe {
+            memset(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        }
         mem_vm_region_free(vm.pa_start(idx), vm.pa_length(idx));
     }
     // emu dev

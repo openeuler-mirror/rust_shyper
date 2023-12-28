@@ -135,10 +135,14 @@ impl ArchPageTableEntryTrait for Aarch64PageTableEntry {
 
     fn entry(&self, index: usize) -> Aarch64PageTableEntry {
         let addr = self.to_pa() + index * WORD_SIZE;
+        // SAFETY: The read of any address is safe in EL2
         unsafe { Aarch64PageTableEntry((addr as *const usize).read_volatile()) }
     }
 
-    fn set_entry(&self, index: usize, value: Aarch64PageTableEntry) {
+    /// # Safety：
+    /// 1. The index can't be out of [0, PAGE_SIZE / WORD_SIZE)
+    /// 2. The page table entry have write permission
+    unsafe fn set_entry(&self, index: usize, value: Aarch64PageTableEntry) {
         let addr = self.to_pa() + index * WORD_SIZE;
         unsafe { (addr as *mut usize).write_volatile(value.0) }
     }
@@ -196,7 +200,12 @@ impl PageTable {
             } else if l2e.to_pte() & 0b11 == PTE_BLOCK {
                 let pte = l2e.to_pte() & !(0b11 << 6) | ap;
                 debug!("access_permission set 512 page ipa {:x}", ipa);
-                l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry::from_pa(pte));
+                // SAFETY:
+                // We set the page table entry to read-write
+                // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                unsafe {
+                    l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry::from_pa(pte));
+                }
                 ipa += 512 * 4096; // 2MB: 9 + 12 bits
                 pa = l2e.to_pa();
                 size += 512 * 4096;
@@ -205,7 +214,12 @@ impl PageTable {
             let l3e = l2e.entry(pt_lvl3_idx(ipa));
             if l3e.valid() {
                 let pte = l3e.to_pte() & !(0b11 << 6) | ap;
-                l2e.set_entry(pt_lvl3_idx(ipa), Aarch64PageTableEntry::from_pa(pte));
+                // SAFETY:
+                // We set the page table entry to read-write
+                // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                unsafe {
+                    l2e.set_entry(pt_lvl3_idx(ipa), Aarch64PageTableEntry::from_pa(pte));
+                }
                 pa = l3e.to_pa();
                 size += 4096;
             }
@@ -224,7 +238,12 @@ impl PageTable {
                     l0e = Aarch64PageTableEntry::make_table(frame.pa());
                     let mut pages = self.pages.lock();
                     pages.push(frame);
-                    directory.set_entry(pt_lvl0_idx(ipa), l0e);
+                    // SAFETY:
+                    // We set the page table entry to read-write
+                    // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                    unsafe {
+                        directory.set_entry(pt_lvl0_idx(ipa), l0e);
+                    }
                 } else {
                     error!("map lv0 page failed");
                     return;
@@ -242,9 +261,19 @@ impl PageTable {
                 let mut pages = self.pages.lock();
                 pages.push(frame);
                 if cfg!(feature = "lvl4") {
-                    l0e.set_entry(pt_lvl1_idx(ipa), l1e);
+                    // SAFETY:
+                    // We set the page table entry to read-write
+                    // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                    unsafe {
+                        l0e.set_entry(pt_lvl1_idx(ipa), l1e);
+                    }
                 } else {
-                    directory.set_entry(pt_lvl1_idx(ipa), l1e);
+                    // SAFETY:
+                    // We set the page table entry to read-write
+                    // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                    unsafe {
+                        directory.set_entry(pt_lvl1_idx(ipa), l1e);
+                    }
                 }
             } else {
                 error!("map lv1 page failed");
@@ -256,7 +285,12 @@ impl PageTable {
         if l2e.valid() {
             debug!("map_2mb lvl 2 already mapped with 0x{:x}", l2e.to_pte());
         } else {
-            l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry::from_pa(pa | pte | PTE_BLOCK));
+            // SAFETY:
+            // We set the page table entry to read-write
+            // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+            unsafe {
+                l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry::from_pa(pa | pte | PTE_BLOCK));
+            }
         }
     }
 
@@ -276,13 +310,28 @@ impl PageTable {
         if l1e.valid() {
             let l2e = l1e.entry(pt_lvl2_idx(ipa));
             if l2e.valid() {
-                l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry(0));
+                // SAFETY:
+                // We set the page table entry to read-write
+                // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                unsafe {
+                    l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry(0));
+                }
                 if empty_page(l1e.to_pa()) {
                     let l1e_pa = l1e.to_pa();
                     if cfg!(feature = "lvl4") {
-                        l0e.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                        // SAFETY:
+                        // We set the page table entry to read-write
+                        // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                        unsafe {
+                            l0e.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                        }
                     } else {
-                        directory.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                        // SAFETY:
+                        // We set the page table entry to read-write
+                        // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                        unsafe {
+                            directory.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                        }
                     }
                     let mut pages = self.pages.lock();
                     pages.retain(|pf| pf.pa() != l1e_pa);
@@ -301,7 +350,12 @@ impl PageTable {
                     l0e = Aarch64PageTableEntry::make_table(frame.pa());
                     let mut pages = self.pages.lock();
                     pages.push(frame);
-                    directory.set_entry(pt_lvl0_idx(ipa), l0e);
+                    // SAFETY:
+                    // We set the page table entry to read-write
+                    // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                    unsafe {
+                        directory.set_entry(pt_lvl0_idx(ipa), l0e);
+                    }
                 } else {
                     error!("map lv0 page failed");
                     return;
@@ -319,9 +373,19 @@ impl PageTable {
                 let mut pages = self.pages.lock();
                 pages.push(frame);
                 if cfg!(feature = "lvl4") {
-                    l0e.set_entry(pt_lvl1_idx(ipa), l1e);
+                    // SAFETY:
+                    // We set the page table entry to read-write
+                    // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                    unsafe {
+                        l0e.set_entry(pt_lvl1_idx(ipa), l1e);
+                    }
                 } else {
-                    directory.set_entry(pt_lvl1_idx(ipa), l1e);
+                    // SAFETY:
+                    // We set the page table entry to read-write
+                    // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                    unsafe {
+                        directory.set_entry(pt_lvl1_idx(ipa), l1e);
+                    }
                 }
             } else {
                 error!("map lv1 page failed");
@@ -336,7 +400,12 @@ impl PageTable {
                 l2e = Aarch64PageTableEntry::make_table(frame.pa());
                 let mut pages = self.pages.lock();
                 pages.push(frame);
-                l1e.set_entry(pt_lvl2_idx(ipa), l2e);
+                // SAFETY:
+                // We set the page table entry to read-write
+                // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                unsafe {
+                    l1e.set_entry(pt_lvl2_idx(ipa), l2e);
+                }
             } else {
                 error!("map lv2 page failed {:#?}", result.err());
                 return;
@@ -348,7 +417,12 @@ impl PageTable {
         if l3e.valid() {
             debug!("map lvl 3 already mapped with 0x{:x}", l3e.to_pte());
         } else {
-            l2e.set_entry(pt_lvl3_idx(ipa), Aarch64PageTableEntry::from_pa(pa | PTE_TABLE | pte));
+            // SAFETY:
+            // We set the page table entry to read-write
+            // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+            unsafe {
+                l2e.set_entry(pt_lvl3_idx(ipa), Aarch64PageTableEntry::from_pa(pa | PTE_TABLE | pte));
+            }
         }
     }
 
@@ -370,20 +444,40 @@ impl PageTable {
             if l2e.valid() {
                 let l3e = l2e.entry(pt_lvl3_idx(ipa));
                 if l3e.valid() {
-                    l2e.set_entry(pt_lvl3_idx(ipa), Aarch64PageTableEntry::from_pa(0));
+                    // SAFETY:
+                    // We set the page table entry to read-write
+                    // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                    unsafe {
+                        l2e.set_entry(pt_lvl3_idx(ipa), Aarch64PageTableEntry::from_pa(0));
+                    }
                     // check l2e
                     if empty_page(l2e.to_pa()) {
                         let l2e_pa = l2e.to_pa();
-                        l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry(0));
+                        // SAFETY:
+                        // We set the page table entry to read-write
+                        // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                        unsafe {
+                            l1e.set_entry(pt_lvl2_idx(ipa), Aarch64PageTableEntry(0));
+                        }
                         let mut pages = self.pages.lock();
                         pages.retain(|pf| pf.pa != l2e_pa);
                         // check l1e
                         if empty_page(l1e.to_pa()) {
                             let l1e_pa = l1e.to_pa();
                             if cfg!(feature = "lvl4") {
-                                l0e.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                                // SAFETY:
+                                // We set the page table entry to read-write
+                                // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                                unsafe {
+                                    l0e.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                                }
                             } else {
-                                directory.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                                // SAFETY:
+                                // We set the page table entry to read-write
+                                // And the idx will "& (PTE_PER_PAGE - 1)" so it will not out of range
+                                unsafe {
+                                    directory.set_entry(pt_lvl1_idx(ipa), Aarch64PageTableEntry(0));
+                                }
                             }
                             pages.retain(|pf| pf.pa != l1e_pa);
                         }
@@ -478,6 +572,8 @@ impl PageTable {
 /// check if a page is empty
 pub fn empty_page(addr: usize) -> bool {
     for i in 0..(PAGE_SIZE / 8) {
+        // SAFETY:
+        // the read of any address is safe in EL2
         if unsafe { ((addr + i * 8) as *const usize).read_volatile() != 0 } {
             return false;
         }

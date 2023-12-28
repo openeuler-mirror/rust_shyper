@@ -11,7 +11,7 @@
 use tock_registers::*;
 use tock_registers::interfaces::*;
 
-use crate::utils::{memset_safe, bit_extract};
+use crate::utils::{memset, bit_extract};
 use crate::arch::{at, isb};
 
 use super::interface::*;
@@ -113,12 +113,12 @@ pub struct PageTables {
 }
 
 /// level1 page table
-pub static mut LVL1_PAGE_TABLE: PageTables = PageTables {
+pub static LVL1_PAGE_TABLE: PageTables = PageTables {
     entry: [BlockDescriptor(0); ENTRY_PER_PAGE],
 };
 
 /// level2 page table
-pub static mut LVL2_PAGE_TABLE: PageTables = PageTables {
+pub static LVL2_PAGE_TABLE: PageTables = PageTables {
     entry: [BlockDescriptor(0); ENTRY_PER_PAGE],
 };
 
@@ -130,8 +130,13 @@ const PLATFORM_PHYSICAL_LIMIT_GB: usize = 16;
 pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables) {
     let lvl1_base: usize = lvl1_pt as *const _ as usize;
     let lvl2_base = lvl2_pt as *const _ as usize;
-    memset_safe(lvl1_base as *mut u8, 0, PAGE_SIZE);
-    memset_safe(lvl2_base as *mut u8, 0, PAGE_SIZE);
+    // SAFETY:
+    // The lvl1_pt and lvl2_pt are writable for the Hypervisor in EL2.
+    // c is a valid value of type u8 without overflow.
+    unsafe {
+        memset(lvl1_base as *mut u8, 0, PAGE_SIZE);
+        memset(lvl2_base as *mut u8, 0, PAGE_SIZE);
+    }
 
     #[cfg(feature = "tx2")]
     {

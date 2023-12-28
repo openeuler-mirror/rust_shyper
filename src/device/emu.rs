@@ -44,6 +44,8 @@ pub struct EmuContext {
 
 impl EmuContext {
     /// Reads from the specified emulator context.
+    /// # Safety:
+    /// The address must be readable.
     pub unsafe fn read(&self) -> usize {
         match self.width {
             1 => ptr::read_volatile(self.address as *const u8) as usize,
@@ -55,6 +57,8 @@ impl EmuContext {
     }
 
     /// Writes to the specified emulator context.
+    /// # Safety:
+    /// The address must be writable.
     pub unsafe fn write(&self, val: usize) {
         match self.width {
             1 => ptr::write_volatile(self.address as *mut u8, val as u8),
