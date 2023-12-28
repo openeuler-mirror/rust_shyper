@@ -33,6 +33,8 @@ pub fn current_cpu_arch() -> u64 {
     TPIDR_EL2.get()
 }
 
-pub fn set_current_cpu(cpu_addr: u64) {
+/// # Safety:
+/// The 'cpu_addr' must be a valid address of 'Cpu' struct.
+pub unsafe fn set_current_cpu(cpu_addr: u64) {
     TPIDR_EL2.set(cpu_addr);
 }

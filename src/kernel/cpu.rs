@@ -322,10 +322,17 @@ pub fn cpu_idle() -> ! {
 
 /// store all cpu's CPU struct in this array
 pub static mut CPU_LIST: [Cpu; PLATFORM_CPU_NUM_MAX] = [const { Cpu::default() }; PLATFORM_CPU_NUM_MAX];
-
 pub extern "C" fn cpu_map_self(mpidr: usize) {
     let cpu_id = Platform::mpidr2cpuid(mpidr);
+    // SAFETY:
+    // One core only call this function once
+    // And it will get the reference of the CPU_LIST[cpu_id] by cpu_id
+    // So it won't influence other cores
     let cpu = unsafe { &mut CPU_LIST[cpu_id] };
     cpu.id = cpu_id;
-    set_current_cpu(cpu as *const _ as u64);
+    // SAFETY:
+    // The 'cpu' is a valid reference of CPU_LIST[cpu_id]
+    unsafe {
+        set_current_cpu(cpu as *const _ as u64);
+    }
 }
