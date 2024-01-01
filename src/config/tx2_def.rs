@@ -9,10 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
-
-use spin::Mutex;
 
 use crate::arch::traits::InterruptController;
 use crate::board::{Platform, PlatOperation};
@@ -91,8 +88,8 @@ pub fn mvm_config_init() {
     ];
 
     // vm0 passthrough
-    let mut pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig::default();
-    pt_dev_config.regions = vec![
+    let pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig {
+    regions: vec![
         PassthroughRegion { ipa: 0x100000, pa: 0x100000, length: 0x10000, dev_property: true },
         PassthroughRegion { ipa: 0x02100000, pa: 0x02100000, length: 0x1000, dev_property: true },
         PassthroughRegion { ipa: 0x02110000, pa: 0x02110000, length: 0x1000, dev_property: true },
@@ -201,9 +198,9 @@ pub fn mvm_config_init() {
         PassthroughRegion { ipa: 0x17000000, pa: 0x17000000, length: 0x2000000, dev_property: true },
         PassthroughRegion { ipa: 0x30000000, pa: 0x30000000, length: 0x10000000, dev_property: true },
         PassthroughRegion { ipa: 0x40000000, pa: 0x40000000, length: 0x40000000, dev_property: true },
-    ];
+    ],
     // 146 is UART_INT
-    pt_dev_config.irqs = vec![
+    irqs: vec![
         crate::arch::IntCtrl::IRQ_GUEST_TIMER, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 49, 56, 57, 58, 59, 60, 62, 63, 64, 65, 67, 68,
         69, 70, 71, 72, 74, 76, 79, 82, 85, 88, 91, 92, 94, 95, 96, 97, 102, 103, 104, 105, 107,
         108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125,
@@ -212,12 +209,12 @@ pub fn mvm_config_init() {
         185, 186, 187, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 208,
         212, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 229, 230, 233, 234, 235, 237, 238,
         242, 255, 256, 295, 297, 315, 322, 328, 329, 330, 331, 352, 353, 366,
-    ];
-    pt_dev_config.streams_ids = vec![
+    ],
+    streams_ids: vec![
         1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 25, 26, 27, 28,
         29, 30, 31, 32, 42, 45, 50, 51, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
         71,
-    ];
+    ]};
 
     // vm0 vm_region
     let vm_region = vec![
@@ -240,25 +237,24 @@ pub fn mvm_config_init() {
         // String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/nvme0n1p1 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),
         String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/sda1 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=5\0"),
 
-        image: Arc::new(Mutex::new(VmImageConfig {
+        image: VmImageConfig {
             kernel_img_name: Some("L4T"),
             kernel_load_ipa: 0xa0080000,
-            kernel_load_pa: 0,
             kernel_entry_point: 0xa0080000,
             device_tree_load_ipa: 0xa0000000,
             ramdisk_load_ipa: 0,
             mediated_block_index: None,
-        })),
-        memory: Arc::new(Mutex::new(VmMemoryConfig {
+        },
+        memory: VmMemoryConfig {
             region: vm_region,
-        })),
-        cpu: Arc::new(Mutex::new(VmCpuConfig {
+        },
+        cpu: VmCpuConfig {
             num: 1,
             allocate_bitmap: 0b0001,
-            master: 0,
-        })),
-        vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config })),
-        vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
+            master: None,
+        },
+        vm_emu_dev_confg: VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config },
+        vm_pt_dev_confg: pt_dev_config,
         ..Default::default()
     };
     let _ = vm_cfg_add_vm_entry(mvm_config_entry);

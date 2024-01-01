@@ -13,20 +13,16 @@ use alloc::sync::Arc;
 use core::mem::size_of;
 use spin::Mutex;
 
-use crate::arch::PAGE_SIZE;
 use crate::config::{vm_num, vm_type};
 use crate::device::{DevDesc, VirtioMmio, Virtq, VIRTQ_DESC_F_NEXT, VIRTQ_DESC_F_WRITE};
 use crate::device::EmuDevs;
 use crate::device::VirtioIov;
-use crate::kernel::{
-    active_vm, active_vm_id, current_cpu, vm_if_cmp_mac, vm_if_get_cpu_id, vm_if_set_mem_map_bit, vm_ipa2pa, VM_LIST,
-    VM_STATE_FLAG,
-};
+use crate::kernel::{active_vm, active_vm_id, current_cpu, vm_if_cmp_mac, vm_if_get_cpu_id, vm_ipa2pa, VM_LIST};
 use crate::kernel::{ipi_send_msg, IpiEthernetMsg, IpiInnerMsg, IpiType};
 use crate::kernel::IpiMessage;
 use crate::kernel::vm;
 use crate::kernel::Vm;
-use crate::utils::{round_down, trace};
+use crate::utils::trace;
 
 const VIRTIO_NET_OK: u8 = 0;
 const VIRTIO_NET_ERR: u8 = 1;
@@ -252,17 +248,6 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         }
 
         // update ctrl queue used ring
-        if vm.id() != 0 {
-            let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
-                debug!("vm1 virtio net ctrl write memory in 0x{:x}", used_addr);
-            }
-            vm_if_set_mem_map_bit(vm.clone(), used_addr);
-
-            for idx in 0..in_iov.num() {
-                vm_if_set_mem_map_bit(vm.clone(), in_iov.get_buf(idx));
-            }
-        }
         if !vq.update_used_ring(len as u32, next_desc_idx_opt.unwrap() as u32) {
             return false;
         }
@@ -315,14 +300,6 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
             vms_to_notify |= trgt_vmid_map;
         }
 
-        if vm.id() != 0 {
-            let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
-                debug!("vm1 virtio net write memory in 0x{:x}", used_addr);
-            }
-            vm_if_set_mem_map_bit(vm.clone(), used_addr);
-            vm_if_set_mem_map_bit(vm.clone(), used_addr + PAGE_SIZE);
-        }
         if !vq.update_used_ring(
             (len - size_of::<VirtioNetHdr>()) as u32,
             next_desc_idx_opt.unwrap() as u32,
@@ -381,7 +358,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
                     src_vmid: active_vm_id(),
                     trgt_vmid,
                 };
-                let cpu_trgt = vm_if_get_cpu_id(trgt_vmid);
+                let cpu_trgt = vm_if_get_cpu_id(trgt_vmid).unwrap();
                 if !ipi_send_msg(cpu_trgt, IpiType::IpiTEthernetMsg, IpiInnerMsg::EnternetMsg(msg)) {
                     error!(
                         "virtio_net_notify_handler: failed to send ipi message, target {}",
@@ -572,16 +549,6 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
         }
         let desc_len = rx_vq.desc_len(desc_idx) as usize;
 
-        if vmid != 0 {
-            let mut addr = round_down(dst, PAGE_SIZE);
-            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
-                debug!("A: vm0 virtio net write vm1 memory in 0x{:x}", addr);
-            }
-            while addr <= round_down(dst + desc_len, PAGE_SIZE) {
-                vm_if_set_mem_map_bit(vm.clone(), addr);
-                addr += PAGE_SIZE;
-            }
-        }
         rx_iov.push_data(dst, desc_len);
         rx_len += desc_len;
         if rx_len >= len {
@@ -615,14 +582,6 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
         return false;
     }
 
-    if vmid != 0 {
-        let used_addr = vm_ipa2pa(vm.clone(), rx_vq.used_addr());
-        if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
-            debug!("B: vm0 virtio net write vm1 memory in 0x{:x}", used_addr);
-        }
-        vm_if_set_mem_map_bit(vm.clone(), used_addr);
-        vm_if_set_mem_map_bit(vm, used_addr + PAGE_SIZE);
-    }
     if !rx_vq.update_used_ring(len as u32, desc_idx_header as u32) {
         return false;
     }

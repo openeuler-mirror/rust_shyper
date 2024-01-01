@@ -195,7 +195,7 @@ pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     create_chosen_node(&mut fdt, &config.cmdline, config.ramdisk_load_ipa(), CPIO_RAMDISK.len())?;
     create_cpu_node(&mut fdt, config.clone())?;
     if !config.dtb_device_list().is_empty() {
-        create_serial_node(&mut fdt, &config.dtb_device_list())?;
+        create_serial_node(&mut fdt, config.dtb_device_list())?;
     }
     // match &config.vm_dtb_devs {
     //     Some(vm_dtb_devs) => {
@@ -335,7 +335,7 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
 fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> FdtWriterResult<()> {
     for dev in devs_config {
         if dev.dev_type == DtbDevType::DevSerial {
-            let serial_name = format!("serial@{:x}", dev.addr_region.ipa);
+            let serial_name = format!("serial@{:x}", dev.addr_region.ipa_start);
             let serial = fdt.begin_node(&serial_name)?;
             if cfg!(feature = "rk3588") {
                 fdt.property_string("compatible", "snps,dw-apb-uart")?;
@@ -343,7 +343,7 @@ fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> Fd
                 fdt.property_string("compatible", "ns16550")?;
             }
             fdt.property_u32("clock-frequency", 408000000)?;
-            fdt.property_array_u64("reg", &[dev.addr_region.ipa as u64, 0x1000])?;
+            fdt.property_array_u64("reg", &[dev.addr_region.ipa_start as u64, 0x1000])?;
             fdt.property_u32("reg-shift", 0x2)?;
             fdt.property_array_u32("interrupts", &[0x0, (dev.irqs[0] - 32) as u32, 0x4])?;
             fdt.property_string("status", "okay")?;

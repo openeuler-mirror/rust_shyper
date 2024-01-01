@@ -30,6 +30,8 @@ pub use self::vgic::*;
 pub use self::vgicv3::*;
 pub use self::start::*;
 pub use self::regs::*;
+pub use self::cache::*;
+pub use self::tlb::*;
 
 #[macro_use]
 mod regs;

@@ -16,7 +16,6 @@ use crate::arch::{
 #[cfg(feature = "gicv3")]
 use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL, PTE_S2_NORMALNOCACHE};
-use crate::arch::PAGE_SIZE;
 #[cfg(not(feature = "gicv3"))]
 use crate::board::*;
 use crate::config::vm_cfg_entry;
@@ -26,8 +25,7 @@ use crate::device::{emu_register_reg, EmuRegType};
 use crate::device::create_fdt;
 use crate::device::EmuDeviceType::*;
 use crate::kernel::{
-    add_async_used_info, cpu_idle, current_cpu, iommmu_vm_init, shyper_init, vm_if_init_mem_map, VM_IF_LIST, VmPa,
-    VmType, iommu_add_device,
+    add_async_used_info, cpu_idle, current_cpu, iommmu_vm_init, shyper_init, VM_IF_LIST, VmPa, VmType, iommu_add_device,
 };
 use crate::kernel::{mem_page_alloc, mem_vm_region_alloc};
 use crate::kernel::{vm, Vm};
@@ -48,7 +46,6 @@ fn vmm_init_memory(vm: Vm) -> bool {
     let result = mem_page_alloc();
     let vm_id = vm.id();
     let config = vm.config();
-    let mut vm_mem_size: usize = 0; // size for pages
 
     if let Ok(pt_dir_frame) = result {
         vm.set_pt(pt_dir_frame);
@@ -60,7 +57,6 @@ fn vmm_init_memory(vm: Vm) -> bool {
 
     for vm_region in config.memory_region() {
         let pa = mem_vm_region_alloc(vm_region.length);
-        vm_mem_size += vm_region.length;
 
         if pa == 0 {
             error!("vmm_init_memory: vm memory region is not large enough");
@@ -79,7 +75,6 @@ fn vmm_init_memory(vm: Vm) -> bool {
             offset: vm_region.ipa_start as isize - pa as isize,
         });
     }
-    vm_if_init_mem_map(vm_id, (vm_mem_size + PAGE_SIZE - 1) / PAGE_SIZE);
 
     true
 }
@@ -240,7 +235,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             // Init dtb for GVM.
             match create_fdt(config.clone()) {
                 Ok(dtb) => {
-                    let mut overlay = config.fdt_overlay.lock();
+                    let mut overlay = config.fdt_overlay.clone();
                     let offset = config.device_tree_load_ipa() - vm.config().memory_region()[0].ipa_start;
                     let target = (vm.pa_start(0) + offset) as *mut u8;
                     debug!(
@@ -305,9 +300,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
 }
 
 fn vmm_init_emulated_device(vm: Vm) -> bool {
-    let config: Vec<crate::config::VmEmulatedDeviceConfig> = vm.config().emulated_device_list();
-
-    for (idx, emu_dev) in config.iter().enumerate() {
+    for (idx, emu_dev) in vm.config().emulated_device_list().iter().enumerate() {
         match emu_dev.emu_type {
             EmuDeviceTGicd => {
                 vm.set_intc_dev_id(idx);
@@ -466,7 +459,7 @@ fn vmm_init_passthrough_device(vm: Vm) -> bool {
         );
     }
     for irq in vm.config().passthrough_device_irqs() {
-        if !interrupt_vm_register(vm.clone(), irq) {
+        if !interrupt_vm_register(vm.clone(), *irq) {
             return false;
         }
     }
@@ -475,10 +468,10 @@ fn vmm_init_passthrough_device(vm: Vm) -> bool {
 
 fn vmm_init_iommu_device(vm: Vm) -> bool {
     for stream_id in vm.config().passthrough_device_stread_ids() {
-        if stream_id == 0 {
+        if *stream_id == 0 {
             break;
         }
-        if !iommu_add_device(vm.clone(), stream_id) {
+        if !iommu_add_device(vm.clone(), *stream_id) {
             return false;
         }
     }
@@ -633,6 +626,11 @@ pub fn vmm_cpu_assign_vcpu(vm_id: usize) {
     let vm = vm(vm_id).unwrap();
     let cfg_master = vm.config().cpu_master();
     let cfg_cpu_num = vm.config().cpu_num();
+    info!(
+        "cfg_cpu_num:{cfg_cpu_num}, vm.cpu_num():{vm_cpu_num}",
+        cfg_cpu_num = cfg_cpu_num,
+        vm_cpu_num = vm.cpu_num()
+    );
     let cfg_cpu_allocate_bitmap = vm.config().cpu_allocated_bitmap();
 
     if cfg_cpu_num != cfg_cpu_allocate_bitmap.count_ones() as usize {
@@ -643,7 +641,7 @@ pub fn vmm_cpu_assign_vcpu(vm_id: usize) {
     }
 
     info!(
-        "vmm_cpu_assign_vcpu: vm[{}] cpu {} cfg_master {} cfg_cpu_num {} cfg_cpu_allocate_bitmap {:#b}",
+        "vmm_cpu_assign_vcpu: vm[{}] cpu {} cfg_master {:?} cfg_cpu_num {} cfg_cpu_allocate_bitmap {:#b}",
         vm_id, cpu_id, cfg_master, cfg_cpu_num, cfg_cpu_allocate_bitmap
     );
 
@@ -662,6 +660,11 @@ pub fn vmm_cpu_assign_vcpu(vm_id: usize) {
     }
 
     #[cfg(not(feature = "secondary_start"))]
+    info!(
+        "cfg_cpu_num:{cfg_cpu_num}, vm.cpu_num():{vm_cpu_num}",
+        cfg_cpu_num = cfg_cpu_num,
+        vm_cpu_num = vm.cpu_num()
+    );
     if cfg_cpu_num == vm.cpu_num() {
         vm.set_ready(true);
     }

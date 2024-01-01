@@ -100,8 +100,7 @@ fn vmm_remove_vcpu(vm: Vm) {
 }
 
 fn vmm_remove_emulated_device(vm: Vm) {
-    let config = vm.config().emulated_device_list();
-    for (idx, emu_dev) in config.iter().enumerate() {
+    for (idx, emu_dev) in vm.config().emulated_device_list().iter().enumerate() {
         // mmio / vgic will be removed with struct vm
         if !emu_dev.emu_type.removable() {
             warn!("vmm_remove_emulated_device: cannot remove device {}", emu_dev.emu_type);
@@ -111,20 +110,13 @@ fn vmm_remove_emulated_device(vm: Vm) {
             meta::unregister(idx);
         }
         emu_remove_dev(vm.id(), idx, emu_dev.base_ipa, emu_dev.length);
-        // println!(
-        //     "VM[{}] removes emulated device: id=<{}>, name=\"{}\", ipa=<0x{:x}>",
-        //     vm.id(),
-        //     idx,
-        //     emu_dev.emu_type,
-        //     emu_dev.base_ipa
-        // );
     }
 }
 
 fn vmm_remove_passthrough_device(vm: Vm) {
     for irq in vm.config().passthrough_device_irqs() {
-        if irq > GIC_SGIS_NUM {
-            interrupt_vm_remove(vm.clone(), irq);
+        if *irq > GIC_SGIS_NUM {
+            interrupt_vm_remove(vm.clone(), *irq);
             // println!("VM[{}] remove irq {}", vm.id(), irq);
         }
     }

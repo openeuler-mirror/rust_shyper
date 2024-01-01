@@ -141,7 +141,7 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
                 vcpu.set_phys_id(target_cpu_id);
 
                 let cfg_master = vm.config().cpu_master();
-                if target_cpu_id == cfg_master && target_cpu_id == current_cpu().id {
+                if target_cpu_id == cfg_master.unwrap() && target_cpu_id == current_cpu().id {
                     current_cpu().vcpu_array.append_vcpu(vcpu);
                 }
             } else if target_cpu_id != current_cpu().id {
@@ -208,36 +208,42 @@ pub fn vmm_init_gvm(vm_id: usize) {
  * @param[in] vm_id: target VM id to boot.
  */
 pub fn vmm_boot_vm(vm_id: usize) {
-    let phys_id = vm_if_get_cpu_id(vm_id);
-    if phys_id != current_cpu().id {
-        use crate::kernel::{CPU_IF_LIST, CpuState};
-        use crate::arch::psci_vm_maincpu_on;
-        let state = CPU_IF_LIST.lock().get(phys_id).unwrap().state_for_start;
-        if state == CpuState::CpuInv {
-            let vmpidr = vm(vm_id).unwrap().pcpuid_to_vcpuid(phys_id).unwrap();
-            info!("now start cpu on! vmpidr={vmpidr}");
-            psci_vm_maincpu_on(vmpidr, vmm_boot_vm as usize, 0, vm_id);
-        } else {
-            let m = IpiVmmMsg {
-                vmid: vm_id,
-                event: VmmEvent::VmmBoot,
-            };
-            if !ipi_send_msg(phys_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
-                error!("vmm_boot_vm: failed to send ipi to Core {}", phys_id);
+    if let Some(phys_id) = vm_if_get_cpu_id(vm_id) {
+        if phys_id != current_cpu().id {
+            use crate::kernel::{CPU_IF_LIST, CpuState};
+            use crate::arch::psci_vm_maincpu_on;
+            let state = CPU_IF_LIST.lock().get(phys_id).unwrap().state_for_start;
+            if state == CpuState::CpuInv {
+                let vmpidr = vm(vm_id).unwrap().pcpuid_to_vcpuid(phys_id).unwrap();
+                info!("now start cpu on! vmpidr={vmpidr}");
+                psci_vm_maincpu_on(vmpidr, vmm_boot_vm as usize, 0, vm_id);
+            } else {
+                let m = IpiVmmMsg {
+                    vmid: vm_id,
+                    event: VmmEvent::VmmBoot,
+                };
+                if !ipi_send_msg(phys_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
+                    error!("vmm_boot_vm: failed to send ipi to Core {}", phys_id);
+                }
             }
+        } else {
+            if current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).is_none() {
+                let vm = vm(vm_id).unwrap();
+                let vcpuid = vm.pcpuid_to_vcpuid(phys_id).unwrap();
+                let vcpu = vm.vcpuid_to_vcpu(vcpuid);
+                current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
+            };
+            let vcpu = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).unwrap();
+            IntCtrl::clear();
+            // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
+            current_cpu().scheduler().yield_to(vcpu);
+            vmm_boot();
         }
     } else {
-        if current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).is_none() {
-            let vm = vm(vm_id).unwrap();
-            let vcpuid = vm.pcpuid_to_vcpuid(phys_id).unwrap();
-            let vcpu = vm.vcpuid_to_vcpu(vcpuid);
-            current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
-        };
-        let vcpu = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).unwrap();
-        IntCtrl::clear();
-        // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
-        current_cpu().scheduler().yield_to(vcpu);
-        vmm_boot();
+        error!(
+            "vmm_boot_vm: failed to get cpu id for vm {}, it is not configured",
+            vm_id
+        );
     }
 }
 
@@ -258,7 +264,7 @@ pub fn vmm_reboot_vm(arg: usize) {
         if cur_vm.id() == vm_id {
             vmm_reboot();
         } else {
-            let cpu_trgt = vm_if_get_cpu_id(vm_id);
+            let cpu_trgt = vm_if_get_cpu_id(vm_id).unwrap();
             let m = IpiVmmMsg {
                 vmid: vm_id,
                 event: VmmEvent::VmmReboot,
@@ -441,6 +447,7 @@ pub fn vmm_list_vm(vm_info_ipa: usize) -> Result<usize, ()> {
 }
 
 pub fn vmm_ipi_handler(msg: &IpiMessage) {
+    info!("vmm_ipi_handler: core {} receive ipi", current_cpu().id);
     match msg.ipi_message {
         IpiInnerMsg::VmmMsg(vmm) => match vmm.event {
             VmmEvent::VmmBoot => {

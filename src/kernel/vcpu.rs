@@ -359,10 +359,10 @@ pub fn vcpu_run(announce: bool) -> ! {
         if announce {
             crate::device::virtio_net_announce(vm.clone());
         }
-        tlb_invalidate_guest_all();
+        crate::arch::tlb_invalidate_guest_all();
         for i in 0..vm.mem_region_num() {
             unsafe {
-                cache_invalidate_d(vm.pa_start(i), vm.pa_length(i));
+                crate::arch::cache_invalidate_d(vm.pa_start(i), vm.pa_length(i));
             }
         }
     }

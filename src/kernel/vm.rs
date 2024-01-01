@@ -10,26 +10,18 @@
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::mem::size_of;
 
-use spin::Mutex;
+use spin::{Mutex, Once};
 
 use crate::arch::PAGE_SIZE;
 use crate::arch::GICC_CTLR_EN_BIT;
 use crate::arch::PageTable;
 use crate::arch::Vgic;
 use crate::config::VmConfigEntry;
-use crate::device::{EmuDevs, VirtioMmioData};
+use crate::device::EmuDevs;
 use crate::utils::*;
 use crate::mm::PageFrame;
 use super::vcpu::Vcpu;
-
-pub enum EmuDevData {
-    VirtioBlk(VirtioMmioData),
-    VirtioNet(VirtioMmioData),
-    VirtioConsole(VirtioMmioData),
-    None,
-}
 
 pub const VM_NUM_MAX: usize = 8;
 pub static VM_IF_LIST: [Mutex<VmInterface>; VM_NUM_MAX] = [const { Mutex::new(VmInterface::default()) }; VM_NUM_MAX];
@@ -60,8 +52,8 @@ pub fn vm_if_get_type(vm_id: usize) -> VmType {
 }
 
 fn vm_if_set_cpu_id(vm_id: usize, master_cpu_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.master_cpu_id = master_cpu_id;
+    let vm_if = VM_IF_LIST[vm_id].lock();
+    vm_if.master_cpu_id.call_once(|| master_cpu_id);
     debug!(
         "vm_if_list_set_cpu_id vm [{}] set master_cpu_id {}",
         vm_id, master_cpu_id
@@ -69,9 +61,9 @@ fn vm_if_set_cpu_id(vm_id: usize, master_cpu_id: usize) {
 }
 
 // todo: rewrite return val to Option<usize>
-pub fn vm_if_get_cpu_id(vm_id: usize) -> usize {
+pub fn vm_if_get_cpu_id(vm_id: usize) -> Option<usize> {
     let vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.master_cpu_id
+    vm_if.master_cpu_id.get().cloned()
 }
 
 /// compare vm_if mac addr with frame mac addr
@@ -104,142 +96,61 @@ pub fn vm_if_ivc_arg_ptr(vm_id: usize) -> usize {
     let vm_if = VM_IF_LIST[vm_id].lock();
     vm_if.ivc_arg_ptr
 }
-
-// new if for vm migration
-pub fn vm_if_init_mem_map(vm_id: usize, len: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map = Some(FlexBitmap::new(len));
-}
-
-pub fn vm_if_set_mem_map_cache(vm_id: usize, pf: PageFrame) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map_cache = Some(Arc::new(pf));
-}
-
-pub fn vm_if_mem_map_cache(vm_id: usize) -> Option<Arc<PageFrame>> {
-    let vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map_cache.clone()
-}
-
-pub fn vm_if_dirty_mem_map(vm_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_mut().unwrap().init_dirty();
-}
-
-pub fn vm_if_set_mem_map_bit(vm: Vm, pa: usize) {
-    let mut vm_if = VM_IF_LIST[vm.id()].lock();
-    let mut bit = 0;
-    for i in 0..vm.region_num() {
-        let start = vm.pa_start(i);
-        let len = vm.pa_length(i);
-        if pa >= start && pa < start + len {
-            bit += (pa - start) / PAGE_SIZE;
-            vm_if.mem_map.as_mut().unwrap().set(bit, true);
-            return;
-        } else {
-            bit += len / PAGE_SIZE;
-        }
-    }
-    panic!("vm_if_set_mem_map_bit: illegal pa 0x{:x}", pa);
-}
-
-pub fn vm_if_set_mem_map(vm_id: usize, bit: usize, len: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_mut().unwrap().set_bits(bit, len, true);
-}
-
-pub fn vm_if_clear_mem_map(vm_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_mut().unwrap().clear();
-}
-
-pub fn vm_if_copy_mem_map(vm_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    let mem_map_cache = vm_if.mem_map_cache.clone();
-    let map = vm_if.mem_map.as_mut().unwrap();
-    // SAFETY:
-    // We have both read and write access to the src and dst memory regions.
-    // The copied size will not exceed the memory region.
-    unsafe {
-        memcpy(
-            mem_map_cache.as_ref().unwrap().pa() as *const u8,
-            map.slice() as *const _ as *const u8,
-            size_of::<u64>() * map.vec_len(),
-        );
-    }
-    // clear bitmap after copy
-    map.clear();
-}
-
-pub fn vm_if_mem_map_page_num(vm_id: usize) -> usize {
-    let vm_if = VM_IF_LIST[vm_id].lock();
-    let map = vm_if.mem_map.as_ref().unwrap();
-    8 * map.vec_len() / PAGE_SIZE
-}
-
-pub fn vm_if_mem_map_dirty_sum(vm_id: usize) -> usize {
-    let vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_ref().unwrap().sum()
-}
 // End vm interface func implementation
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub enum VmState {
+    #[default]
     VmInv = 0,
     VmPending = 1,
     VmActive = 2,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub enum VmType {
+    #[default]
     VmTOs = 0,
     VmTBma = 1,
 }
 
-impl VmType {
-    pub fn from_usize(value: usize) -> VmType {
+impl From<usize> for VmType {
+    fn from(value: usize) -> Self {
         match value {
-            0 => VmType::VmTOs,
-            1 => VmType::VmTBma,
+            0 => Self::VmTOs,
+            1 => Self::VmTBma,
             _ => panic!("Unknown VmType value: {}", value),
         }
     }
 }
 
 pub struct VmInterface {
-    pub master_cpu_id: usize,
+    pub master_cpu_id: Once<usize>,
     pub state: VmState,
     pub vm_type: VmType,
     pub mac: [u8; 6],
     pub ivc_arg: usize,
     pub ivc_arg_ptr: usize,
-    pub mem_map: Option<FlexBitmap>,
-    pub mem_map_cache: Option<Arc<PageFrame>>,
 }
 
 impl VmInterface {
     const fn default() -> VmInterface {
         VmInterface {
-            master_cpu_id: 0,
+            master_cpu_id: Once::new(),
             state: VmState::VmPending,
             vm_type: VmType::VmTBma,
             mac: [0; 6],
             ivc_arg: 0,
             ivc_arg_ptr: 0,
-            mem_map: None,
-            mem_map_cache: None,
         }
     }
 
     fn reset(&mut self) {
-        self.master_cpu_id = 0;
+        self.master_cpu_id = Once::new();
         self.state = VmState::VmPending;
         self.vm_type = VmType::VmTBma;
         self.mac = [0; 6];
         self.ivc_arg = 0;
         self.ivc_arg_ptr = 0;
-        self.mem_map = None;
-        self.mem_map_cache = None;
     }
 }
 
@@ -260,11 +171,75 @@ impl VmPa {
     }
 }
 
-// #[repr(align(4096))]
 #[derive(Clone)]
 pub struct Vm {
     pub inner: Arc<Mutex<VmInner>>,
+    // innner_const: VmInnerConst,
+    // inner_mut: Mutex<VmInnerMut>,
 }
+
+// struct VmInnerConst {
+//     id: usize,
+//     config: Option<VmConfigEntry>,
+//     dtb: Option<usize>,
+//     // Memory config
+//     mem_region_num: usize,
+//     pa_region: Vec<VmPa>,
+//     entry_point: usize,
+//     // Vcpu config
+//     has_master: bool,
+//     vcpu_list: Vec<Vcpu>,
+//     cpu_num: usize,
+//     ncpu: usize,
+//     // Interrupt config
+//     intc_dev_id: usize,
+//     sint_bitmap: Option<BitMap<BitAlloc256>>,
+//     // Emul devs config
+//     emu_devs: Vec<EmuDevs>,
+// }
+
+// struct VmInnerMut {
+//     pt: Option<PageTable>,
+//     ready: bool,
+//     iommu_ctx_id: Option<usize>,
+// }
+
+// impl VmInnerConst {
+//     fn new(id: usize, config: Option<VmConfigEntry>, vm: Weak<Vm>) -> VmInnerConst {
+//         VmInnerConst {
+//             id,
+//             config,
+//             dtb: None,
+//             mem_region_num: 0,
+//             pa_region: Vec::new(),
+//             entry_point: 0,
+//             has_master: false,
+//             vcpu_list: Vec::new(),
+//             cpu_num: 0,
+//             ncpu: 0,
+//             intc_dev_id: 0,
+//             int_bitmap: Some(BitAlloc4K::default()),
+//             emu_devs: Vec::new(),
+//         }
+//     }
+// }
+
+// fn cal_phys_id_list(config: &VmConfigEntry) -> Vec<usize> {
+//     let mut phys_id_list = Vec::new();
+//     let cpu_num = config.cpu_num();
+//     let cpu_master = config.cpu_master();
+//     let cpu_allocated_bitmap = config.cpu_allocated_bitmap();
+//     for i in 0..cpu_num {
+//         if (cpu_allocated_bitmap & (1 << i)) != 0 {
+//             if i == cpu_master {
+//                 phys_id_list.insert(0, i);
+//             } else {
+//                 phys_id_list.push(i);
+//             }
+//         }
+//     }
+//     phys_id_list
+// }
 
 impl Vm {
     pub fn inner(&self) -> Arc<Mutex<VmInner>> {
@@ -384,13 +359,17 @@ impl Vm {
         let mut vm_inner = self.inner.lock();
         if (cfg_cpu_allocate_bitmap & (1 << cpu_id)) != 0 && vm_inner.cpu_num < cfg_cpu_num {
             // vm.vcpu(0) must be the VM's master vcpu
-            let trgt_id = if cpu_id == cfg_master || (!vm_inner.has_master && vm_inner.cpu_num == cfg_cpu_num - 1) {
-                0
-            } else if vm_inner.has_master {
-                cfg_cpu_num - vm_inner.cpu_num
+            let trgt_id = if let Some(master) = cfg_master {
+                if cpu_id == master || (!vm_inner.has_master && vm_inner.cpu_num == cfg_cpu_num - 1) {
+                    0
+                } else if vm_inner.has_master {
+                    cfg_cpu_num - vm_inner.cpu_num
+                } else {
+                    // if master vcpu is not assigned, retain id 0 for it
+                    cfg_cpu_num - vm_inner.cpu_num - 1
+                }
             } else {
-                // if master vcpu is not assigned, retain id 0 for it
-                cfg_cpu_num - vm_inner.cpu_num - 1
+                0
             };
             match vm_inner.vcpu_list.get(trgt_id).cloned() {
                 None => None,
@@ -684,9 +663,9 @@ impl Vm {
         vm_inner.ready
     }
 
-    pub fn set_ready(&self, _ready: bool) {
+    pub fn set_ready(&self, ready: bool) {
         let mut vm_inner = self.inner.lock();
-        vm_inner.ready = _ready;
+        vm_inner.ready = ready;
     }
 
     pub fn get_vcpu_by_mpidr(&self, mpdir: usize) -> Option<Vcpu> {
@@ -885,7 +864,6 @@ pub fn ipa2pa(pa_region: &[VmPa], ipa: usize) -> usize {
         }
     }
 
-    // println!("ipa2pa: access invalid ipa {:x}", ipa);
     0
 }
 

@@ -17,7 +17,7 @@ use crate::device::{VirtioMmio, Virtq};
 use crate::device::DevDesc;
 use crate::device::EmuDevs;
 use crate::device::VirtioIov;
-use crate::kernel::{active_vm, vm_if_set_mem_map_bit, vm_ipa2pa};
+use crate::kernel::{active_vm, vm_ipa2pa};
 use crate::kernel::vm;
 use crate::kernel::Vm;
 use crate::utils::round_down;
@@ -123,7 +123,6 @@ pub fn console_features() -> usize {
 /// Returns `true` upon successful handling.
 pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> bool {
     if vq.vq_indx() % 4 != 1 {
-        // println!("console rx queue notified!");
         return true;
     }
 
@@ -132,7 +131,6 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         return false;
     }
 
-    let tx_iov = VirtioIov::default();
     let dev = console.dev();
 
     let (trgt_vmid, trgt_console_ipa) = match dev.desc() {
@@ -143,13 +141,12 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         }
     };
 
-    // let buf = dev.cache();
     let mut next_desc_idx_opt = vq.pop_avail_desc_idx(vq.avail_idx());
 
     while next_desc_idx_opt.is_some() {
         let mut idx = next_desc_idx_opt.unwrap() as usize;
         let mut len = 0;
-        tx_iov.clear();
+        let tx_iov = VirtioIov::default();
 
         loop {
             let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
@@ -157,7 +154,6 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
                 error!("virtio_console_notify_handler: failed to desc addr");
                 return false;
             }
-            // println!("virtio_consle:addr:{:#x}", addr);
             tx_iov.push_data(addr, vq.desc_len(idx) as usize);
 
             len += vq.desc_len(idx) as usize;
@@ -166,29 +162,9 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
             }
             idx = vq.desc_next(idx) as usize;
         }
-        // unsafe {
-        //     let slice = core::slice::from_raw_parts(
-        //         vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx)) as *const u8,
-        //         len as usize,
-        //     );
-        //     use alloc::string::String;
-        //     let s = String::from_utf8_lossy(slice);
-        //     println!("send data:{}", s);
-        // }
 
         if !virtio_console_recv(trgt_vmid, trgt_console_ipa, tx_iov.clone(), len) {
             error!("virtio_console_notify_handler: failed send");
-            // return false;
-        }
-        if vm.id() != 0 {
-            let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            // println!(
-            //     "virtio_console_notify_handler: used addr {:x}, size {}",
-            //     used_addr,
-            //     size_of::<VringUsed>()
-            // );
-            vm_if_set_mem_map_bit(vm.clone(), used_addr);
-            vm_if_set_mem_map_bit(vm.clone(), used_addr + PAGE_SIZE);
         }
         if !vq.update_used_ring(len as u32, next_desc_idx_opt.unwrap() as u32) {
             return false;
@@ -203,7 +179,6 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
     }
 
     console.notify(vm);
-    // vq.notify(dev.int_id(), vm.clone());
 
     true
 }
@@ -254,7 +229,6 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         error!("virtio_console_recv: receive invalid avail desc idx");
         return false;
     } else if desc_header_idx_opt.is_none() {
-        // println!("virtio_console_recv: desc_header_idx_opt.is_none()");
         return true;
     }
 
@@ -272,13 +246,11 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
             );
             return false;
         }
-        // println!("virtio_consle recv:addr:{:#x}", dst);
         let desc_len = rx_vq.desc_len(desc_idx) as usize;
         // dirty pages
         if trgt_vmid != 0 {
             let mut addr = round_down(dst, PAGE_SIZE);
             while addr <= round_down(dst + desc_len, PAGE_SIZE) {
-                vm_if_set_mem_map_bit(trgt_vm.clone(), addr);
                 addr += PAGE_SIZE;
             }
         }
@@ -310,11 +282,6 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         return false;
     }
 
-    if trgt_vmid != 0 {
-        let used_addr = vm_ipa2pa(trgt_vm.clone(), rx_vq.used_addr());
-        vm_if_set_mem_map_bit(trgt_vm.clone(), used_addr);
-        vm_if_set_mem_map_bit(trgt_vm.clone(), used_addr + PAGE_SIZE);
-    }
     if !rx_vq.update_used_ring(len as u32, desc_idx_header as u32) {
         error!(
             "virtio_console_recv: update used ring failed len {} rx_vq num {}",
@@ -325,6 +292,5 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
     }
 
     console.notify(trgt_vm);
-    // rx_vq.notify(console.dev().int_id(), trgt_vm.clone());
     true
 }

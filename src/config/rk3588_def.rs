@@ -9,11 +9,9 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use fdt::binding::FdtBuf;
-use spin::Mutex;
 
 use crate::arch::traits::InterruptController;
 use crate::board::{Platform, PlatOperation};
@@ -341,25 +339,24 @@ pub fn mvm_config_init() {
         // String::from("emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 root=/dev/nfs nfsroot=192.168.106.153:/tftp/rootfs,proto=tcp rw ip=192.168.106.143:192.168.106.153:192.168.106.1:255.255.255.0::eth0:off default_hugepagesz=32M hugepagesz=32M hugepages=4"),
         // String::from("earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 rw rootwait overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0\0"),
         // String::from("storagemedia=emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 androidboot.verifiedbootstate=orange rw rootwait earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0\0"),
-        image: Arc::new(Mutex::new(VmImageConfig {
+        image: VmImageConfig {
             kernel_img_name: Some("Linux-5.10"),
             kernel_load_ipa: 0x10080000,
-            kernel_load_pa: 0,
             kernel_entry_point: 0x10080000,
             device_tree_load_ipa: 0x10000000,
             ramdisk_load_ipa: 0,
             mediated_block_index: None,
-        })),
-        memory: Arc::new(Mutex::new(VmMemoryConfig {
+        },
+        memory: VmMemoryConfig {
             region: vm_region,
-        })),
-        cpu: Arc::new(Mutex::new(VmCpuConfig {
+        },
+        cpu: VmCpuConfig {
             num: 1,
             allocate_bitmap: 0b1,
-            master: 0,
-        })),
-        vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config })),
-        vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
+            master: None,
+        },
+        vm_emu_dev_confg: VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config },
+        vm_pt_dev_confg: pt_dev_config,
         ..Default::default()
     };
     let _ = vm_cfg_add_vm_entry(mvm_config_entry);
