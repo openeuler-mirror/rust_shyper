@@ -213,7 +213,5 @@ pub fn secondary_init(mpidr: usize) {
     crate::utils::barrier();
     use crate::arch::guest_cpu_on;
     guest_cpu_on(mpidr);
-    loop {
-        core::hint::spin_loop();
-    }
+    crate::kernel::cpu_idle();
 }
