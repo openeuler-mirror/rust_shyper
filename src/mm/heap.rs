@@ -30,8 +30,9 @@ pub fn heap_init() {
     // HEAP_REGION is aligned and HEAP_SIZE is a multiple of PAGE_SIZE
     unsafe {
         println!(
-            "init buddy system, heap start from {:x}",
-            HEAP_REGION.0.as_mut_ptr() as usize
+            "init buddy system, heap start from {:x} with size {} MB",
+            HEAP_REGION.0.as_mut_ptr() as usize,
+            HEAP_SIZE / (1024 * 1024)
         );
         HEAP_ALLOCATOR
             .lock()
