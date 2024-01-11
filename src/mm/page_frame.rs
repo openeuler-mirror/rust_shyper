@@ -17,13 +17,12 @@ use crate::kernel::AllocError;
 /// PageFrame struct represents a page frame, consisting of physical address and page number.
 pub struct PageFrame {
     pub pa: usize,
-    pub page_num: usize,
     layout: Layout,
 }
 
 impl PageFrame {
-    pub fn new(pa: usize, page_num: usize, layout: Layout) -> Self {
-        Self { pa, page_num, layout }
+    pub fn new(pa: usize, layout: Layout) -> Self {
+        Self { pa, layout }
     }
 
     /// Allocate a page frame with given page number.
@@ -35,11 +34,11 @@ impl PageFrame {
         match Layout::from_size_align(page_num * PAGE_SIZE, PAGE_SIZE) {
             Ok(layout) => {
                 let pa = unsafe { alloc::alloc_zeroed(layout) as usize };
-                Ok(Self::new(pa, page_num, layout))
+                Ok(Self::new(pa, layout))
             }
             Err(err) => {
                 error!("alloc_pages: Layout error {}", err);
-                return Err(AllocError::OutOfFrame);
+                Err(AllocError::OutOfFrame)
             }
         }
     }
@@ -51,7 +50,10 @@ impl PageFrame {
 
 impl Drop for PageFrame {
     fn drop(&mut self) {
-        info!("drop page frame: {:#x}, with {} page(s)", self.pa, self.page_num);
+        debug!(
+            "drop page frame: {:#x}, with Layput {:x?} page(s)",
+            self.pa, self.layout
+        );
         unsafe { alloc::dealloc(self.pa as *mut u8, self.layout) }
     }
 }

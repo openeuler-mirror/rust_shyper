@@ -41,7 +41,6 @@ log = { version = "0.4", features = [
     "release_max_level_info",
 ] }
 spin = { version = "0.9.4", features = ["use_ticket_mutex"] }
-buddy_system_allocator = "0.8.0"
 memoffset = { version = "0.8", default-features = false, features = [
     "unstable_const",
 ] }
@@ -50,6 +49,10 @@ cfg-if = "1.0.0"
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 cortex-a = { package = "aarch64-cpu", version = "9.3.1" }
 smccc = "0.1.1"
+
+[dependencies.buddy_system_allocator]
+version = "0.8.0"
+features = ["const_fn"]
 
 [dependencies.tock-registers]
 version = "0.8.0"
