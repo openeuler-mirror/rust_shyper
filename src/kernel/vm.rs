@@ -14,7 +14,7 @@ use core::mem::size_of;
 
 use spin::Mutex;
 
-use crate::arch::{PAGE_SIZE, PTE_S2_FIELD_AP_RO};
+use crate::arch::PAGE_SIZE;
 use crate::arch::GICC_CTLR_EN_BIT;
 use crate::arch::PageTable;
 use crate::arch::Vgic;
@@ -321,24 +321,12 @@ impl Vm {
 
     pub fn med_blk_id(&self) -> usize {
         let vm_inner = self.inner.lock();
-        // match self.config().mediated_block_index() {
-        //     None => {
-        //         panic!("vm {} do not have mediated blk", vm_inner.id);
-        //     }
-        //     Some(idx) => idx,
-        // }
         match vm_inner.config.as_ref().unwrap().mediated_block_index() {
             None => {
                 panic!("vm {} do not have mediated blk", vm_inner.id);
             }
             Some(idx) => idx,
         }
-        // match vm_inner.med_blk_id {
-        //     None => {
-        //         panic!("vm {} do not have mediated blk", vm_inner.id);
-        //     }
-        //     Some(idx) => idx,
-        // }
     }
 
     pub fn dtb(&self) -> Option<*mut fdt::myctypes::c_void> {
@@ -488,26 +476,6 @@ impl Vm {
             Some(pt) => pt.access_permission(ipa, PAGE_SIZE, ap),
             None => {
                 panic!("pt_set_access_permission: vm{} pt is empty", vm_inner.id);
-            }
-        }
-    }
-
-    pub fn pt_read_only(&self) {
-        let vm_inner = self.inner.lock();
-        match vm_inner.pt.clone() {
-            Some(pt) => {
-                let num = vm_inner.mem_region_num;
-                drop(vm_inner);
-                for i in 0..num {
-                    let vm_inner = self.inner.lock();
-                    let ipa_start = vm_inner.pa_region[i].pa_start + vm_inner.pa_region[i].offset as usize;
-                    let len = vm_inner.pa_region[i].pa_length;
-                    drop(vm_inner);
-                    pt.access_permission(ipa_start, len, PTE_S2_FIELD_AP_RO);
-                }
-            }
-            None => {
-                panic!("Vm::read_only: vm{} pt is empty", vm_inner.id);
             }
         }
     }
@@ -765,7 +733,6 @@ pub struct VmInner {
 
     // emul devs
     pub emu_devs: Vec<EmuDevs>,
-    pub med_blk_id: Option<usize>,
 }
 
 impl VmInner {
@@ -790,7 +757,6 @@ impl VmInner {
 
             iommu_ctx_id: None,
             emu_devs: Vec::new(),
-            med_blk_id: None,
         }
     }
 
@@ -814,7 +780,6 @@ impl VmInner {
             int_bitmap: Some(BitAlloc4K::default()),
             iommu_ctx_id: None,
             emu_devs: Vec::new(),
-            med_blk_id: None,
         }
     }
 }

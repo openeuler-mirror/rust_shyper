@@ -364,9 +364,7 @@ impl VmConfigEntry {
     /// Sets the mediated block index.
     pub fn set_mediated_block_index(&mut self, med_blk_id: usize) {
         let mut img_cfg = self.image.lock();
-        // println!("set_mediated_block_index {}",med_blk_id);
         img_cfg.mediated_block_index = Some(med_blk_id);
-        // println!("set_mediated_block_index {} self.med_blk_idx {:?}",med_blk_id, img_cfg.mediated_block_index);
     }
 
     /// Returns the name of the kernel image, if any.

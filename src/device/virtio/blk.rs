@@ -214,26 +214,7 @@ impl VirtioBlkReq {
 
     pub fn add_req_node(&self, node: VirtioBlkReqNode, _vm: Vm) {
         let mut list = self.req_list.lock();
-        // let mediated_blk = mediated_blk_list_get(vm.med_blk_id());
-        // push_used_info(node.desc_chain_head_idx, node.iov_total as u32, vm.id());
         list.push(node);
-
-        // match list.last_mut() {
-        //     None => {
-        //         list.push(node);
-        //     }
-        //     Some(prev) => {
-        //         if prev.req_type == node.req_type
-        //             && (prev.sector + prev.iov_sum_up / SECTOR_BSIZE) == node.sector
-        //             && (prev.iov_sum_up + node.iov_sum_up) / SECTOR_BSIZE < mediated_blk.dma_block_max()
-        //         {
-        //             prev.iov_sum_up += node.iov_sum_up;
-        //             prev.iov.append(&mut node.iov);
-        //         } else {
-        //             list.push(node);
-        //         }
-        //     }
-        // }
     }
 
     /// Gets the number of requests in the request list.
