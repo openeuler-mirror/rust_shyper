@@ -21,7 +21,7 @@ use crate::arch::aarch64::regs::ReadableReg;
 use crate::board::PLAT_DESC;
 use crate::device::EmuContext;
 use crate::device::EmuDevs;
-use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, cpuid2mpidr, IpiInitcMessage};
+use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, cpuid2mpidr, IpiInitcMessage, IntCtrlType};
 use crate::kernel::{active_vm, active_vm_id};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm};
@@ -2064,7 +2064,7 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
 /// emulated interrupt controller initialize
 pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
     let vgic_cpu_num = vm.config().cpu_num();
-    vm.init_intc_mode(true);
+    vm.init_intc_mode(IntCtrlType::Emulated);
 
     let vgic = Arc::new(Vgic::default());
 
@@ -2248,7 +2248,7 @@ pub fn emul_vgicr_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
 }
 
 pub fn partial_passthrough_intc_init(vm: Vm) {
-    vm.init_intc_mode(false);
+    vm.init_intc_mode(IntCtrlType::Passthrough);
 }
 
 pub fn vgic_set_hw_int(vm: Vm, int_id: usize) {

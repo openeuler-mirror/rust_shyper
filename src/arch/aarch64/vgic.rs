@@ -19,7 +19,7 @@ use crate::board::{Platform, PlatOperation};
 use crate::device::EmuContext;
 use crate::device::EmuDevs;
 use crate::kernel::{active_vcpu_id, current_cpu, restore_vcpu_gic, save_vcpu_gic};
-use crate::kernel::{active_vm, active_vm_id, active_vm_ncpu};
+use crate::kernel::{active_vm, active_vm_id, active_vm_ncpu, IntCtrlType};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm};
 use crate::utils::{bit_extract, bit_get, bit_set, bitmap_find_nth};
@@ -2044,7 +2044,7 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
 
 pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
     let vgic_cpu_num = vm.config().cpu_num();
-    vm.init_intc_mode(true);
+    vm.init_intc_mode(IntCtrlType::Emulated);
 
     let vgic = Arc::new(Vgic::default());
 
@@ -2080,7 +2080,7 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
 }
 
 pub fn partial_passthrough_intc_init(vm: Vm) {
-    vm.init_intc_mode(false);
+    vm.init_intc_mode(IntCtrlType::Passthrough);
 }
 
 pub fn vgic_set_hw_int(vm: Vm, int_id: usize) {

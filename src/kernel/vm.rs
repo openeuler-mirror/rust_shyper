@@ -14,7 +14,6 @@ use alloc::vec::Vec;
 use spin::{Mutex, Once};
 
 use crate::arch::PAGE_SIZE;
-use crate::arch::GICC_CTLR_EN_BIT;
 use crate::arch::PageTable;
 use crate::arch::Vgic;
 use crate::config::VmConfigEntry;
@@ -171,6 +170,14 @@ impl VmPa {
     }
 }
 
+/// Vm interrupt controller type
+#[derive(Clone, Copy, Default, Debug)]
+pub enum IntCtrlType {
+    #[default]
+    Emulated,
+    Passthrough,
+}
+
 #[derive(Clone)]
 pub struct Vm {
     pub inner: Arc<Mutex<VmInner>>,
@@ -255,27 +262,6 @@ impl Vm {
     pub fn new(id: usize) -> Vm {
         Vm {
             inner: Arc::new(Mutex::new(VmInner::new(id))),
-        }
-    }
-
-    /// Init the VM's interrupt controller mode.
-    pub fn init_intc_mode(&self, emu: bool) {
-        let vm_inner = self.inner.lock();
-        for vcpu in &vm_inner.vcpu_list {
-            info!(
-                "vm {} vcpu {} set {} hcr",
-                vm_inner.id,
-                vcpu.id(),
-                if emu { "emu" } else { "partial passthrough" }
-            );
-            if !emu {
-                vcpu.set_gich_ctlr((GICC_CTLR_EN_BIT) as u32);
-                vcpu.set_hcr(0x80080001); // HCR_EL2_GIC_PASSTHROUGH_VAL
-            } else {
-                #[cfg(not(feature = "gicv3"))]
-                vcpu.set_gich_ctlr((GICC_CTLR_EN_BIT | crate::arch::GICC_CTLR_EOIMODENS_BIT) as u32);
-                vcpu.set_hcr(0x80080019);
-            }
         }
     }
 
