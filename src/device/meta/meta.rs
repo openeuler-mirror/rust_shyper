@@ -1,12 +1,15 @@
-use crate::config::VmEmulatedDeviceConfig;
-use crate::device::EmuContext;
-use crate::device::meta::dispatch;
-use crate::kernel::Vm;
-use crate::error::{ErrorKind, Result};
+use core::ops::Range;
 use alloc::collections::BTreeMap;
 use alloc::boxed::Box;
 
+use alloc::sync::Arc;
 use spin::RwLock;
+
+use crate::config::VmEmulatedDeviceConfig;
+use crate::device::{EmuContext, EmuDev, EmuDeviceType, meta};
+use crate::device::meta::dispatch;
+use crate::kernel::Vm;
+use crate::error::{ErrorKind, Result};
 
 /// Metadata context containing device ID and emulation context.
 #[derive(Debug, Clone, Copy)]
@@ -55,4 +58,42 @@ pub fn register(dev_id: usize, vm: &Vm, cfg: &VmEmulatedDeviceConfig) -> Result<
 pub fn unregister(dev_id: usize) {
     let mut devs = META_DEVICES.write();
     devs.remove(&dev_id).unwrap();
+}
+
+pub struct EmuMetaDev {
+    address_range: Range<usize>,
+    dev_id: usize,
+}
+
+impl EmuDev for EmuMetaDev {
+    fn emu_type(&self) -> crate::device::EmuDeviceType {
+        crate::device::EmuDeviceType::EmuDeviceTMeta
+    }
+
+    fn address_range(&self) -> Range<usize> {
+        self.address_range.clone()
+    }
+
+    fn handler(&self, emu_ctx: &EmuContext) -> bool {
+        emu_meta_handler(self.dev_id, emu_ctx)
+    }
+}
+
+pub fn emu_meta_init(
+    dev_id: usize,
+    vm: &Vm,
+    cfg: &VmEmulatedDeviceConfig,
+) -> core::result::Result<Arc<dyn EmuDev>, ()> {
+    if cfg.emu_type == EmuDeviceType::EmuDeviceTMeta {
+        if meta::register(dev_id, vm, cfg).is_ok() {
+            Ok(Arc::new(EmuMetaDev {
+                address_range: cfg.base_ipa..cfg.base_ipa + cfg.length,
+                dev_id,
+            }))
+        } else {
+            Err(())
+        }
+    } else {
+        Err(())
+    }
 }

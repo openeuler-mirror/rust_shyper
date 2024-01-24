@@ -8,16 +8,23 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+use alloc::rc::Weak;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use spin::{Mutex, Once};
 
+use crate::arch::vgic_icc_sgir_handler;
+use crate::arch::vgic_icc_sre_handler;
 use crate::arch::PAGE_SIZE;
 use crate::arch::PageTable;
 use crate::arch::Vgic;
+use crate::arch::emu_intc_init;
 use crate::config::VmConfigEntry;
-use crate::device::EmuDevs;
+use crate::device::emu_register_reg;
+use crate::device::emu_virtio_mmio_init;
+use crate::device::{EmuDev, EmuRegType};
+use crate::kernel::{shyper_init, emu_iommu_init};
 use crate::utils::*;
 use crate::mm::PageFrame;
 use super::vcpu::Vcpu;
@@ -202,7 +209,6 @@ pub struct Vm {
 //     intc_dev_id: usize,
 //     sint_bitmap: Option<BitMap<BitAlloc256>>,
 //     // Emul devs config
-//     emu_devs: Vec<EmuDevs>,
 // }
 
 // struct VmInnerMut {
@@ -259,10 +265,13 @@ impl Vm {
         }
     }
 
-    pub fn new(id: usize) -> Vm {
-        Vm {
-            inner: Arc::new(Mutex::new(VmInner::new(id))),
-        }
+    pub fn new(id: usize, config: VmConfigEntry) -> Arc<Self> {
+        let this = Arc::new_cyclic(|weak| Vm {
+            inner: Arc::new(Mutex::new(VmInner::new(id, config, weak.clone()))),
+        });
+        let vm_inner = this.inner.lock();
+        this.init_intc_mode(vm_inner.intc_type);
+        this
     }
 
     pub fn set_iommu_ctx_id(&self, id: usize) {
@@ -379,19 +388,13 @@ impl Vm {
         vm_inner.entry_point = entry_point;
     }
 
-    pub fn set_emu_devs(&self, idx: usize, emu: EmuDevs) {
-        let mut vm_inner = self.inner.lock();
-        if idx < vm_inner.emu_devs.len() {
-            if let EmuDevs::None = vm_inner.emu_devs[idx] {
-                // println!("set_emu_devs: cover a None emu dev");
-                vm_inner.emu_devs[idx] = emu;
-                return;
-            } else {
-                panic!("set_emu_devs: set an exsit emu dev");
-            }
-        }
-        vm_inner.emu_devs.resize(idx, EmuDevs::None);
-        vm_inner.emu_devs.push(emu);
+    pub fn find_emu_dev(&self, ipa: usize) -> Option<Arc<dyn EmuDev>> {
+        let vm_inner = self.inner.lock();
+        vm_inner
+            .emu_devs
+            .iter()
+            .find(|&dev| dev.address_range().contains(&ipa))
+            .cloned()
     }
 
     pub fn set_intc_dev_id(&self, intc_dev_id: usize) {
@@ -517,59 +520,15 @@ impl Vm {
 
     pub fn vgic(&self) -> Arc<Vgic> {
         let vm_inner = self.inner.lock();
-        match &vm_inner.emu_devs[vm_inner.intc_dev_id] {
-            EmuDevs::Vgic(vgic) => vgic.clone(),
-            _ => {
-                panic!("vm{} cannot find vgic", vm_inner.id);
-            }
+        if let Some(vgic) = vm_inner.arch_intc_dev.as_ref() {
+            return vgic;
         }
+        panic!("vm{} cannot find vgic", vm_inner.id);
     }
 
     pub fn has_vgic(&self) -> bool {
         let vm_inner = self.inner.lock();
-        if vm_inner.intc_dev_id >= vm_inner.emu_devs.len() {
-            return false;
-        }
-        matches!(&vm_inner.emu_devs[vm_inner.intc_dev_id], EmuDevs::Vgic(_))
-    }
-
-    pub fn emu_dev(&self, dev_id: usize) -> EmuDevs {
-        let vm_inner = self.inner.lock();
-        vm_inner.emu_devs[dev_id].clone()
-    }
-
-    pub fn emu_net_dev(&self, id: usize) -> EmuDevs {
-        let vm_inner = self.inner.lock();
-        let mut dev_num = 0;
-
-        for i in 0..vm_inner.emu_devs.len() {
-            if let EmuDevs::VirtioNet(_) = vm_inner.emu_devs[i] {
-                if dev_num == id {
-                    return vm_inner.emu_devs[i].clone();
-                }
-                dev_num += 1;
-            }
-        }
-        EmuDevs::None
-    }
-
-    pub fn emu_blk_dev(&self) -> EmuDevs {
-        for emu in &self.inner.lock().emu_devs {
-            if let EmuDevs::VirtioBlk(_) = emu {
-                return emu.clone();
-            }
-        }
-        EmuDevs::None
-    }
-
-    // Get console dev by ipa.
-    pub fn emu_console_dev(&self, ipa: usize) -> EmuDevs {
-        for (idx, emu_dev_cfg) in self.config().emulated_device_list().iter().enumerate() {
-            if emu_dev_cfg.base_ipa == ipa {
-                return self.inner.lock().emu_devs[idx].clone();
-            }
-        }
-        EmuDevs::None
+        vm_inner.arch_intc_dev.is_some()
     }
 
     pub fn ncpu(&self) -> usize {
@@ -667,6 +626,26 @@ impl Vm {
         };
         inner.vcpu_list.iter().find(|vcpu| vcpu.id() == cpuid).cloned()
     }
+
+    pub fn ipa2pa(&self, ipa: usize) -> usize {
+        if ipa == 0 {
+            error!("vm_ipa2pa: VM {} access invalid ipa {:x}", self.id(), ipa);
+            return 0;
+        }
+
+        for i in 0..self.mem_region_num() {
+            if in_range(
+                (ipa as isize - self.pa_offset(i) as isize) as usize,
+                self.pa_start(i),
+                self.pa_length(i),
+            ) {
+                return (ipa as isize - self.pa_offset(i) as isize) as usize;
+            }
+        }
+
+        error!("vm_ipa2pa: VM {} access invalid ipa {:x}", self.id(), ipa);
+        0
+    }
 }
 
 #[repr(align(4096))]
@@ -686,18 +665,20 @@ pub struct VmInner {
     // vcpu config
     pub has_master: bool,
     pub vcpu_list: Vec<Vcpu>,
+    pub intc_type: IntCtrlType,
     pub cpu_num: usize,
     pub ncpu: usize,
 
     // interrupt
     pub intc_dev_id: usize,
     pub int_bitmap: Option<BitMap<BitAlloc256>>,
+    arch_intc_dev: Option<Arc<Vgic>>,
 
     // iommu
     pub iommu_ctx_id: Option<usize>,
 
     // emul devs
-    pub emu_devs: Vec<EmuDevs>,
+    pub emu_devs: Vec<Arc<dyn EmuDev>>,
 }
 
 impl VmInner {
@@ -714,22 +695,24 @@ impl VmInner {
 
             has_master: false,
             vcpu_list: Vec::new(),
+            intc_type: IntCtrlType::Emulated,
             cpu_num: 0,
             ncpu: 0,
 
             intc_dev_id: 0,
             int_bitmap: Some(BitAlloc4K::default()),
+            arch_intc_dev: None,
 
             iommu_ctx_id: None,
             emu_devs: Vec::new(),
         }
     }
 
-    pub fn new(id: usize) -> VmInner {
-        VmInner {
+    pub fn new(id: usize, config: VmConfigEntry, vm: Weak<Vm>) -> VmInner {
+        let mut this = VmInner {
             id,
             ready: false,
-            config: None,
+            config: Some(config),
             dtb: None,
             pt: None,
             mem_region_num: 0,
@@ -738,31 +721,109 @@ impl VmInner {
 
             has_master: false,
             vcpu_list: Vec::new(),
+            intc_type: IntCtrlType::Emulated,
             cpu_num: 0,
             ncpu: 0,
 
             intc_dev_id: 0,
             int_bitmap: Some(BitAlloc4K::default()),
+            arch_intc_dev: None,
             iommu_ctx_id: None,
             emu_devs: Vec::new(),
+        };
+        this.init_device(vm);
+        this
+    }
+
+    fn init_device(&mut self, vm: Weak<Vm>) -> bool {
+        use crate::device::EmuDeviceType::*;
+        for (idx, emu_cfg) in self.config.unwrap().emulated_device_list().iter().enumerate() {
+            let dev = match emu_cfg.dev_type {
+                EmuDeviceTGicd => {
+                    self.intc_type = IntCtrlType::Emulated;
+                    emu_intc_init(emu_cfg, &self.vcpu_list).map(|vgic| {
+                        self.arch_intc_dev = vgic.clone().into_any_arc().downcast::<Vgic>().ok();
+                        vgic
+                    })
+                }
+                EmuDeviceTGICR => {
+                    if let Some(vgic) = self.arch_intc_dev.as_ref() {
+                        crate::arch::emu_vgicr_init(emu_cfg, vgic).map(|vgicr| vgicr)
+                    } else {
+                        panic!("init_device: vgic not init");
+                    }
+                }
+                EmuDeviceTGPPT => {
+                    self.intc_type = IntCtrlType::Passthrough;
+                    crate::arch::partial_passthrough_intc_init(emu_cfg)
+                }
+                EmuDeviceTConsole | EmuDeviceTVirtioNet | EmuDeviceTVirtioBlk => emu_virtio_mmio_init(vm, emu_cfg),
+                EmuDeviceTIOMMU => emu_iommu_init(emu_cfg),
+                EmuDeviceTShyper => {
+                    if !shyper_init(vm, emu_cfg.base_ipa, emu_cfg.length) {
+                        return false;
+                    }
+                    Err(())
+                }
+                #[cfg(feature = "gicv3")]
+                EmuDeviceTICCSRE => {
+                    emu_register_reg(EmuRegType::SysReg, emu_cfg.base_ipa, vgic_icc_sre_handler);
+                    Err(())
+                }
+                #[cfg(feature = "gicv3")]
+                EmuDeviceTSGIR => {
+                    emu_register_reg(EmuRegType::SysReg, emu_cfg.base_ipa, vgic_icc_sgir_handler);
+                    Err(())
+                }
+                _ => {
+                    panic!("init_device: unknown emu dev type");
+                }
+            };
+            // Then add the dev to the emu_devs list
+            if let Ok(emu_dev) = dev {
+                if self.emu_devs.iter().any(|dev| {
+                    emu_dev.address_range().contains(&dev.address_range().start)
+                        || dev.address_range().contains(&emu_dev.address_range().start)
+                }) {
+                    panic!(
+                        "duplicated emul address region: prev address {:x?}",
+                        emu_dev.address_range(),
+                    );
+                } else {
+                    self.emu_devs.push(emu_dev);
+                }
+            }
+            // Then init int_bitmap
+            if emu_cfg.irq_id != 0 {
+                self.int_bitmap.as_mut().unwrap().set(emu_cfg.irq_id);
+            }
+            info!(
+                "VM {} registers emulated device: id=<{}>, name=\"{:?}\", ipa=<{:#x}>",
+                self.id, idx, emu_cfg.emu_type, emu_cfg.base_ipa
+            );
         }
+        // Passthrough irqs
+        for irq in self.config.unwrap().passthrough_device_irqs() {
+            self.int_bitmap.as_mut().unwrap().set(*irq);
+        }
+        true
     }
 }
 
-pub static VM_LIST: Mutex<Vec<Vm>> = Mutex::new(Vec::new());
+pub static VM_LIST: Mutex<Vec<Arc<Vm>>> = Mutex::new(Vec::new());
 
-pub fn push_vm(id: usize) -> Result<(), ()> {
+pub fn push_vm(id: usize, config: VmConfigEntry) -> Result<(), ()> {
     let mut vm_list = VM_LIST.lock();
     if vm_list.iter().any(|x| x.id() == id) {
         error!("push_vm: vm {} already exists", id);
         Err(())
     } else {
-        vm_list.push(Vm::new(id));
+        vm_list.push(Vm::new(id, config));
         Ok(())
     }
 }
 
-pub fn remove_vm(id: usize) -> Vm {
+pub fn remove_vm(id: usize) -> Arc<Vm> {
     let mut vm_list = VM_LIST.lock();
     match vm_list.iter().position(|x| x.id() == id) {
         None => {
@@ -772,7 +833,7 @@ pub fn remove_vm(id: usize) -> Vm {
     }
 }
 
-pub fn vm(id: usize) -> Option<Vm> {
+pub fn vm(id: usize) -> Option<Arc<Vm>> {
     let vm_list = VM_LIST.lock();
     vm_list.iter().find(|&x| x.id() == id).cloned()
 }

@@ -15,7 +15,7 @@ use spin::Mutex;
 use crate::device::{virtio_blk_notify_handler, VIRTIO_BLK_T_IN, VIRTIO_BLK_T_OUT};
 use crate::kernel::{
     active_vm, async_task_exe, AsyncTaskState, finish_async_task, hvc_send_msg_to_vm, HvcDefaultMsg, HvcGuestMsg,
-    IpiInnerMsg, set_front_io_task_state, vm, vm_ipa2pa, VM_LIST,
+    IpiInnerMsg, set_front_io_task_state, vm_ipa2pa, VM_LIST,
 };
 use crate::kernel::IpiMessage;
 
@@ -234,10 +234,9 @@ pub fn mediated_blk_notify_handler(dev_ipa_reg: usize) -> Result<usize, ()> {
 pub fn mediated_ipi_handler(msg: &IpiMessage) {
     // println!("core {} mediated_ipi_handler", current_cpu().id);
     if let IpiInnerMsg::MediatedMsg(mediated_msg) = &msg.ipi_message {
-        let src_id = mediated_msg.src_id;
-        let vm = vm(src_id).unwrap();
+        let src_id = mediated_msg.src_vm.id();
         // generate IO request in `virtio_blk_notify_handler`
-        virtio_blk_notify_handler(mediated_msg.vq.clone(), mediated_msg.blk.clone(), vm);
+        virtio_blk_notify_handler(mediated_msg.vq, mediated_msg.blk, mediated_msg.src_vm);
         // mark the ipi task as finish (pop it from the ipi queue)
         finish_async_task(true);
         // invoke the executor to do IO request

@@ -15,7 +15,6 @@ use spin::Mutex;
 use crate::arch::PAGE_SIZE;
 use crate::device::{VirtioMmio, Virtq};
 use crate::device::DevDesc;
-use crate::device::EmuDevs;
 use crate::device::VirtioIov;
 use crate::kernel::{active_vm, vm_ipa2pa};
 use crate::kernel::vm;
@@ -42,9 +41,8 @@ const VIRTIO_CONSOLE_PORT_OPEN: usize = 6;
 const VIRTIO_CONSOLE_PORT_NAME: usize = 7;
 
 /// A wrapper structure for `ConsoleDescInner` providing a convenient and thread-safe interface.
-#[derive(Clone)]
 pub struct ConsoleDesc {
-    inner: Arc<Mutex<ConsoleDescInner>>,
+    inner: Mutex<ConsoleDescInner>,
 }
 
 /// Holds data related to console configuration.
@@ -59,19 +57,16 @@ pub struct ConsoleDescData {
 }
 
 impl ConsoleDesc {
-    /// Creates a new `ConsoleDesc` with default inner values.
-    pub fn default() -> ConsoleDesc {
+    /// Creates a new `ConsoleDesc` with passed value.
+    pub fn new(oppo_end_vmid: u16, oppo_end_ipa: u64) -> ConsoleDesc {
+        let mut desc = ConsoleDescInner::default();
+        desc.oppo_end_vmid = oppo_end_vmid;
+        desc.oppo_end_ipa = oppo_end_ipa;
+        desc.cols = 80;
+        desc.rows = 25;
         ConsoleDesc {
-            inner: Arc::new(Mutex::new(ConsoleDescInner::default())),
+            inner: Mutex::new(desc),
         }
-    }
-
-    pub fn cfg_init(&self, oppo_end_vmid: u16, oppo_end_ipa: u64) {
-        let mut inner = self.inner.lock();
-        inner.oppo_end_vmid = oppo_end_vmid;
-        inner.oppo_end_ipa = oppo_end_ipa;
-        inner.cols = 80;
-        inner.rows = 25;
     }
 
     /// Returns the starting address of the console configuration.
@@ -121,7 +116,7 @@ pub fn console_features() -> usize {
 /// Handles notification for a Virtio console request on the specified Virtqueue (`vq`), Virtio console device (`console`), and virtual machine (`vm`).
 /// This function processes the available descriptors in the Virtqueue and performs necessary operations.
 /// Returns `true` upon successful handling.
-pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> bool {
+pub fn virtio_console_notify_handler(vq: Arc<Virtq>, console: Arc<VirtioMmio>, vm: Arc<Vm>) -> bool {
     if vq.vq_indx() % 4 != 1 {
         return true;
     }
@@ -163,7 +158,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
             idx = vq.desc_next(idx) as usize;
         }
 
-        if !virtio_console_recv(trgt_vmid, trgt_console_ipa, tx_iov.clone(), len) {
+        if !virtio_console_recv(trgt_vmid, trgt_console_ipa, tx_iov, len) {
             error!("virtio_console_notify_handler: failed send");
         }
         if !vq.update_used_ring(len as u32, next_desc_idx_opt.unwrap() as u32) {
@@ -178,7 +173,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         return false;
     }
 
-    console.notify(vm);
+    console.notify();
 
     true
 }
@@ -194,15 +189,18 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         Some(vm) => vm,
     };
 
-    let console = match trgt_vm.emu_console_dev(trgt_console_ipa as usize) {
-        EmuDevs::VirtioConsole(x) => x,
-        _ => {
+    let console = match trgt_vm
+        .find_emu_dev(trgt_console_ipa as usize)
+        .and_then(|dev| dev.into_any_arc().downcast::<VirtioMmio>().ok())
+    {
+        None => {
             error!(
                 "virtio_console_recv: trgt_vm[{}] failed to get virtio console dev",
                 trgt_vmid
             );
             return true;
         }
+        Some(vm) => vm,
     };
 
     if !console.dev().activated() {
@@ -271,7 +269,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         return false;
     }
 
-    if tx_iov.write_through_iov(rx_iov.clone(), len) > 0 {
+    if tx_iov.write_through_iov(&rx_iov, len) > 0 {
         error!(
             "virtio_console_recv: write through iov failed, rx_iov_num {} tx_iov_num {} rx_len {} tx_len {}",
             rx_iov.num(),
@@ -291,6 +289,6 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         return false;
     }
 
-    console.notify(trgt_vm);
+    console.notify();
     true
 }

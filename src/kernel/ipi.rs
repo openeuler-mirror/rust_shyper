@@ -7,6 +7,7 @@
 // EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
+use alloc::sync::Arc;
 
 use crate::arch::traits::InterruptController;
 use crate::board::PLAT_DESC;
@@ -67,11 +68,10 @@ pub struct IpiPowerMessage {
 //     pub succeed: bool,
 // }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 /// Ethernet Message Struct transfered by IPI
 pub struct IpiEthernetMsg {
-    pub src_vmid: usize,
-    pub trgt_vmid: usize,
+    pub trgt_nic: Arc<VirtioMmio>,
 }
 
 #[derive(Copy, Clone)]
@@ -93,10 +93,9 @@ pub struct IpiVcpuMsg {
 #[derive(Clone)]
 /// Mediated Device Message Struct transfered by IPI
 pub struct IpiMediatedMsg {
-    pub src_id: usize,
-    pub vq: Virtq,
-    pub blk: VirtioMmio,
-    // pub avail_idx: u16,
+    pub src_vm: Arc<Vm>,
+    pub vq: Arc<Virtq>,
+    pub blk: Arc<VirtioMmio>,
 }
 
 #[derive(Clone, Copy)]

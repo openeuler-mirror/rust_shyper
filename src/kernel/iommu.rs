@@ -7,8 +7,11 @@
 // EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
+use alloc::sync::Arc;
 
 use crate::arch::{smmu_add_device, smmu_vm_init};
+use crate::device::EmuDev;
+use crate::config::VmEmulatedDeviceConfig;
 use crate::kernel::Vm;
 
 /// init iommu
@@ -38,5 +41,14 @@ pub fn iommu_add_device(vm: Vm, stream_id: usize) -> bool {
     } else {
         warn!("Platform not support IOMMU");
         false
+    }
+}
+
+/// init emu_iommu for vm
+pub fn emu_iommu_init(emu_cfg: &VmEmulatedDeviceConfig) -> Result<Arc<dyn EmuDev>, ()> {
+    if cfg!(feature = "tx2") {
+        crate::arch::emu_smmu_init(emu_cfg)
+    } else {
+        Err(())
     }
 }

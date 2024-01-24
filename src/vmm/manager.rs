@@ -52,10 +52,6 @@ pub fn vmm_shutdown_secondary_vm() {
  */
 pub fn vmm_push_vm(vm_id: usize) {
     info!("vmm_push_vm: add vm {} on cpu {}", vm_id, current_cpu().id);
-    if push_vm(vm_id).is_err() {
-        return;
-    }
-    let vm = vm(vm_id).unwrap();
     let vm_cfg = match vm_cfg_entry(vm_id) {
         Some(vm_cfg) => vm_cfg,
         None => {
@@ -63,7 +59,9 @@ pub fn vmm_push_vm(vm_id: usize) {
             return;
         }
     };
-    vm.set_config_entry(Some(vm_cfg));
+    if push_vm(vm_id, vm_cfg).is_err() {
+        panic!("vmm_push_vm: failed to push vm {}", vm_id);
+    }
 
     use crate::kernel::vm_if_set_type;
     vm_if_set_type(vm_id, vm_type(vm_id));

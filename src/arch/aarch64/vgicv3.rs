@@ -9,6 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use core::mem::size_of;
+use core::ops::Range;
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
@@ -19,9 +20,10 @@ use spin::Mutex;
 use crate::arch::{GICH, MPIDR_EL1};
 use crate::arch::aarch64::regs::ReadableReg;
 use crate::board::PLAT_DESC;
+use crate::config::VmEmulatedDeviceConfig;
 use crate::device::EmuContext;
-use crate::device::EmuDevs;
-use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, cpuid2mpidr, IpiInitcMessage, IntCtrlType};
+use crate::device::{EmuDev, EmuDeviceType};
+use crate::kernel::{current_cpu, restore_vcpu_gic, save_vcpu_gic, cpuid2mpidr, IpiInitcMessage};
 use crate::kernel::{active_vm, active_vm_id};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm};
@@ -318,11 +320,12 @@ struct Vgicd {
 }
 
 impl Vgicd {
-    fn default() -> Vgicd {
+    fn new(cpu_num: usize) -> Vgicd {
         Vgicd {
-            ctlr: 0,
-            typer: 0,
-            iidr: 0,
+            ctlr: 0b10,
+            typer: (GICD.typer() & !(GICD_TYPER_CPUNUM_MSK | GICD_TYPER_LPIS) as u32)
+                | ((((cpu_num - 1) << GICD_TYPER_CPUNUM_OFF) & GICD_TYPER_CPUNUM_MSK) as u32),
+            iidr: GICD.iidr(),
             interrupts: Vec::new(),
         }
     }
@@ -433,14 +436,16 @@ impl VgicCpuPriv {
 
 /// VGIC general struct
 pub struct Vgic {
+    address_range: Range<usize>,
     vgicd: Mutex<Vgicd>,
     cpu_priv: Mutex<Vec<VgicCpuPriv>>,
 }
 
 impl Vgic {
-    pub fn default() -> Vgic {
+    pub fn new(base: usize, length: usize, cpu_num: usize) -> Vgic {
         Vgic {
-            vgicd: Mutex::new(Vgicd::default()),
+            address_range: base..base + length,
+            vgicd: Mutex::new(Vgicd::new(cpu_num)),
             cpu_priv: Mutex::new(Vec::new()),
         }
     }
@@ -1846,84 +1851,132 @@ const VGICD_REG_OFFSET_PREFIX_ICACTIVER: usize = 0x7;
 const VGICD_REG_OFFSET_PREFIX_ICFGR: usize = 0x18;
 const VGICD_REG_OFFSET_PREFIX_SGIR: usize = 0x1e;
 
-/// emulated interrupt controller handler
-pub fn emu_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
-    let offset = emu_ctx.address & 0xffff;
+impl EmuDev for Vgic {
+    fn emu_type(&self) -> EmuDeviceType {
+        EmuDeviceType::EmuDeviceTGicd
+    }
 
-    let vm = match crate::kernel::active_vm() {
-        None => {
-            panic!("emu_intc_handler: vm is None");
-        }
-        Some(x) => x,
-    };
+    fn address_range(&self) -> Range<usize> {
+        self.address_range.clone()
+    }
 
-    let vgic = vm.vgic();
-    let vgicd_offset_prefix = offset >> 7;
-    trace!(
-        "current_cpu:{} emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
-        current_cpu().id,
-        emu_ctx.address,
-        emu_ctx.write,
-        current_cpu().get_gpr(emu_ctx.reg)
-    );
+    fn handler(&self, emu_ctx: &EmuContext) -> bool {
+        let offset = emu_ctx.address & 0xffff;
 
-    match vgicd_offset_prefix {
-        VGICD_REG_OFFSET_PREFIX_ISENABLER => {
-            vgic.emu_isenabler_access(emu_ctx);
+        let vgicd_offset_prefix = offset >> 7;
+        if !vgicd_emu_access_is_vaild(emu_ctx) {
+            return false;
         }
-        VGICD_REG_OFFSET_PREFIX_ISPENDR => {
-            vgic.emu_ispendr_access(emu_ctx);
-        }
-        VGICD_REG_OFFSET_PREFIX_ISACTIVER => {
-            vgic.emu_isactiver_access(emu_ctx);
-        }
-        VGICD_REG_OFFSET_PREFIX_ICENABLER => {
-            vgic.emu_icenabler_access(emu_ctx);
-        }
-        VGICD_REG_OFFSET_PREFIX_ICPENDR => {
-            vgic.emu_icpendr_access(emu_ctx);
-        }
-        VGICD_REG_OFFSET_PREFIX_ICACTIVER => {
-            vgic.emu_icativer_access(emu_ctx);
-        }
-        VGICD_REG_OFFSET_PREFIX_ICFGR => {
-            vgic.emu_icfgr_access(emu_ctx);
-        }
-        _ => {
-            match offset {
-                // VGICD_REG_OFFSET(CTLR)
-                0 => {
-                    vgic.emu_ctrl_access(emu_ctx);
-                }
-                // VGICD_REG_OFFSET(TYPER)
-                0x004 => {
-                    vgic.emu_typer_access(emu_ctx);
-                }
-                // VGICD_REG_OFFSET(IIDR)
-                0x008 => {
-                    vgic.emu_iidr_access(emu_ctx);
-                }
-                0xf00 => {
-                    vgic.emu_razwi(emu_ctx);
-                }
-                _ => {
-                    if (0x400..0x800).contains(&offset) {
-                        vgic.emu_ipriorityr_access(emu_ctx);
-                    } else if (0x800..0xc00).contains(&offset) {
-                        vgic.emu_razwi(emu_ctx);
-                    } else if (0x6000..0x8000).contains(&offset) {
-                        vgic.emu_irouter_access(emu_ctx);
-                    } else if (0xffd0..0x10000).contains(&offset) {
-                        //ffe8 is GICD_PIDR2, Peripheral ID2 Register
-                        vgic.emu_pidr_access(emu_ctx);
-                    } else {
-                        vgic.emu_razwi(emu_ctx);
+
+        trace!(
+            "current_cpu:{} emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
+            current_cpu().id,
+            emu_ctx.address,
+            emu_ctx.write,
+            current_cpu().get_gpr(emu_ctx.reg)
+        );
+
+        match vgicd_offset_prefix {
+            VGICD_REG_OFFSET_PREFIX_ISENABLER => {
+                self.emu_isenabler_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ISPENDR => {
+                self.emu_ispendr_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ISACTIVER => {
+                self.emu_isactiver_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICENABLER => {
+                self.emu_icenabler_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICPENDR => {
+                self.emu_icpendr_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICACTIVER => {
+                self.emu_icativer_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICFGR => {
+                self.emu_icfgr_access(emu_ctx);
+            }
+            _ => {
+                match offset {
+                    // VGICD_REG_OFFSET(CTLR)
+                    0 => {
+                        self.emu_ctrl_access(emu_ctx);
+                    }
+                    // VGICD_REG_OFFSET(TYPER)
+                    0x004 => {
+                        self.emu_typer_access(emu_ctx);
+                    }
+                    // VGICD_REG_OFFSET(IIDR)
+                    0x008 => {
+                        self.emu_iidr_access(emu_ctx);
+                    }
+                    0xf00 => {
+                        self.emu_razwi(emu_ctx);
+                    }
+                    _ => {
+                        if (0x400..0x800).contains(&offset) {
+                            self.emu_ipriorityr_access(emu_ctx);
+                        } else if (0x800..0xc00).contains(&offset) {
+                            self.emu_razwi(emu_ctx);
+                        } else if (0x6000..0x8000).contains(&offset) {
+                            self.emu_irouter_access(emu_ctx);
+                        } else if (0xffd0..0x10000).contains(&offset) {
+                            //ffe8 is GICD_PIDR2, Peripheral ID2 Register
+                            self.emu_pidr_access(emu_ctx);
+                        } else {
+                            self.emu_razwi(emu_ctx);
+                        }
                     }
                 }
             }
         }
+        true
     }
-    true
+}
+pub struct PartialPassthroughIntc {
+    address_range: Range<usize>,
+}
+
+impl EmuDev for PartialPassthroughIntc {
+    fn emu_type(&self) -> EmuDeviceType {
+        EmuDeviceType::EmuDeviceTGPPT
+    }
+
+    fn address_range(&self) -> Range<usize> {
+        self.address_range.clone()
+    }
+
+    /// partial passthrough interrupt controller handler
+    fn handler(&self, emu_ctx: &EmuContext) -> bool {
+        if !vgicd_emu_access_is_vaild(emu_ctx) {
+            return false;
+        }
+
+        if emu_ctx.write {
+            // SAFETY: Emu_ctx.address is writeable in EL2
+            unsafe {
+                emu_ctx.write(current_cpu().get_gpr(emu_ctx.reg));
+            }
+        } else {
+            // SAFETY: Emu_ctx.address is readable in EL2
+            current_cpu().set_gpr(emu_ctx.reg, unsafe { emu_ctx.read() });
+        }
+
+        true
+    }
+}
+
+pub fn partial_passthrough_intc_init(emu_cfg: &VmEmulatedDeviceConfig) -> Result<Arc<dyn EmuDev>, ()> {
+    if emu_cfg.emu_type == EmuDeviceType::EmuDeviceTGPPT {
+        let intc = PartialPassthroughIntc {
+            address_range: emu_cfg.base_ipa..emu_cfg.base_ipa + emu_cfg.length,
+        };
+        Ok(Arc::new(intc))
+    } else {
+        Err(())
+    }
 }
 
 pub fn vgicd_emu_access_is_vaild(emu_ctx: &EmuContext) -> bool {
@@ -1958,24 +2011,6 @@ pub fn vgicd_emu_access_is_vaild(emu_ctx: &EmuContext) -> bool {
             }
         }
     }
-    true
-}
-
-/// partial passthrough interrupt controller handler
-pub fn partial_passthrough_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
-    if !vgicd_emu_access_is_vaild(emu_ctx) {
-        return false;
-    }
-    if emu_ctx.write {
-        // SAFETY: Emu_ctx.address is writeable in EL2
-        unsafe {
-            emu_ctx.write(current_cpu().get_gpr(emu_ctx.reg));
-        }
-    } else {
-        // SAFETY: Emu_ctx.address is readable in EL2
-        current_cpu().set_gpr(emu_ctx.reg, unsafe { emu_ctx.read() });
-    }
-
     true
 }
 
@@ -2062,28 +2097,27 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
 }
 
 /// emulated interrupt controller initialize
-pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
-    let vgic_cpu_num = vm.config().cpu_num();
-    vm.init_intc_mode(IntCtrlType::Emulated);
+pub fn emu_intc_init(emu_cfg: &VmEmulatedDeviceConfig, vcpu_list: &[Vcpu]) -> Result<Arc<dyn EmuDev>, ()> {
+    if emu_cfg.emu_type != EmuDeviceType::EmuDeviceTGicd {
+        error!("emu_intc_init: emu_type is not EmuDeviceTGicd");
+        return Err(());
+    }
 
-    let vgic = Arc::new(Vgic::default());
+    let vcpu_num = vcpu_list.len();
+    let vgic = Arc::new(Vgic::new(emu_cfg.base_ipa, emu_cfg.length, vcpu_num));
 
     let mut vgicd = vgic.vgicd.lock();
-    vgicd.typer = (GICD.typer() & !(GICD_TYPER_CPUNUM_MSK | GICD_TYPER_LPIS) as u32)
-        | ((((vm.cpu_num() - 1) << GICD_TYPER_CPUNUM_OFF) & GICD_TYPER_CPUNUM_MSK) as u32);
-    vgicd.iidr = GICD.iidr();
-    vgicd.ctlr = 0b10;
 
     for i in 0..GIC_SPI_MAX {
         vgicd.interrupts.push(VgicInt::new(i));
     }
     drop(vgicd);
 
-    for i in 0..vgic_cpu_num {
-        let mut typer = i << GICR_TYPER_PRCNUM_OFF;
-        let vmpidr = vm.vcpu(i).unwrap().get_vmpidr();
+    for vcpu in vcpu_list {
+        let mut typer = vcpu.id() << GICR_TYPER_PRCNUM_OFF;
+        let vmpidr = vcpu.get_vmpidr();
         typer |= (vmpidr & MPIDR_AFF_MSK) << GICR_TYPER_AFFVAL_OFF;
-        typer |= !!((i == (vm.cpu_num() - 1)) as usize) << GICR_TYPER_LAST_OFF;
+        typer |= !!((vcpu.id() == (vcpu_num - 1)) as usize) << GICR_TYPER_LAST_OFF;
         //need the low 6 bits for LPI/ITS init
         //DPGS, bit [5]:Sets support for GICR_CTLR.DPG* bits
         //DirectLPI, bit [3]: Indicates whether this Redistributor supports direct injection of LPIs.
@@ -2094,12 +2128,11 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
 
         let mut cpu_priv = VgicCpuPriv::new(
             typer,
-            GICR.get_ctrl(vm.vcpu(i).unwrap().phys_id() as u32) as usize,
-            GICR.get_iidr(vm.vcpu(i).unwrap().phys_id()) as usize,
+            GICR.get_ctrl(vcpu.phys_id() as u32) as usize,
+            GICR.get_iidr(vcpu.phys_id()) as usize,
         );
 
         for int_idx in 0..GIC_SGIS_NUM {
-            let vcpu = vm.vcpu(i).unwrap();
             let phys_id = vcpu.phys_id();
 
             cpu_priv.interrupts.push(VgicInt::priv_new(
@@ -2113,7 +2146,6 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
         }
 
         for int_idx in GIC_SGIS_NUM..GIC_PRIVINT_NUM {
-            let vcpu = vm.vcpu(i).unwrap();
             let phys_id = vcpu.phys_id();
 
             cpu_priv.interrupts.push(VgicInt::priv_new(
@@ -2131,12 +2163,112 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
         drop(vgic_cpu_priv);
     }
 
-    vm.set_emu_devs(emu_dev_id, EmuDevs::Vgic(vgic.clone()));
+    Ok(vgic)
 }
 
-pub fn emu_vgicr_init(vm: Vm, emu_dev_id: usize) {
-    let vigc = vm.emu_dev(vm.intc_dev_id()).clone();
-    vm.set_emu_devs(emu_dev_id, vigc);
+pub struct VgicRedis {
+    address_range: Range<usize>,
+    vgic: Arc<Vgic>,
+}
+
+impl VgicRedis {
+    pub fn new(base_ipa: usize, length: usize, vgic: Arc<Vgic>) -> Self {
+        Self {
+            address_range: base_ipa..base_ipa + length,
+            vgic,
+        }
+    }
+
+    fn vgicr_emul_ctrl_access(&self, emu_ctx: &EmuContext) {
+        if !emu_ctx.write {
+            current_cpu().set_gpr(emu_ctx.reg, GICR.get_ctrl(current_cpu().id as u32) as usize);
+        } else {
+            GICR.set_ctrlr(current_cpu().id, current_cpu().get_gpr(emu_ctx.reg));
+        }
+    }
+}
+
+impl EmuDev for VgicRedis {
+    fn emu_type(&self) -> EmuDeviceType {
+        EmuDeviceType::EmuDeviceTGICR
+    }
+
+    fn address_range(&self) -> Range<usize> {
+        self.address_range.clone()
+    }
+
+    fn handler(&self, emu_ctx: &EmuContext) -> bool {
+        let vgic = &self.vgic;
+        let vgicr_id = vgicr_get_id(emu_ctx);
+        let offset = emu_ctx.address & 0x1ffff;
+
+        trace!(
+            "current_cpu:{}emul_vgicr_handler addr:{:#x} reg {:?} offset {:#x} is write:{}, val:{:#x}",
+            current_cpu().id,
+            emu_ctx.address,
+            GicrRegs::from(offset),
+            offset,
+            emu_ctx.write,
+            current_cpu().get_gpr(emu_ctx.reg)
+        );
+
+        match offset {
+            VGICR_REG_OFFSET_CLTR => {
+                self.vgicr_emul_ctrl_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_TYPER => {
+                vgic.vgicr_emul_typer_access(emu_ctx, vgicr_id as usize);
+            }
+            VGICR_REG_OFFSET_ISENABLER0 => {
+                vgic.emu_isenabler_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_ISPENDR0 => {
+                vgic.emu_ispendr_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_ISACTIVER0 => {
+                vgic.emu_isactiver_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_ICENABLER0 => {
+                vgic.emu_icenabler_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_ICPENDR0 => {
+                vgic.emu_icpendr_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_ICACTIVER0 => {
+                vgic.emu_icativer_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_ICFGR0 | VGICR_REG_OFFSET_ICFGR1 => {
+                vgic.emu_icfgr_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_PROPBASER => {
+                vgic.emu_probaser_access(emu_ctx);
+            }
+            VGICR_REG_OFFSET_PENDBASER => {
+                vgic.emu_pendbaser_access(emu_ctx);
+            }
+            _ => {
+                if (0x10400..0x10420).contains(&offset) {
+                    vgic.emu_ipriorityr_access(emu_ctx);
+                } else if (0xffd0..0x10000).contains(&offset) {
+                    vgicr_emul_pidr_access(emu_ctx, vgicr_id as usize);
+                } else {
+                    vgic.emu_razwi(emu_ctx);
+                }
+            }
+        }
+        true
+    }
+}
+
+pub fn emu_vgicr_init(emu_cfg: &VmEmulatedDeviceConfig, vgic: Arc<Vgic>) -> Result<Arc<dyn EmuDev>, ()> {
+    if emu_cfg.emu_type != EmuDeviceType::EmuDeviceTGICR {
+        error!("emu_vgicr_init: emu_type is not EmuDeviceTGICR");
+        return Err(());
+    }
+
+    let vgicr = Arc::new(VgicRedis::new(emu_cfg.base_ipa, emu_cfg.length, vgic));
+
+    Ok(vgicr)
 }
 
 const VGICR_REG_OFFSET_CLTR: usize = 0x0;
@@ -2185,71 +2317,6 @@ impl From<usize> for GicrRegs {
     }
 }
 
-pub fn emul_vgicr_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
-    let vgic = current_cpu().active_vcpu.clone().unwrap().vm().unwrap().vgic();
-    let vgicr_id = vgicr_get_id(emu_ctx);
-    let offset = emu_ctx.address & 0x1ffff;
-
-    trace!(
-        "current_cpu:{}emul_vgicr_handler addr:{:#x} reg {:?} offset {:#x} is write:{}, val:{:#x}",
-        current_cpu().id,
-        emu_ctx.address,
-        GicrRegs::from(offset),
-        offset,
-        emu_ctx.write,
-        current_cpu().get_gpr(emu_ctx.reg)
-    );
-
-    match offset {
-        VGICR_REG_OFFSET_CLTR => {
-            vgicr_emul_ctrl_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_TYPER => {
-            vgic.vgicr_emul_typer_access(emu_ctx, vgicr_id as usize);
-        }
-        VGICR_REG_OFFSET_ISENABLER0 => {
-            vgic.emu_isenabler_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_ISPENDR0 => {
-            vgic.emu_ispendr_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_ISACTIVER0 => {
-            vgic.emu_isactiver_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_ICENABLER0 => {
-            vgic.emu_icenabler_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_ICPENDR0 => {
-            vgic.emu_icpendr_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_ICACTIVER0 => {
-            vgic.emu_icativer_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_ICFGR0 | VGICR_REG_OFFSET_ICFGR1 => {
-            vgic.emu_icfgr_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_PROPBASER => {
-            vgic.emu_probaser_access(emu_ctx);
-        }
-        VGICR_REG_OFFSET_PENDBASER => {
-            vgic.emu_pendbaser_access(emu_ctx);
-        }
-        _ => {
-            if (0x10400..0x10420).contains(&offset) {
-                vgic.emu_ipriorityr_access(emu_ctx);
-            } else if (0xffd0..0x10000).contains(&offset) {
-                vgicr_emul_pidr_access(emu_ctx, vgicr_id as usize);
-            } else {
-                vgic.emu_razwi(emu_ctx);
-            }
-        }
-    }
-    true
-}
-
-pub fn partial_passthrough_intc_init(vm: Vm) {
-    vm.init_intc_mode(IntCtrlType::Passthrough);
-}
 
 pub fn vgic_set_hw_int(vm: Vm, int_id: usize) {
     if int_id < GIC_SGIS_NUM {

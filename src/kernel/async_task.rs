@@ -41,8 +41,8 @@ pub struct UsedInfo {
 #[derive(Clone)]
 pub struct IoAsyncMsg {
     pub src_vmid: usize,
-    pub vq: Virtq,
-    pub dev: VirtioMmio,
+    pub vq: Arc<Virtq>,
+    pub dev: Arc<VirtioMmio>,
     pub io_type: usize,
     pub blk_id: usize,
     pub sector: usize,
@@ -53,8 +53,8 @@ pub struct IoAsyncMsg {
 
 #[derive(Clone)]
 pub struct IoIdAsyncMsg {
-    pub vq: Virtq,
-    pub dev: VirtioMmio,
+    pub vq: Arc<Virtq>,
+    pub dev: Arc<VirtioMmio>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -261,10 +261,8 @@ pub async fn async_ipi_req() {
     drop(ipi_list);
     if let AsyncTaskData::AsyncIpiTask(msg) = task.task_data {
         if active_vm_id() == 0 {
-            virtio_blk_notify_handler(msg.vq.clone(), msg.blk.clone(), vm(msg.src_id).unwrap());
+            virtio_blk_notify_handler(msg.vq, msg.blk, msg.src_vm);
         } else {
-            // add_task_ipi_count();
-            // send IPI to target cpu, and the target will invoke `mediated_ipi_handler`
             ipi_send_msg(0, IpiType::IpiTMediatedDev, IpiInnerMsg::MediatedMsg(msg));
         }
     }
@@ -451,13 +449,13 @@ pub fn finish_async_task(ipi: bool) {
 
             update_used_info(args.vq.clone(), task.src_vmid);
             let src_vm = vm(task.src_vmid).unwrap();
-            args.dev.notify(src_vm);
+            args.dev.notify();
         }
         AsyncTaskData::AsyncIpiTask(_) => {}
         AsyncTaskData::AsyncNoneTask(args) => {
             update_used_info(args.vq.clone(), task.src_vmid);
             let src_vm = vm(task.src_vmid).unwrap();
-            args.dev.notify(src_vm);
+            args.dev.notify();
         }
     }
 }

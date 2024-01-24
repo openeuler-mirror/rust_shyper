@@ -11,15 +11,17 @@
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Range;
 
 use spin::Mutex;
 
 use crate::{arch::GICH, kernel::IpiInitcMessage};
+use crate::config::VmEmulatedDeviceConfig;
 use crate::board::{Platform, PlatOperation};
 use crate::device::EmuContext;
-use crate::device::EmuDevs;
+use crate::device::{EmuDev, EmuDeviceType};
 use crate::kernel::{active_vcpu_id, current_cpu, restore_vcpu_gic, save_vcpu_gic};
-use crate::kernel::{active_vm, active_vm_id, active_vm_ncpu, IntCtrlType};
+use crate::kernel::{active_vm, active_vm_id, active_vm_ncpu};
 use crate::kernel::{ipi_intra_broadcast_msg, ipi_send_msg, IpiInnerMsg, IpiMessage, IpiType};
 use crate::kernel::{InitcEvent, Vcpu, Vm};
 use crate::utils::{bit_extract, bit_get, bit_set, bitmap_find_nth};
@@ -262,11 +264,12 @@ struct Vgicd {
 }
 
 impl Vgicd {
-    fn default() -> Vgicd {
+    fn new(cpu_num: usize) -> Vgicd {
         Vgicd {
-            ctlr: 0,
-            typer: 0,
-            iidr: 0,
+            ctlr: 0b10,
+            typer: (GICD.typer() & GICD_TYPER_CPUNUM_MSK as u32)
+                | (((cpu_num - 1) << GICD_TYPER_CPUNUM_OFF) & GICD_TYPER_CPUNUM_MSK) as u32,
+            iidr: GICD.iidr(),
             interrupts: Vec::new(),
         }
     }
@@ -307,14 +310,16 @@ impl VgicCpuPriv {
 }
 
 pub struct Vgic {
+    address_range: Range<usize>,
     vgicd: Mutex<Vgicd>,
     cpu_priv: Mutex<Vec<VgicCpuPriv>>,
 }
 
 impl Vgic {
-    pub fn default() -> Vgic {
+    pub fn new(base: usize, length: usize, cpu_num: usize) -> Vgic {
         Vgic {
-            vgicd: Mutex::new(Vgicd::default()),
+            address_range: base..base + length,
+            vgicd: Mutex::new(Vgicd::new(cpu_num)),
             cpu_priv: Mutex::new(Vec::new()),
         }
     }
@@ -1946,23 +1951,6 @@ pub fn vgicd_emu_access_is_vaild(emu_ctx: &EmuContext) -> bool {
     true
 }
 
-pub fn partial_passthrough_intc_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
-    if !vgicd_emu_access_is_vaild(emu_ctx) {
-        return false;
-    }
-    if emu_ctx.write {
-        // SAFETY: Emu_ctx.address is writeable in EL2
-        unsafe {
-            emu_ctx.write(current_cpu().get_gpr(emu_ctx.reg));
-        }
-    } else {
-        // SAFETY: Emu_ctx.address is readable in EL2
-        current_cpu().set_gpr(emu_ctx.reg, unsafe { emu_ctx.read() });
-    }
-
-    true
-}
-
 pub fn vgic_ipi_handler(msg: &IpiMessage) {
     let vm_id;
     let int_id;
@@ -2042,26 +2030,25 @@ pub fn vgic_ipi_handler(msg: &IpiMessage) {
     save_vcpu_gic(current_cpu().active_vcpu.clone(), trgt_vcpu);
 }
 
-pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
-    let vgic_cpu_num = vm.config().cpu_num();
-    vm.init_intc_mode(IntCtrlType::Emulated);
+pub fn emu_intc_init(emu_cfg: &VmEmulatedDeviceConfig, vcpu_list: &[Vcpu]) -> Result<Arc<dyn EmuDev>, ()> {
+    if emu_cfg.emu_type != EmuDeviceType::EmuDeviceTGicd {
+        error!("emu_intc_init: emu_type is not EmuDeviceTGicd");
+        return Err(());
+    }
 
-    let vgic = Arc::new(Vgic::default());
+    let vcpu_num = vcpu_list.len();
+    let vgic = Arc::new(Vgic::new(emu_cfg.base_ipa, emu_cfg.length, vcpu_num));
 
     let mut vgicd = vgic.vgicd.lock();
-    vgicd.typer = (GICD.typer() & GICD_TYPER_CPUNUM_MSK as u32)
-        | (((vm.cpu_num() - 1) << GICD_TYPER_CPUNUM_OFF) & GICD_TYPER_CPUNUM_MSK) as u32;
-    vgicd.iidr = GICD.iidr();
 
     for i in 0..GIC_SPI_MAX {
         vgicd.interrupts.push(VgicInt::new(i));
     }
     drop(vgicd);
 
-    for i in 0..vgic_cpu_num {
+    for vcpu in vcpu_list {
         let mut cpu_priv = VgicCpuPriv::default();
         for int_idx in 0..GIC_PRIVINT_NUM {
-            let vcpu = vm.vcpu(i).unwrap();
             let phys_id = vcpu.phys_id();
 
             cpu_priv.interrupts.push(VgicInt::priv_new(
@@ -2076,11 +2063,7 @@ pub fn emu_intc_init(vm: Vm, emu_dev_id: usize) {
         vgic_cpu_priv.push(cpu_priv);
     }
 
-    vm.set_emu_devs(emu_dev_id, EmuDevs::Vgic(vgic.clone()));
-}
-
-pub fn partial_passthrough_intc_init(vm: Vm) {
-    vm.init_intc_mode(IntCtrlType::Passthrough);
+    Ok(vgic)
 }
 
 pub fn vgic_set_hw_int(vm: Vm, int_id: usize) {
@@ -2109,5 +2092,130 @@ pub fn vgic_set_hw_int(vm: Vm, int_id: usize) {
             interrupt.set_hw(true);
             drop(interrupt_lock);
         }
+    }
+}
+
+impl EmuDev for Vgic {
+    fn emu_type(&self) -> EmuDeviceType {
+        EmuDeviceType::EmuDeviceTGicd
+    }
+
+    fn address_range(&self) -> Range<usize> {
+        self.address_range.clone()
+    }
+
+    fn handler(&self, emu_ctx: &EmuContext) -> bool {
+        let offset = emu_ctx.address & 0xffff;
+
+        let vgicd_offset_prefix = offset >> 7;
+        if !vgicd_emu_access_is_vaild(emu_ctx) {
+            return false;
+        }
+
+        trace!(
+            "current_cpu:{} emu_intc_handler offset:{:#x} is write:{},val:{:#x}",
+            current_cpu().id,
+            emu_ctx.address,
+            emu_ctx.write,
+            current_cpu().get_gpr(emu_ctx.reg)
+        );
+        match vgicd_offset_prefix {
+            VGICD_REG_OFFSET_PREFIX_ISENABLER => {
+                self.emu_isenabler_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ISPENDR => {
+                self.emu_ispendr_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ISACTIVER => {
+                self.emu_isactiver_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICENABLER => {
+                self.emu_icenabler_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICPENDR => {
+                self.emu_icpendr_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICACTIVER => {
+                self.emu_icativer_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_ICFGR => {
+                self.emu_icfgr_access(emu_ctx);
+            }
+            VGICD_REG_OFFSET_PREFIX_SGIR => {
+                self.emu_sgiregs_access(emu_ctx);
+            }
+            _ => {
+                match offset {
+                    // VGICD_REG_OFFSET(CTLR)
+                    0 => {
+                        self.emu_ctrl_access(emu_ctx);
+                    }
+                    // VGICD_REG_OFFSET(TYPER)
+                    0x004 => {
+                        self.emu_typer_access(emu_ctx);
+                    }
+                    // VGICD_REG_OFFSET(IIDR)
+                    0x008 => {
+                        self.emu_iidr_access(emu_ctx);
+                    }
+                    _ => {
+                        if !emu_ctx.write {
+                            let idx = emu_ctx.reg;
+                            let val = 0;
+                            current_cpu().set_gpr(idx, val);
+                        }
+                    }
+                }
+                if (0x400..0x800).contains(&offset) {
+                    self.emu_ipriorityr_access(emu_ctx);
+                } else if (0x800..0xc00).contains(&offset) {
+                    self.emu_itargetr_access(emu_ctx);
+                }
+            }
+        }
+        true
+    }
+}
+
+pub struct PartialPassthroughIntc {
+    address_range: Range<usize>,
+}
+
+impl EmuDev for PartialPassthroughIntc {
+    fn emu_type(&self) -> EmuDeviceType {
+        EmuDeviceType::EmuDeviceTGPPT
+    }
+
+    fn address_range(&self) -> Range<usize> {
+        self.address_range.clone()
+    }
+
+    fn handler(&self, emu_ctx: &EmuContext) -> bool {
+        if !vgicd_emu_access_is_vaild(emu_ctx) {
+            return false;
+        }
+
+        if emu_ctx.write {
+            // SAFETY: Emu_ctx.address is writeable in EL2
+            unsafe {
+                emu_ctx.write(current_cpu().get_gpr(emu_ctx.reg));
+            }
+        } else {
+            // SAFETY: Emu_ctx.address is readable in EL2
+            current_cpu().set_gpr(emu_ctx.reg, unsafe { emu_ctx.read() });
+        }
+
+        true
+    }
+}
+
+pub fn partial_passthrough_intc_init(emu_cfg: &VmEmulatedDeviceConfig) -> Result<Arc<dyn EmuDev>, ()> {
+    if emu_cfg.emu_type == EmuDeviceType::EmuDeviceTGPPT {
+        let intc = PartialPassthroughIntc {
+            address_range: emu_cfg.base_ipa..emu_cfg.base_ipa + emu_cfg.length,
+        };
+        Ok(Arc::new(intc))
+    } else {
+        Err(())
     }
 }

@@ -10,23 +10,13 @@
 
 use alloc::vec::Vec;
 
-use crate::arch::{
-    emu_intc_handler, emu_intc_init, emu_smmu_handler, partial_passthrough_intc_handler, partial_passthrough_intc_init,
-};
-#[cfg(feature = "gicv3")]
-use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL, PTE_S2_NORMALNOCACHE};
 #[cfg(not(feature = "gicv3"))]
 use crate::board::*;
 use crate::config::vm_cfg_entry;
-use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init, meta};
-#[cfg(feature = "gicv3")]
-use crate::device::{emu_register_reg, EmuRegType};
 use crate::device::create_fdt;
 use crate::device::EmuDeviceType::*;
-use crate::kernel::{
-    add_async_used_info, cpu_idle, current_cpu, iommmu_vm_init, shyper_init, VM_IF_LIST, VmPa, VmType, iommu_add_device,
-};
+use crate::kernel::{add_async_used_info, cpu_idle, current_cpu, VmPa, VmType, iommu_add_device};
 use crate::kernel::{mem_page_alloc, mem_vm_region_alloc};
 use crate::kernel::{vm, Vm};
 use crate::kernel::{active_vcpu_id, vcpu_run};
@@ -299,146 +289,6 @@ pub fn vmm_init_image(vm: Vm) -> bool {
     true
 }
 
-fn vmm_init_emulated_device(vm: Vm) -> bool {
-    for (idx, emu_dev) in vm.config().emulated_device_list().iter().enumerate() {
-        match emu_dev.emu_type {
-            EmuDeviceTGicd => {
-                vm.set_intc_dev_id(idx);
-                emu_register_dev(
-                    EmuDeviceTGicd,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    emu_intc_handler,
-                );
-                emu_intc_init(vm.clone(), idx);
-            }
-            EmuDeviceTGPPT => {
-                vm.set_intc_dev_id(idx);
-                emu_register_dev(
-                    EmuDeviceTGPPT,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    partial_passthrough_intc_handler,
-                );
-                partial_passthrough_intc_init(vm.clone());
-            }
-            EmuDeviceTVirtioBlk => {
-                emu_register_dev(
-                    EmuDeviceTVirtioBlk,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    emu_virtio_mmio_handler,
-                );
-                if !emu_virtio_mmio_init(vm.clone(), idx, emu_dev.mediated) {
-                    return false;
-                }
-            }
-            EmuDeviceTVirtioNet => {
-                emu_register_dev(
-                    EmuDeviceTVirtioNet,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    emu_virtio_mmio_handler,
-                );
-                if !emu_virtio_mmio_init(vm.clone(), idx, emu_dev.mediated) {
-                    return false;
-                }
-                let mut vm_if_list = VM_IF_LIST[vm.id()].lock();
-                for i in 0..6 {
-                    vm_if_list.mac[i] = emu_dev.cfg_list[i] as u8;
-                }
-                drop(vm_if_list);
-            }
-            EmuDeviceTVirtioConsole => {
-                emu_register_dev(
-                    EmuDeviceTVirtioConsole,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    emu_virtio_mmio_handler,
-                );
-                if !emu_virtio_mmio_init(vm.clone(), idx, emu_dev.mediated) {
-                    return false;
-                }
-            }
-            EmuDeviceTIOMMU => {
-                emu_register_dev(
-                    EmuDeviceTIOMMU,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    emu_smmu_handler,
-                );
-                if !iommmu_vm_init(vm.clone()) {
-                    return false;
-                }
-            }
-            EmuDeviceTShyper => {
-                if !shyper_init(vm.clone(), emu_dev.base_ipa, emu_dev.length) {
-                    return false;
-                }
-            }
-            #[cfg(feature = "gicv3")]
-            EmuDeviceTICCSRE => {
-                emu_register_reg(EmuRegType::SysReg, emu_dev.base_ipa, vgic_icc_sre_handler);
-            }
-            #[cfg(feature = "gicv3")]
-            EmuDeviceTSGIR => {
-                emu_register_reg(EmuRegType::SysReg, emu_dev.base_ipa, vgic_icc_sgir_handler);
-            }
-            #[cfg(feature = "gicv3")]
-            EmuDeviceTGICR => {
-                emu_register_dev(
-                    EmuDeviceTGICR,
-                    vm.id(),
-                    idx,
-                    emu_dev.base_ipa,
-                    emu_dev.length,
-                    emul_vgicr_handler,
-                );
-                emu_vgicr_init(vm.clone(), idx);
-            }
-            EmuDeviceTMeta => {
-                if meta::register(idx, &vm, emu_dev).is_ok() {
-                    emu_register_dev(
-                        EmuDeviceTMeta,
-                        vm.id(),
-                        idx,
-                        emu_dev.base_ipa,
-                        emu_dev.length,
-                        meta::emu_meta_handler,
-                    );
-                } else {
-                    return false;
-                }
-            }
-            _ => {
-                warn!("vmm_init_emulated_device: unknown emulated device");
-                return false;
-            }
-        }
-        info!(
-            "VM {} registers emulated device: id=<{}>, name=\"{}\", ipa=<0x{:x}>",
-            vm.id(),
-            idx,
-            emu_dev.emu_type,
-            emu_dev.base_ipa
-        );
-    }
-
-    true
-}
-
 fn vmm_init_passthrough_device(vm: Vm) -> bool {
     for region in vm.config().passthrough_device_regions() {
         // TODO: specify the region property more accurately.
@@ -600,10 +450,6 @@ pub fn vmm_setup_config(vm_id: usize) {
 
     if !vmm_init_image(vm.clone()) {
         panic!("vmm_setup_config: vmm_init_image failed");
-    }
-
-    if !vmm_init_emulated_device(vm.clone()) {
-        panic!("vmm_setup_config: vmm_init_emulated_device failed");
     }
     if !vmm_init_passthrough_device(vm.clone()) {
         panic!("vmm_setup_config: vmm_init_passthrough_device failed");

@@ -52,6 +52,8 @@ pub fn vmm_remove_vm(vm_id: usize) {
     vmm_remove_passthrough_device(vm.clone());
     // clear async task list
     remove_vm_async_task(vm_id);
+    // virtio nic
+    crate::device::remove_virtio_nic(vm_id);
     // async used info
     remove_async_used_info(vm_id);
     // remove vm: page table / mmio / vgic will be removed with struct vm

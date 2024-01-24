@@ -8,30 +8,29 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Display, Formatter};
+use core::ops::Range;
 use core::ptr;
 
 use spin::Mutex;
 use spin::RwLock;
 
-use crate::arch::Vgic;
-use crate::device::VirtioMmio;
 use crate::kernel::current_cpu;
+use crate::utils::downcast::DowncastSync;
 use crate::utils::in_range;
+
+pub trait EmuDev: DowncastSync {
+    /// emulated device type
+    fn emu_type(&self) -> EmuDeviceType;
+    /// emulated device address range
+    fn address_range(&self) -> Range<usize>;
+    /// emulated device handler
+    fn handler(&self, emu_ctx: &EmuContext) -> bool;
+}
 
 pub static EMU_DEVS_LIST: Mutex<Vec<EmuDevEntry>> = Mutex::new(Vec::new());
 
-/// Enumeration representing various emulator devices.
-#[derive(Clone)]
-pub enum EmuDevs {
-    Vgic(Arc<Vgic>),
-    VirtioBlk(VirtioMmio),
-    VirtioNet(VirtioMmio),
-    VirtioConsole(VirtioMmio),
-    None,
-}
 #[derive(Debug, Clone, Copy)]
 pub struct EmuContext {
     pub address: usize,
