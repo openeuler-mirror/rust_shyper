@@ -21,6 +21,9 @@ use smccc::{self, Smc};
 
 use super::smc::smc_call;
 
+// RKNPU requires this feature to be reported by the PSCI_FEATURES call.
+const SMCCC_VERSION: usize = 0x80000000;
+
 pub const PSCI_VERSION: usize = 0x84000000;
 pub const PSCI_CPU_SUSPEND_32: usize = 0x84000001;
 pub const PSCI_CPU_SUSPEND_64: usize = 0xC4000001;
@@ -199,7 +202,7 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
             result.0
         }
         PSCI_FEATURES => match x1 {
-            PSCI_VERSION | PSCI_CPU_ON_64 | PSCI_FEATURES => PSCI_E_SUCCESS,
+            PSCI_VERSION | PSCI_CPU_ON_64 | PSCI_FEATURES | SMCCC_VERSION => PSCI_E_SUCCESS,
             _ => PSCI_E_NOT_SUPPORTED,
         },
         PSCI_CPU_FREEZE => match smccc::psci::cpu_freeze::<Smc>() {
