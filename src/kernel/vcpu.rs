@@ -14,6 +14,8 @@ use core::mem::size_of;
 use spin::Mutex;
 
 use crate::arch::{ContextFrame, ContextFrameTrait, GicContext, VmContext, timer_arch_get_counter};
+use crate::arch::cache::cache_invalidate_d;
+use crate::arch::tlb::tlb_invalidate_guest_all;
 use crate::board::PlatOperation;
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
@@ -355,14 +357,14 @@ pub fn vcpu_run(announce: bool) -> ! {
 
         vcpu.context_vm_restore();
         if announce {
-            crate::device::virtio_net_announce(vm);
+            crate::device::virtio_net_announce(vm.clone());
         }
-        // tlb_invalidate_guest_all();
-        // for i in 0..vm.mem_region_num() {
-        //     unsafe {
-        //         cache_invalidate_d(vm.pa_start(i), vm.pa_length(i));
-        //     }
-        // }
+        tlb_invalidate_guest_all();
+        for i in 0..vm.mem_region_num() {
+            unsafe {
+                cache_invalidate_d(vm.pa_start(i), vm.pa_length(i));
+            }
+        }
     }
     extern "C" {
         fn context_vm_entry(ctx: usize) -> !;

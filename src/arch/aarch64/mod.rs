@@ -33,7 +33,7 @@ pub use self::regs::*;
 
 #[macro_use]
 mod regs;
-mod cache;
+pub mod cache;
 mod context_frame;
 mod cpu;
 mod exception;
@@ -51,7 +51,7 @@ mod smmu;
 mod start;
 mod sync;
 mod timer;
-mod tlb;
+pub mod tlb;
 mod vcpu;
 #[cfg(not(feature = "gicv3"))]
 mod vgic;
