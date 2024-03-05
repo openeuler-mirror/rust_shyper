@@ -182,20 +182,25 @@ pub fn mvm_config_init() {
     let mut pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig::default();
     let mut pt = crate::utils::interval::IntervalExcluder::new();
 
-    // all, exclude gic
-    pt.add_range(0xfb000000, 0xfe600000);
+    // all peripherals
+    pt.add_range(0xfb000000, 0x1_0000_0000);
 
     // exclude ethernet@0xfe1c0000 for 'noeth'
     #[cfg(feature = "rk3588-noeth")]
     pt.exclude_len(0xfe1c0000, 0x10000);
+
+    // interrupt-controller (without msi-controller)
+    pt.exclude_len(0xfe600000, 0x10000);
+    pt.exclude_len(0xfe680000, 0x100000);
+
+    // serial1 to serial9
+    pt.exclude_range(0xfeb40000, 0xfebc0000);
 
     pt_dev_config.regions = pt.into_iter().map(|t| {
         PassthroughRegion { ipa: t.left, pa: t.left, length: t.len(), dev_property: true }
     }).collect();
 
     pt_dev_config.regions.extend(&[
-        PassthroughRegion { ipa: 0xfe680000 + 0x100000, pa: 0xfe680000 + 0x100000, length: 0xfeb40000 - (0xfe680000 + 0x100000), dev_property: true },
-        PassthroughRegion { ipa: 0xfebc0000, pa: 0xfebc0000, length: 0x0001_0000_0000 - 0xfebc0000, dev_property: true },
         // serial@feb5000——ttyFIQ
         PassthroughRegion { ipa: 0xfeb50000, pa: 0xfeb50000, length: 0x100, dev_property: true },
         // serial@feba000——ttyS7
@@ -209,9 +214,6 @@ pub fn mvm_config_init() {
         // device for PCI bus to be mapped in.
         PassthroughRegion { ipa: 0xf4000000, pa: 0xf4000000, length: 0x1000000, dev_property: true },
         PassthroughRegion { ipa: 0xf3000000, pa: 0xf3000000, length: 0x1000000, dev_property: true },
-        // device for its
-        PassthroughRegion { ipa: 0xfe640000, pa: 0xfe640000, length: 0x20000, dev_property: true },
-        PassthroughRegion { ipa: 0xfe660000, pa: 0xfe660000, length: 0x20000, dev_property: true },
     ]);
 
     pt_dev_config.irqs = vec![
