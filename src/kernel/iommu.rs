@@ -25,7 +25,7 @@ pub fn iommu_init() {
 }
 
 /// init iommu for vm
-pub fn iommmu_vm_init(vm: Vm) -> bool {
+pub fn iommmu_vm_init(vm: &Vm) -> bool {
     if cfg!(feature = "tx2") {
         smmu_vm_init(vm)
     } else {
@@ -35,7 +35,7 @@ pub fn iommmu_vm_init(vm: Vm) -> bool {
 }
 
 /// add device to iommu
-pub fn iommu_add_device(vm: Vm, stream_id: usize) -> bool {
+pub fn iommu_add_device(vm: &Vm, stream_id: usize) -> bool {
     if cfg!(feature = "tx2") {
         smmu_add_device(vm.iommu_ctx_id(), stream_id)
     } else {

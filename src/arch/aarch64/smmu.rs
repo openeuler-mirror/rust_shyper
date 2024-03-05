@@ -574,7 +574,7 @@ pub fn smmu_init() {
     SMMU_V2.call_once(|| Mutex::new(SmmuV2::new()));
 }
 
-pub fn smmu_vm_init(vm: Vm) -> bool {
+pub fn smmu_vm_init(vm: &Vm) -> bool {
     let mut smmu_v2 = SMMU_V2.get().unwrap().lock();
     match smmu_v2.alloc_ctxbnk() {
         Some(context_id) => {

@@ -162,17 +162,17 @@ impl VirtioBlkReq {
     }
 
     /// Sets the start address of the block request region.
-    pub fn set_start(&self, start: usize) {
+    pub fn set_start(&mut self, start: usize) {
         self.region.start = start;
     }
 
     /// Sets the size of the block request region.
-    pub fn set_size(&self, size: usize) {
+    pub fn set_size(&mut self, size: usize) {
         self.region.size = size;
     }
 
     /// Sets whether the request is mediated.
-    pub fn set_mediated(&self, mediated: bool) {
+    pub fn set_mediated(&mut self, mediated: bool) {
         self.mediated = mediated;
     }
 
@@ -400,7 +400,6 @@ pub fn virtio_blk_notify_handler(vq: Arc<Virtq>, blk: Arc<VirtioMmio>, vm: Arc<V
 
     let avail_idx = vq.avail_idx();
 
-    // let begin = time_current_us();
     if vq.ready() == 0 {
         error!("blk virt_queue is not ready!");
         return false;
@@ -524,13 +523,5 @@ pub fn virtio_blk_notify_handler(vq: Arc<Virtq>, blk: Arc<VirtioMmio>, vm: Arc<V
         blk.notify();
     }
 
-    // if req.mediated() {
-    // finish_task(true);
-    //     finish_async_task(true);
-    //     async_task_exe();
-    // }
-
-    // let end = time_current_us();
-    // println!("init time {}us, while handle desc ring time {}us, finish task {}us", time0 - begin, time1 - time0, end - time1);
     true
 }

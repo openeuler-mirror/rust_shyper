@@ -169,7 +169,7 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
 
 /// Creates the Device Tree Blob (DTB) for the secondary VM (vm1) based on the provided configuration.
 // create vm1 fdt demo
-pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
+pub fn create_fdt(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     let mut fdt = FdtWriter::new()?;
 
     let root_node = fdt.begin_node("root")?;
@@ -193,7 +193,7 @@ pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     }
     // todo: fix create_chosen_node size
     create_chosen_node(&mut fdt, &config.cmdline, config.ramdisk_load_ipa(), CPIO_RAMDISK.len())?;
-    create_cpu_node(&mut fdt, config.clone())?;
+    create_cpu_node(&mut fdt, config)?;
     if !config.dtb_device_list().is_empty() {
         create_serial_node(&mut fdt, config.dtb_device_list())?;
     }
@@ -300,7 +300,7 @@ fn create_timer_node(fdt: &mut FdtWriter, trigger_lvl: u32) -> FdtWriterResult<(
 }
 
 /// Creates the CPU node in the Device Tree for the VM based on the provided configuration.
-fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResult<()> {
+fn create_cpu_node(fdt: &mut FdtWriter, config: &VmConfigEntry) -> FdtWriterResult<()> {
     let cpus = fdt.begin_node("cpus")?;
     fdt.property_u32("#size-cells", 0)?;
     fdt.property_u32("#address-cells", 0x2)?;

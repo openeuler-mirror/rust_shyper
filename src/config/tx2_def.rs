@@ -223,10 +223,6 @@ pub fn mvm_config_init() {
             length: 0x60000000,
         }
     ];
-    // vm_region.push(VmRegion {
-    //     ipa_start: 0xf0200000,
-    //     length: 0xc0000000,
-    // });
 
     // vm0 config
     let mvm_config_entry = VmConfigEntry {

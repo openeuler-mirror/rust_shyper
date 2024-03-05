@@ -13,7 +13,7 @@ use crate::arch::traits::InterruptController;
 use crate::board::PLAT_DESC;
 use crate::device::{VirtioMmio, Virtq};
 use crate::kernel::{CPU_IF_LIST, current_cpu, interrupt_cpu_ipi_send};
-use crate::vmm::VmmEvent;
+use crate::vmm::{VmmEvent, VmmPercoreEvent};
 
 use super::Vm;
 
@@ -81,12 +81,11 @@ pub struct IpiVmmMsg {
     pub event: VmmEvent,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 /// VCPU Message Struct transfered by IPI
-pub struct IpiVcpuMsg {
-    pub vmid: usize,
-    pub vcpuid: usize,
-    pub event: VmmEvent,
+pub struct IpiVmmPercoreMsg {
+    pub vm: Arc<Vm>,
+    pub event: VmmPercoreEvent,
 }
 
 // only support for mediated blk
@@ -123,7 +122,7 @@ pub struct IpiIntInjectMsg {
 declare_enum_with_handler! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     #[repr(usize)]
-    pub enum IpiType [pub IPI_HANDLER_LIST => IpiHandlerFunc] {
+    pub enum IpiType [pub IPI_HANDLER_LIST => fn(IpiMessage)] {
         IpiTIntc => crate::arch::vgic_ipi_handler,
         IpiTPower => crate::arch::psci_ipi_handler,
         IpiTEthernetMsg => crate::device::ethernet_ipi_rev_handler,
@@ -141,7 +140,7 @@ pub enum IpiInnerMsg {
     Power(IpiPowerMessage),
     EnternetMsg(IpiEthernetMsg),
     VmmMsg(IpiVmmMsg),
-    VcpuMsg(IpiVcpuMsg),
+    VmmPercoreMsg(IpiVmmPercoreMsg),
     MediatedMsg(IpiMediatedMsg),
     MediatedNotifyMsg(IpiMediatedNotifyMsg),
     HvcMsg(IpiHvcMsg),
@@ -158,20 +157,6 @@ pub struct IpiMessage {
 
 const IPI_HANDLER_MAX: usize = 16;
 
-pub type IpiHandlerFunc = fn(&IpiMessage);
-
-/// IPI Handler Struct
-pub struct IpiHandler {
-    pub handler: IpiHandlerFunc,
-    pub ipi_type: IpiType,
-}
-
-impl IpiHandler {
-    fn new(handler: IpiHandlerFunc, ipi_type: IpiType) -> IpiHandler {
-        IpiHandler { handler, ipi_type }
-    }
-}
-
 /// ipi handler entry, scanning the received ipi list and call the coresponding handler
 pub fn ipi_irq_handler() {
     // println!("ipi handler");
@@ -185,7 +170,7 @@ pub fn ipi_irq_handler() {
         let ipi_type = ipi_msg.ipi_type as usize;
 
         if let Some(handler) = IPI_HANDLER_LIST.get(ipi_type) {
-            handler(&ipi_msg);
+            handler(ipi_msg);
         } else {
             error!("illegal ipi type {}", ipi_type)
         }
@@ -215,7 +200,7 @@ pub fn ipi_send_msg(target_id: usize, ipi_type: IpiType, ipi_message: IpiInnerMs
     ipi_send(target_id, msg)
 }
 
-pub fn ipi_intra_broadcast_msg(vm: Vm, ipi_type: IpiType, msg: IpiInnerMsg) -> bool {
+pub fn ipi_intra_broadcast_msg(vm: &Vm, ipi_type: IpiType, msg: IpiInnerMsg) -> bool {
     let mut i = 0;
     let mut n = 0;
     while n < (vm.cpu_num() - 1) {

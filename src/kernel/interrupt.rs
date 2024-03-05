@@ -56,7 +56,7 @@ pub fn interrupt_init() {
 }
 
 /// register a new interrupt for specific vm
-pub fn interrupt_vm_register(vm: Vm, id: usize) -> bool {
+pub fn interrupt_vm_register(vm: &Vm, id: usize) -> bool {
     // println!("VM {} register interrupt {}", vm.id(), id);
     let mut glb_bitmap_lock = INTERRUPT_GLB_BITMAP.lock();
     if glb_bitmap_lock.get(id) != 0 && id >= IntCtrl::PRI_NUN_MAX {
@@ -64,14 +64,13 @@ pub fn interrupt_vm_register(vm: Vm, id: usize) -> bool {
         return false;
     }
 
-    IntCtrl::vm_register(vm.clone(), id);
-    vm.set_int_bit_map(id);
+    IntCtrl::vm_register(vm, id);
     glb_bitmap_lock.set(id);
     true
 }
 
 /// remove interrupt for specific vm
-pub fn interrupt_vm_remove(_vm: Vm, id: usize) {
+pub fn interrupt_vm_remove(_vm: &Vm, id: usize) {
     let mut glb_bitmap_lock = INTERRUPT_GLB_BITMAP.lock();
     // vgic and vm will be removed with struct vm
     glb_bitmap_lock.clear(id);
@@ -81,7 +80,7 @@ pub fn interrupt_vm_remove(_vm: Vm, id: usize) {
     }
 }
 
-pub fn interrupt_vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize) {
+pub fn interrupt_vm_inject(vm: &Vm, vcpu: &Vcpu, int_id: usize) {
     if vcpu.phys_id() != current_cpu().id {
         error!(
             "interrupt_vm_inject: Core {} failed to find target (VCPU {} VM {})",
@@ -108,7 +107,7 @@ pub fn interrupt_handler(int_id: usize) -> bool {
         if let Some(vcpu) = &current_cpu().active_vcpu {
             if let Some(active_vm) = vcpu.vm() {
                 if active_vm.has_interrupt(int_id) {
-                    interrupt_vm_inject(active_vm, vcpu.clone(), int_id);
+                    interrupt_vm_inject(&active_vm, vcpu, int_id);
                     return false;
                 } else {
                     return true;
@@ -126,7 +125,7 @@ pub fn interrupt_handler(int_id: usize) -> bool {
                     return true;
                 }
 
-                interrupt_vm_inject(vm, vcpu.clone(), int_id);
+                interrupt_vm_inject(&vm, vcpu, int_id);
                 return false;
             }
         }
@@ -141,8 +140,8 @@ pub fn interrupt_handler(int_id: usize) -> bool {
 }
 
 /// ipi interrupt handler entry
-pub fn interrupt_inject_ipi_handler(msg: &IpiMessage) {
-    match &msg.ipi_message {
+pub fn interrupt_inject_ipi_handler(msg: IpiMessage) {
+    match msg.ipi_message {
         IpiInnerMsg::IntInjectMsg(int_msg) => {
             let vm_id = int_msg.vm_id;
             let int_id = int_msg.int_id;
@@ -151,7 +150,7 @@ pub fn interrupt_inject_ipi_handler(msg: &IpiMessage) {
                     panic!("inject int {} to illegal cpu {}", int_id, current_cpu().id);
                 }
                 Some(vcpu) => {
-                    interrupt_vm_inject(vcpu.vm().unwrap(), vcpu, int_id);
+                    interrupt_vm_inject(&vcpu.vm().unwrap(), vcpu, int_id);
                 }
             }
         }

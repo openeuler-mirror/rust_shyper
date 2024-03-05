@@ -13,12 +13,10 @@ use core::fmt::{Display, Formatter};
 use core::ops::Range;
 use core::ptr;
 
-use spin::Mutex;
 use spin::RwLock;
 
-use crate::kernel::current_cpu;
+use crate::kernel::{active_vm, current_cpu};
 use crate::utils::downcast::DowncastSync;
-use crate::utils::in_range;
 
 pub trait EmuDev: DowncastSync {
     /// emulated device type
@@ -28,8 +26,6 @@ pub trait EmuDev: DowncastSync {
     /// emulated device handler
     fn handler(&self, emu_ctx: &EmuContext) -> bool;
 }
-
-pub static EMU_DEVS_LIST: Mutex<Vec<EmuDevEntry>> = Mutex::new(Vec::new());
 
 #[derive(Debug, Clone, Copy)]
 pub struct EmuContext {
@@ -98,8 +94,6 @@ pub enum EmuDeviceType {
     EmuDeviceTShyper = 6,
     EmuDeviceTVirtioBlkMediated = 7,
     EmuDeviceTIOMMU = 8,
-    EmuDeviceTICCSRE = 9,
-    EmuDeviceTSGIR = 10,
     EmuDeviceTGICR = 11,
     EmuDeviceTMeta = 12,
 }
@@ -117,8 +111,6 @@ impl Display for EmuDeviceType {
             EmuDeviceType::EmuDeviceTShyper => write!(f, "device shyper"),
             EmuDeviceType::EmuDeviceTVirtioBlkMediated => write!(f, "medaited virtio block"),
             EmuDeviceType::EmuDeviceTIOMMU => write!(f, "IOMMU"),
-            EmuDeviceType::EmuDeviceTICCSRE => write!(f, "interrupt ICC SRE"),
-            EmuDeviceType::EmuDeviceTSGIR => write!(f, "interrupt ICC SGIR"),
             EmuDeviceType::EmuDeviceTGICR => write!(f, "interrupt controller gicr"),
             EmuDeviceType::EmuDeviceTMeta => write!(f, "meta device"),
         }
@@ -132,8 +124,6 @@ impl EmuDeviceType {
         matches!(
             *self,
             EmuDeviceType::EmuDeviceTGicd
-                | EmuDeviceType::EmuDeviceTSGIR
-                | EmuDeviceType::EmuDeviceTICCSRE
                 | EmuDeviceType::EmuDeviceTGPPT
                 | EmuDeviceType::EmuDeviceTVirtioBlk
                 | EmuDeviceType::EmuDeviceTVirtioNet
@@ -155,8 +145,6 @@ impl EmuDeviceType {
             6 => EmuDeviceType::EmuDeviceTShyper,
             7 => EmuDeviceType::EmuDeviceTVirtioBlkMediated,
             8 => EmuDeviceType::EmuDeviceTIOMMU,
-            9 => EmuDeviceType::EmuDeviceTICCSRE,
-            10 => EmuDeviceType::EmuDeviceTSGIR,
             11 => EmuDeviceType::EmuDeviceTGICR,
             12 => EmuDeviceType::EmuDeviceTMeta,
             _ => panic!("Unknown  EmuDeviceType value: {}", value),
@@ -170,71 +158,17 @@ pub type EmuDevHandler = fn(usize, &EmuContext) -> bool;
 // TO CHECK
 pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
     let ipa = emu_ctx.address;
-    let emu_devs_list = EMU_DEVS_LIST.lock();
 
-    for emu_dev in &*emu_devs_list {
-        let active_vcpu = current_cpu().active_vcpu.clone().unwrap();
-        if active_vcpu.vm_id() == emu_dev.vm_id && in_range(ipa, emu_dev.ipa, emu_dev.size - 1) {
-            // if current_cpu().id == 1 {
-            //     println!("emu dev {:#?} handler", emu_dev.emu_type);
-            // }
-            let handler = emu_dev.handler;
-            let id = emu_dev.id;
-            drop(emu_devs_list);
-            return handler(id, emu_ctx);
-        }
+    if let Some(emu_dev) = active_vm().unwrap().find_emu_dev(ipa) {
+        return emu_dev.handler(emu_ctx);
     }
+
     error!(
         "emu_handler: no emul handler for Core {} data abort ipa 0x{:x}",
         current_cpu().id,
         ipa
     );
     false
-}
-
-/// Function to register an emulator device.
-pub fn emu_register_dev(
-    emu_type: EmuDeviceType,
-    vm_id: usize,
-    dev_id: usize,
-    address: usize,
-    size: usize,
-    handler: EmuDevHandler,
-) {
-    let mut emu_devs_list = EMU_DEVS_LIST.lock();
-
-    for emu_dev in &*emu_devs_list {
-        if vm_id != emu_dev.vm_id {
-            continue;
-        }
-        if in_range(address, emu_dev.ipa, emu_dev.size - 1) || in_range(emu_dev.ipa, address, size - 1) {
-            panic!("emu_register_dev: duplicated emul address region: prev address 0x{:x} size 0x{:x}, next address 0x{:x} size 0x{:x}", emu_dev.ipa, emu_dev.size, address, size);
-        }
-    }
-
-    emu_devs_list.push(EmuDevEntry {
-        emu_type,
-        vm_id,
-        id: dev_id,
-        ipa: address,
-        size,
-        handler,
-    });
-}
-
-/// Function to remove an emulator device.
-pub fn emu_remove_dev(vm_id: usize, dev_id: usize, address: usize, size: usize) {
-    let mut emu_devs_list = EMU_DEVS_LIST.lock();
-    for (idx, emu_dev) in emu_devs_list.iter().enumerate() {
-        if vm_id == emu_dev.vm_id && emu_dev.ipa == address && emu_dev.id == dev_id && emu_dev.size == size {
-            emu_devs_list.remove(idx);
-            return;
-        }
-    }
-    panic!(
-        "emu_remove_dev: emu dev not exist address 0x{:x} size 0x{:x}",
-        address, size
-    );
 }
 
 /// Static RwLock containing a vector of EmuRegEntry instances, representing emulator registers.

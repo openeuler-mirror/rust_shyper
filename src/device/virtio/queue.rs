@@ -236,12 +236,12 @@ impl Virtq {
     }
 
     /// Displays information about the descriptors in the VirtIO queue.
-    pub fn show_desc_info(&self, size: usize, vm: Vm) {
+    pub fn show_desc_info(&self, size: usize, vm: Arc<Vm>) {
         let inner = self.inner.lock();
         let desc = inner.desc_table.as_ref().unwrap();
         info!("[*desc_ring*]");
         for i in 0..size {
-            let desc_addr = vm_ipa2pa(vm.clone(), desc[i].addr);
+            let desc_addr = vm_ipa2pa(&vm, desc[i].addr);
             info!(
                 "index {}   desc_addr_ipa 0x{:x}   desc_addr_pa 0x{:x}   len 0x{:x}   flags {}  next {}",
                 i, desc[i].addr, desc_addr, desc[i].len, desc[i].flags, desc[i].next

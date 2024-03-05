@@ -151,9 +151,6 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
                 BlockDescriptor::invalid()
             }
         }
-        // for i in PLATFORM_PHYSICAL_LIMIT_GB..ENTRY_PER_PAGE {
-        //     pt.entry[i] = BlockDescriptor::invalid();
-        // }
 
         lvl1_pt.entry[0] = BlockDescriptor::table(lvl2_base);
         // 0x200000 ~ 2MB
@@ -273,10 +270,6 @@ pub extern "C" fn mmu_init(pt: &PageTables) {
             + TCR_EL2::IRGN0::WriteBack_ReadAlloc_WriteAlloc_Cacheable
             + TCR_EL2::T0SZ.val(64 - 39),
     );
-
-    // barrier::isb(barrier::SY);
-    // SCTLR_EL2.modify(SCTLR_EL2::M::Enable + SCTLR_EL2::C::Cacheable + SCTLR_EL2::I::Cacheable);
-    // barrier::isb(barrier::SY);
 }
 
 const PAR_EL1_OFF: usize = 12;

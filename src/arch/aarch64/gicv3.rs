@@ -26,7 +26,7 @@ use crate::arch::{
     ICH_AP0R1_EL2, ICH_AP0R0_EL2, ICH_AP1R0_EL2, ICH_AP1R1_EL2, ICH_AP1R2_EL2, ICC_PMR_EL1, ICC_BPR1_EL1, ICC_CTLR_EL1,
     ICH_ELRSR_EL2, ICC_IGRPEN1_EL1, ICC_DIR_EL1, ICC_EOIR1_EL1, ICH_LR0_EL2, ICH_LR1_EL2, ICH_LR2_EL2, ICH_LR3_EL2,
     ICH_LR4_EL2, ICH_LR5_EL2, ICH_LR6_EL2, ICH_LR7_EL2, ICH_LR8_EL2, ICH_LR9_EL2, ICH_LR10_EL2, ICH_LR11_EL2,
-    ICH_LR12_EL2, ICH_LR13_EL2, ICH_LR14_EL2, ICH_LR15_EL2, ICH_EISR_EL2, ICH_MISR_EL2,
+    ICH_LR12_EL2, ICH_LR13_EL2, ICH_LR14_EL2, ICH_LR15_EL2, ICH_EISR_EL2, ICH_MISR_EL2, sysreg_enc_addr,
 };
 use crate::board::{Platform, PlatOperation};
 use crate::utils::bit_extract;
@@ -149,6 +149,10 @@ pub const GICD_TYPER_CPUNUM_LEN: usize = 3;
 pub const GICD_TYPER_CPUNUM_MSK: usize = ((1 << GICD_TYPER_CPUNUM_LEN) - 1) << (GICD_TYPER_CPUNUM_OFF);
 const GICD_TYPER_ITLINESNUM_LEN: usize = 0b11111;
 pub const ICC_CTLR_EOIMODE_BIT: usize = 0x1 << 1;
+
+//sysreg
+pub const ICC_SRE_ADDR: usize = sysreg_enc_addr(3, 0, 12, 12, 5);
+pub const ICC_SGIR_ADDR: usize = sysreg_enc_addr(3, 0, 12, 11, 5);
 
 pub static GIC_LRS_NUM: AtomicUsize = AtomicUsize::new(0);
 

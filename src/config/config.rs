@@ -193,13 +193,6 @@ impl VmCpuConfig {
     }
 }
 
-/// Structure representing address regions.
-#[derive(Clone, Copy)]
-pub struct AddrRegions {
-    pub ipa: usize,
-    pub length: usize,
-}
-
 /// Configuration for VmDtbDev (Device Tree Device in Virtual Machine).
 #[derive(Clone)]
 pub struct VmDtbDevConfig {
@@ -575,7 +568,7 @@ pub fn vm_cfg_remove_vm_entry(vm_id: usize) {
 
 /// Generates a new VM Config Entry and sets basic values.
 pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
-    let config_pa = vm_ipa2pa(active_vm().unwrap(), config_ipa);
+    let config_pa = vm_ipa2pa(&active_vm().unwrap(), config_ipa);
     // SAFETY: config_pa is from user space, it is checked by shyper.ko firstly.
     // And in the function, vm_ipa2pa, it is checked whether the config_pa is in the memory region of the VM.
     let [vm_name_ipa, _vm_name_length, vm_type, cmdline_ipa, _cmdline_length, kernel_load_ipa, device_tree_load_ipa, ramdisk_load_ipa] =
@@ -583,7 +576,7 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
     info!("\n\nStart to prepare configuration for new VM");
 
     // Copy VM name from user ipa.
-    let vm_name_pa = vm_ipa2pa(active_vm().unwrap(), vm_name_ipa);
+    let vm_name_pa = vm_ipa2pa(&active_vm().unwrap(), vm_name_ipa);
     if vm_name_pa == 0 {
         error!("illegal vm_name_ipa {:x}", vm_name_ipa);
         return Err(());
@@ -594,7 +587,7 @@ pub fn vm_cfg_add_vm(config_ipa: usize) -> Result<usize, ()> {
         .to_string();
 
     // Copy VM cmdline from user ipa.
-    let cmdline_pa = vm_ipa2pa(active_vm().unwrap(), cmdline_ipa);
+    let cmdline_pa = vm_ipa2pa(&active_vm().unwrap(), cmdline_ipa);
     if cmdline_pa == 0 {
         error!("illegal cmdline_ipa {:x}", cmdline_ipa);
         return Err(());
@@ -670,7 +663,7 @@ pub fn vm_cfg_add_emu_dev(
         let emu_cfg_list = vm_cfg.emulated_device_list();
 
         // Copy emu device name from user ipa.
-        let name_pa = vm_ipa2pa(active_vm().unwrap(), name_ipa);
+        let name_pa = vm_ipa2pa(&active_vm().unwrap(), name_ipa);
         if name_pa == 0 {
             error!("illegal emulated device name_ipa {:x}", name_ipa);
             return Err(());
@@ -681,7 +674,7 @@ pub fn vm_cfg_add_emu_dev(
             .to_string_lossy()
             .to_string();
         // Copy emu device cfg list from user ipa.
-        let cfg_list_pa = vm_ipa2pa(active_vm().unwrap(), cfg_list_ipa);
+        let cfg_list_pa = vm_ipa2pa(&active_vm().unwrap(), cfg_list_ipa);
         if cfg_list_pa == 0 {
             error!("illegal emulated device cfg_list_ipa {:x}", cfg_list_ipa);
             return Err(());
@@ -779,7 +772,7 @@ pub fn vm_cfg_add_passthrough_device_irqs(vmid: usize, irqs_base_ipa: usize, irq
     );
 
     // Copy passthrough device irqs from user ipa.
-    let irqs_base_pa = vm_ipa2pa(active_vm().unwrap(), irqs_base_ipa);
+    let irqs_base_pa = vm_ipa2pa(&active_vm().unwrap(), irqs_base_ipa);
     if irqs_base_pa == 0 {
         error!("illegal irqs_base_ipa {:x}", irqs_base_ipa);
         return Err(());
@@ -817,7 +810,7 @@ pub fn vm_cfg_add_passthrough_device_streams_ids(
     );
 
     // Copy passthrough device streams ids from user ipa.
-    let streams_ids_base_pa = vm_ipa2pa(active_vm().unwrap(), streams_ids_base_ipa);
+    let streams_ids_base_pa = vm_ipa2pa(&active_vm().unwrap(), streams_ids_base_ipa);
     if streams_ids_base_pa == 0 {
         error!("illegal streams_ids_base_ipa {:x}", streams_ids_base_ipa);
         return Err(());
@@ -859,7 +852,7 @@ pub fn vm_cfg_add_dtb_dev(
     );
 
     // Copy DTB device name from user ipa.
-    let name_pa = vm_ipa2pa(active_vm().unwrap(), name_ipa);
+    let name_pa = vm_ipa2pa(&active_vm().unwrap(), name_ipa);
     if name_pa == 0 {
         error!("illegal dtb_dev name ipa {:x}", name_ipa);
         return Err(());
@@ -871,7 +864,7 @@ pub fn vm_cfg_add_dtb_dev(
     debug!("      get dtb dev name {:?}", dtb_dev_name_str);
 
     // Copy DTB device irq list from user ipa.
-    let irq_list_pa = vm_ipa2pa(active_vm().unwrap(), irq_list_ipa);
+    let irq_list_pa = vm_ipa2pa(&active_vm().unwrap(), irq_list_ipa);
     if irq_list_pa == 0 {
         error!("illegal dtb_dev irq list ipa {:x}", irq_list_ipa);
         return Err(());
@@ -916,7 +909,7 @@ pub fn vm_cfg_add_dtb_dev(
 
 /// Final step for GVM configuration.
 /// Set up GVM configuration and VM kernel image load region.
-fn vm_cfg_finish_configuration(vmid: usize, _img_size: usize) -> Vm {
+fn vm_cfg_finish_configuration(vmid: usize, _img_size: usize) -> alloc::sync::Arc<Vm> {
     // Set up GVM configuration.
     vmm_init_gvm(vmid);
 
@@ -962,16 +955,17 @@ pub fn vm_cfg_upload_kernel_image(
     // TODO: In the Hypervisor, we shouldn't use the cache_pa directly.
     // Instead, we should translate the IPA to the HVA and use the HVA to access the PA.
     // But currently, we don't have the HVA in the Hypervisor.
-    let cache_pa = vm_ipa2pa(active_vm().unwrap(), cache_ipa);
+    let cache_pa = vm_ipa2pa(&active_vm().unwrap(), cache_ipa);
+    let dest_pa = vm.ipa2pa(config.kernel_load_ipa() + load_offset);
+
     if cache_pa == 0 {
         error!("illegal cache ipa {:x}", cache_ipa);
         return Err(());
     }
     // SAFETY: We have checked the cache_pa is in the memory region of the VM by vm_ipa2pa.
-    let src = unsafe { core::slice::from_raw_parts_mut((cache_pa) as *mut u8, load_size) };
+    let src = unsafe { core::slice::from_raw_parts_mut(cache_pa as *mut u8, load_size) };
 
-    let dst =
-        unsafe { core::slice::from_raw_parts_mut((config.kernel_load_ipa() + load_offset) as *mut u8, load_size) };
+    let dst = unsafe { core::slice::from_raw_parts_mut(dest_pa as *mut u8, load_size) };
     dst.copy_from_slice(src);
     Ok(0)
 }
@@ -989,7 +983,7 @@ pub fn vm_cfg_upload_device_tree(
         vmid, cache_ipa, load_offset, load_size,
     );
 
-    let cache_pa = vm_ipa2pa(active_vm().unwrap(), cache_ipa);
+    let cache_pa = vm_ipa2pa(&active_vm().unwrap(), cache_ipa);
     if cache_pa == 0 {
         error!("illegal cache ipa {:x}", cache_ipa);
         return Err(());

@@ -106,6 +106,7 @@ impl VirtMmioRegs {
     }
 }
 
+/// Represents a Virtio MMIO device const value part which will be unmuttable after initialaztion.
 struct VirtioInnerConst {
     base: usize,
     length: usize,
@@ -149,7 +150,7 @@ impl VirtioMmio {
         inner.regs.q_num_max = q_num_max;
     }
 
-    fn virtio_queue_init(&self, weak: &Weak<VirtioMmio>, dev_type: VirtioDeviceType) {
+    fn virtio_queue_init(&mut self, weak: &Weak<VirtioMmio>, dev_type: VirtioDeviceType) {
         match dev_type {
             VirtioDeviceType::Block => {
                 self.set_q_num_max(VIRTQUEUE_BLK_MAX_SIZE as u32);
@@ -158,6 +159,7 @@ impl VirtioMmio {
                 } else {
                     Virtq::new(0, weak.clone(), virtio_blk_notify_handler)
                 };
+                self.inner_const.vq.push(queue);
             }
             VirtioDeviceType::Net => {
                 self.set_q_num_max(VIRTQUEUE_NET_MAX_SIZE as u32);
@@ -197,7 +199,7 @@ impl VirtioMmio {
         let target_vcpu = vm.vcpu(0).unwrap();
         use crate::kernel::interrupt_vm_inject;
         if target_vcpu.phys_id() == current_cpu().id {
-            interrupt_vm_inject(vm, target_vcpu, int_id);
+            interrupt_vm_inject(&vm, target_vcpu, int_id);
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(
@@ -220,7 +222,7 @@ impl VirtioMmio {
         let target_vcpu = vm.vcpu(0).unwrap();
         use crate::kernel::interrupt_vm_inject;
         if target_vcpu.phys_id() == current_cpu().id {
-            interrupt_vm_inject(vm.clone(), target_vcpu, int_id);
+            interrupt_vm_inject(&vm, target_vcpu, int_id);
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(
@@ -551,7 +553,7 @@ fn virtio_mmio_queue_access(mmio: &VirtioMmio, emu_ctx: &EmuContext, offset: usi
             VIRTIO_MMIO_QUEUE_DESC_HIGH => match mmio.vq(q_sel) {
                 Ok(virtq) => {
                     virtq.or_desc_table_addr(value << 32);
-                    let desc_table_addr = vm_ipa2pa(active_vm().unwrap(), virtq.desc_table_addr());
+                    let desc_table_addr = vm_ipa2pa(&active_vm().unwrap(), virtq.desc_table_addr());
                     if desc_table_addr == 0 {
                         error!("virtio_mmio_queue_access: invalid desc_table_addr");
                         return;
@@ -584,7 +586,7 @@ fn virtio_mmio_queue_access(mmio: &VirtioMmio, emu_ctx: &EmuContext, offset: usi
             VIRTIO_MMIO_QUEUE_AVAIL_HIGH => match mmio.vq(q_sel) {
                 Ok(virtq) => {
                     virtq.or_avail_addr(value << 32);
-                    let avail_addr = vm_ipa2pa(active_vm().unwrap(), virtq.avail_addr());
+                    let avail_addr = vm_ipa2pa(&active_vm().unwrap(), virtq.avail_addr());
                     if avail_addr == 0 {
                         error!("virtio_mmio_queue_access: invalid avail_addr");
                         return;
@@ -617,7 +619,7 @@ fn virtio_mmio_queue_access(mmio: &VirtioMmio, emu_ctx: &EmuContext, offset: usi
             VIRTIO_MMIO_QUEUE_USED_HIGH => match mmio.vq(q_sel) {
                 Ok(virtq) => {
                     virtq.or_used_addr(value << 32);
-                    let used_addr = vm_ipa2pa(active_vm().unwrap(), virtq.used_addr());
+                    let used_addr = vm_ipa2pa(&active_vm().unwrap(), virtq.used_addr());
                     if used_addr == 0 {
                         error!("virtio_mmio_queue_access: invalid used_addr");
                         return;
@@ -679,7 +681,7 @@ pub fn emu_virtio_mmio_init(vm: Weak<Vm>, emu_cfg: &VmEmulatedDeviceConfig) -> R
     let virt_dev_type = match emu_cfg.emu_type {
         EmuDeviceType::EmuDeviceTVirtioBlk => VirtioDeviceType::Block,
         EmuDeviceType::EmuDeviceTVirtioNet => VirtioDeviceType::Net,
-        EmuDeviceType::EmuDeviceTConsole => VirtioDeviceType::Console,
+        EmuDeviceType::EmuDeviceTVirtioConsole => VirtioDeviceType::Console,
         _ => {
             error!("emu_virtio_mmio_init: unknown emulated device type");
             return Err(());

@@ -203,13 +203,6 @@ impl Cpu {
     pub fn schedule_to(&mut self, next_vcpu: Vcpu) {
         if let Some(prev_vcpu) = &self.active_vcpu {
             if prev_vcpu.vm_id() != next_vcpu.vm_id() {
-                // println!(
-                //     "next vm{} vcpu {}, prev vm{} vcpu {}",
-                //     next_vcpu.vm_id(),
-                //     next_vcpu.id(),
-                //     prev_vcpu.vm_id(),
-                //     prev_vcpu.id()
-                // );
                 prev_vcpu.set_state(VcpuState::Ready);
                 prev_vcpu.context_vm_store();
             }
@@ -221,7 +214,6 @@ impl Cpu {
         next_vcpu.context_vm_restore();
         // restore vm's Stage2 MMU context
         let vttbr = (next_vcpu.vm_id() << 48) | next_vcpu.vm_pt_dir();
-        // println!("vttbr {:#x}", vttbr);
         // TODO: replace the arch related expr
         // SAFETY: 'vttbr' is saved in the vcpu struct when last scheduled
         unsafe {
@@ -265,8 +257,8 @@ pub fn active_vm_id() -> usize {
     vm.id()
 }
 
-pub fn active_vm() -> Option<Vm> {
-    match current_cpu().active_vcpu.clone() {
+pub fn active_vm() -> Option<alloc::sync::Arc<Vm>> {
+    match current_cpu().active_vcpu.as_ref() {
         None => None,
         Some(active_vcpu) => active_vcpu.vm(),
     }

@@ -431,23 +431,27 @@ pub fn hvc_send_msg_to_vm(vm_id: usize, guest_msg: &HvcGuestMsg) -> bool {
         }
     };
 
-    let cpu_trgt = vm_if_get_cpu_id(vm_id).unwrap();
-    if cpu_trgt != current_cpu().id {
-        let ipi_msg = IpiHvcMsg {
-            src_vmid: 0,
-            trgt_vmid: vm_id,
-            fid,
-            event,
-        };
-        if !ipi_send_msg(cpu_trgt, IpiType::IpiTHvc, IpiInnerMsg::HvcMsg(ipi_msg)) {
-            error!(
-                "hvc_send_msg_to_vm: Failed to send ipi message, target {} type {:#?}",
-                cpu_trgt,
-                IpiType::IpiTHvc
-            );
+    if let Some(cpu_trgt) = vm_if_get_cpu_id(vm_id) {
+        if cpu_trgt != current_cpu().id {
+            let ipi_msg = IpiHvcMsg {
+                src_vmid: 0,
+                trgt_vmid: vm_id,
+                fid,
+                event,
+            };
+            if !ipi_send_msg(cpu_trgt, IpiType::IpiTHvc, IpiInnerMsg::HvcMsg(ipi_msg)) {
+                error!(
+                    "hvc_send_msg_to_vm: Failed to send ipi message, target {} type {:#?}",
+                    cpu_trgt,
+                    IpiType::IpiTHvc
+                );
+            }
+        } else {
+            hvc_guest_notify(vm_id);
         }
     } else {
-        hvc_guest_notify(vm_id);
+        error!("hvc_send_msg_to_vm: Failed to get cpu id of VM {}", vm_id);
+        return false;
     }
 
     true
@@ -466,13 +470,13 @@ pub fn hvc_guest_notify(vm_id: usize) {
         }
         Some(vcpu) => {
             // println!("hvc_guest_notify here");
-            interrupt_vm_inject(vm, vcpu, HVC_IRQ);
+            interrupt_vm_inject(&vm, vcpu, HVC_IRQ);
         }
     };
 }
 
-pub fn hvc_ipi_handler(msg: &IpiMessage) {
-    match &msg.ipi_message {
+pub fn hvc_ipi_handler(msg: IpiMessage) {
+    match msg.ipi_message {
         IpiInnerMsg::HvcMsg(msg) => {
             if current_cpu().vcpu_array.pop_vcpu_through_vmid(msg.trgt_vmid).is_none() {
                 error!(

@@ -55,6 +55,6 @@ pub trait InterruptController {
     fn clear();
     fn finish(int_id: usize);
     fn ipi_send(cpu_id: usize, ipi_id: usize);
-    fn vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize);
-    fn vm_register(vm: Vm, int_id: usize);
+    fn vm_inject(vm: &Vm, vcpu: &Vcpu, int_id: usize);
+    fn vm_register(vm: &Vm, int_id: usize);
 }

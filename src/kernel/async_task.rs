@@ -23,7 +23,7 @@ use crate::device::{
     BlkIov, mediated_blk_read, mediated_blk_write, virtio_blk_notify_handler, VIRTIO_BLK_T_IN, VIRTIO_BLK_T_OUT,
     VirtioMmio, Virtq,
 };
-use crate::kernel::{active_vm_id, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiType, vm};
+use crate::kernel::{active_vm_id, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiType};
 use crate::utils::{memcpy, sleep, trace};
 
 #[derive(Clone, Copy, Debug)]
@@ -447,14 +447,12 @@ pub fn finish_async_task(ipi: bool) {
                 }
             }
 
-            update_used_info(args.vq.clone(), task.src_vmid);
-            let src_vm = vm(task.src_vmid).unwrap();
+            update_used_info(args.vq, task.src_vmid);
             args.dev.notify();
         }
         AsyncTaskData::AsyncIpiTask(_) => {}
         AsyncTaskData::AsyncNoneTask(args) => {
-            update_used_info(args.vq.clone(), task.src_vmid);
-            let src_vm = vm(task.src_vmid).unwrap();
+            update_used_info(args.vq, task.src_vmid);
             args.dev.notify();
         }
     }
@@ -475,16 +473,12 @@ pub fn push_used_info(desc_chain_head_idx: u32, used_len: u32, src_vmid: usize) 
     }
 }
 
-fn update_used_info(vq: Virtq, src_vmid: usize) {
+fn update_used_info(vq: Arc<Virtq>, src_vmid: usize) {
     let mut used_info_list = ASYNC_USED_INFO_LIST.lock();
     match used_info_list.get_mut(&src_vmid) {
         Some(info_list) => {
-            // for info in info_list.iter() {
-            // vq.update_used_ring(info.used_len, info.desc_chain_head_idx, vq_size);
             let info = info_list.pop_front().unwrap();
             vq.update_used_ring(info.used_len, info.desc_chain_head_idx);
-            // }
-            // info_list.clear();
         }
         None => {
             error!("async_push_used_info: src_vmid {} not existed", src_vmid);

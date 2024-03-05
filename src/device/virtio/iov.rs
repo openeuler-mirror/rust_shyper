@@ -31,13 +31,8 @@ impl VirtioIov {
         VirtioIov { vector: Vec::new() }
     }
 
-    /// Clears the I/O vector by removing all data.
-    pub fn clear(&self) {
-        self.vector.clear();
-    }
-
     /// Adds a data segment to the I/O vector.
-    pub fn push_data(&self, buf: usize, len: usize) {
+    pub fn push_data(&mut self, buf: usize, len: usize) {
         self.vector.push(VirtioIovData { buf, len });
     }
 
@@ -73,7 +68,7 @@ impl VirtioIov {
     }
 
     /// Copies data from the specified buffer to the I/O vector.
-    pub fn from_buf(&self, addr: usize, len: usize) {
+    pub fn from_buf(&mut self, addr: usize, len: usize) {
         let mut size = len;
         for iov_data in &self.vector {
             let offset = len - size;
@@ -200,7 +195,7 @@ impl VirtioIov {
 
 /// Represents a data segment in the Virtio I/O vector.
 #[derive(Debug)]
-struct VirtioIovData {
+pub struct VirtioIovData {
     buf: usize,
     len: usize,
 }

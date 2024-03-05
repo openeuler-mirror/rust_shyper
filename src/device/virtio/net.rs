@@ -9,14 +9,14 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use core::mem::size_of;
 use spin::Mutex;
 
-use crate::config::{vm_num, vm_type};
 use crate::device::{DevDesc, VirtioMmio, Virtq, VIRTQ_DESC_F_NEXT, VIRTQ_DESC_F_WRITE};
 use crate::device::VirtioIov;
-use crate::kernel::{active_vm, active_vm_id, current_cpu, vm_if_cmp_mac, vm_if_get_cpu_id, vm_ipa2pa, VM_LIST};
+use crate::kernel::{current_cpu, vm_if_get_cpu_id};
 use crate::kernel::{ipi_send_msg, IpiEthernetMsg, IpiInnerMsg, IpiType};
 use crate::kernel::IpiMessage;
 use crate::kernel::Vm;
@@ -188,17 +188,14 @@ pub fn virtio_net_handle_ctrl(vq: Arc<Virtq>, nic: Arc<VirtioMmio>, vm: Arc<Vm>)
         return false;
     }
 
-    let out_iov = VirtioIov::default();
-    let in_iov = VirtioIov::default();
-    let mut next_desc_idx_opt = vq.pop_avail_desc_idx(vq.avail_idx());
-    while next_desc_idx_opt.is_some() {
-        let mut idx = next_desc_idx_opt.unwrap() as usize;
+    while let Some(next_desc_idx) = vq.pop_avail_desc_idx(vq.avail_idx()) {
+        let mut idx = next_desc_idx as usize;
         let mut len = 0;
-        out_iov.clear();
-        in_iov.clear();
+        let mut out_iov = VirtioIov::default();
+        let mut in_iov = VirtioIov::default();
 
         loop {
-            let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
+            let addr = vm.ipa2pa(vq.desc_addr(idx));
             if addr == 0 {
                 error!("virtio_net_handle_ctrl: failed to desc addr");
                 return false;
@@ -239,10 +236,9 @@ pub fn virtio_net_handle_ctrl(vq: Arc<Virtq>, nic: Arc<VirtioMmio>, vm: Arc<Vm>)
         }
 
         // update ctrl queue used ring
-        if !vq.update_used_ring(len as u32, next_desc_idx_opt.unwrap() as u32) {
+        if !vq.update_used_ring(len as u32, next_desc_idx as u32) {
             return false;
         }
-        next_desc_idx_opt = vq.pop_avail_desc_idx(vq.avail_idx());
     }
     nic.notify();
     true
@@ -260,18 +256,15 @@ pub fn virtio_net_notify_handler(vq: Arc<Virtq>, nic: Arc<VirtioMmio>, vm: Arc<V
         return true;
     }
 
-    let tx_iov = VirtioIov::default();
-    let mut vms_to_notify = 0;
+    let mut nics_to_notify = vec![];
 
-    let mut next_desc_idx_opt = vq.pop_avail_desc_idx(vq.avail_idx());
-
-    while next_desc_idx_opt.is_some() {
-        let mut idx = next_desc_idx_opt.unwrap() as usize;
+    while let Some(head_idx) = vq.pop_avail_desc_idx(vq.avail_idx()) {
+        let mut idx = head_idx as usize;
         let mut len = 0;
-        tx_iov.clear();
+        let mut tx_iov = VirtioIov::default();
 
         loop {
-            let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
+            let addr = vm.ipa2pa(vq.desc_addr(idx));
             if addr == 0 {
                 error!("virtio_net_notify_handler: failed to desc addr");
                 return false;
@@ -285,19 +278,13 @@ pub fn virtio_net_notify_handler(vq: Arc<Virtq>, nic: Arc<VirtioMmio>, vm: Arc<V
             idx = vq.desc_next(idx) as usize;
         }
 
-        let trgt_vmid_map = ethernet_transmit(tx_iov, len).1;
-        if trgt_vmid_map != 0 {
-            vms_to_notify |= trgt_vmid_map;
+        if let Some(list) = ethernet_transmit(tx_iov, len, &vm) {
+            nics_to_notify.extend(list);
         }
 
-        if !vq.update_used_ring(
-            (len - size_of::<VirtioNetHdr>()) as u32,
-            next_desc_idx_opt.unwrap() as u32,
-        ) {
+        if !vq.update_used_ring((len - size_of::<VirtioNetHdr>()) as u32, head_idx as u32) {
             return false;
         }
-
-        next_desc_idx_opt = vq.pop_avail_desc_idx(vq.avail_idx());
     }
 
     if !vq.avail_is_avail() {
@@ -306,54 +293,46 @@ pub fn virtio_net_notify_handler(vq: Arc<Virtq>, nic: Arc<VirtioMmio>, vm: Arc<V
     }
 
     nic.notify();
-    let mut trgt_vmid = 0;
-    while vms_to_notify > 0 {
-        if vms_to_notify & 1 != 0 {
-            let vm = match crate::kernel::vm(trgt_vmid) {
-                None => {
+    for nic in nics_to_notify {
+        let trgt_vm = nic.upper_vm().unwrap();
+        let vcpu = trgt_vm.vcpu(0).unwrap();
+        // When the target VM is not running on the current CPU, send an IPI message to the target CPU.
+        if vcpu.phys_id() == current_cpu().id {
+            let rx_vq = match nic.vq(0) {
+                Ok(x) => x,
+                Err(_) => {
                     error!(
-                        "virtio_net_notify_handler: target vm [{}] is not ready or not exist",
-                        trgt_vmid
+                        "virtio_net_notify_handler: vm[{}] failed to get virtio net rx virt queue",
+                        vm.id()
                     );
-                    return true;
+                    return false;
                 }
-                Some(_vm) => _vm,
             };
-            let vcpu = vm.vcpu(0).unwrap();
-            if vcpu.phys_id() == current_cpu().id {
-                let rx_vq = match nic.vq(0) {
-                    Ok(x) => x,
-                    Err(_) => {
-                        error!(
-                            "virtio_net_notify_handler: vm[{}] failed to get virtio net rx virt queue",
-                            vm.id()
-                        );
-                        return false;
-                    }
-                };
-                if rx_vq.ready() != 0 && rx_vq.avail_flags() == 0 {
-                    nic.notify();
-                }
-            } else {
-                let msg = IpiEthernetMsg { trgt_nic: nic };
-                let cpu_trgt = vm_if_get_cpu_id(trgt_vmid).unwrap();
-                if !ipi_send_msg(cpu_trgt, IpiType::IpiTEthernetMsg, IpiInnerMsg::EnternetMsg(msg)) {
-                    error!(
-                        "virtio_net_notify_handler: failed to send ipi message, target {}",
-                        cpu_trgt
-                    );
-                }
+            if rx_vq.ready() != 0 && rx_vq.avail_flags() == 0 {
+                nic.notify();
             }
+        } else if let Some(cpu_trgt) = vm_if_get_cpu_id(trgt_vm.id()) {
+            let msg = IpiEthernetMsg { trgt_nic: nic };
+            if !ipi_send_msg(cpu_trgt, IpiType::IpiTEthernetMsg, IpiInnerMsg::EnternetMsg(msg)) {
+                error!(
+                    "virtio_net_notify_handler: failed to send IPI message to CPU {}",
+                    cpu_trgt
+                );
+                return false;
+            }
+        } else {
+            error!(
+                "virtio_net_notify_handler: failed to get cpu id for vm {}",
+                trgt_vm.id()
+            );
+            return false;
         }
-
-        trgt_vmid += 1;
-        vms_to_notify >>= 1;
     }
     true
 }
 
 /// Handles the IPI (Inter-Processor Interrupt) message related to Ethernet.
-pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
+pub fn ethernet_ipi_rev_handler(msg: IpiMessage) {
     match msg.ipi_message {
         IpiInnerMsg::EnternetMsg(ethernet_msg) => {
             let nic = ethernet_msg.trgt_nic;
@@ -382,7 +361,7 @@ pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
 /// Transmits Ethernet frames using VirtioNet.
 /// Returns a tuple with the first element indicating success (`true` if successful) and the second element
 /// representing the target virtual machine's bitmask.
-fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
+fn ethernet_transmit(tx_iov: VirtioIov, len: usize, vm: &Vm) -> Option<Vec<Arc<VirtioMmio>>> {
     // [ destination MAC - 6 ][ source MAC - 6 ][ EtherType - 2 ][ Payload ]
     if len < size_of::<VirtioNetHdr>() || len - size_of::<VirtioNetHdr>() < 6 + 6 + 2 {
         warn!(
@@ -390,61 +369,53 @@ fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
             len,
             size_of::<VirtioNetHdr>()
         );
-        return (false, 0);
+        return None;
     }
 
     let frame: &[u8] = tx_iov.get_ptr(size_of::<VirtioNetHdr>());
-    // need to check mac
-    // vm_if_list_cmp_mac(active_vm_id(), frame + 6);
 
-    if frame[0] == 0xff
-        && frame[1] == 0xff
-        && frame[2] == 0xff
-        && frame[3] == 0xff
-        && frame[4] == 0xff
-        && frame[5] == 0xff
-    {
-        if !ethernet_is_arp(frame) {
-            return (false, 0);
+    if frame[0..6] == [0xff, 0xff, 0xff, 0xff, 0xff, 0xff] {
+        if ethernet_is_arp(frame) {
+            return ethernet_broadcast(&tx_iov, len, vm);
         }
-        return ethernet_broadcast(&tx_iov, len);
+        return None;
     }
 
     if frame[0] == 0x33 && frame[1] == 0x33 {
         if !(frame[12] == 0x86 && frame[13] == 0xdd) {
             // Only IPV6 multicast packet is allowed to be broadcast
-            return (false, 0);
+            return None;
         }
-        return ethernet_broadcast(&tx_iov, len);
+        return ethernet_broadcast(&tx_iov, len, vm);
     }
 
     match ethernet_mac_to_vm_id(frame) {
-        Ok(vm_id) => {
+        Ok(nic) => {
             let vm = nic.upper_vm().unwrap();
-            (ethernet_send_to(&vm, &nic, &tx_iov, len), 1 << vm_id)
+            if ethernet_send_to(&vm, &nic, &tx_iov, len) {
+                Some(vec![nic])
+            } else {
+                None
+            }
         }
-        Err(_) => (false, 0),
+        Err(_) => None,
     }
 }
 
 /// Broadcasts an Ethernet frame to all virtual machines, excluding the current one.
-fn ethernet_broadcast(tx_iov: &VirtioIov, len: usize) -> (bool, usize) {
-    let vm_num = vm_num();
-    let cur_vm_id = active_vm_id();
-    let mut trgt_vmid_map = 0;
-    for vm_id in 0..vm_num {
-        if vm_id == cur_vm_id {
-            continue;
+fn ethernet_broadcast(tx_iov: &VirtioIov, len: usize, cur_vm: &Vm) -> Option<Vec<Arc<VirtioMmio>>> {
+    let mut nic_list = vec![];
+    super::mac::virtio_nic_list_walker(|nic| {
+        let vm = nic.upper_vm().unwrap();
+        if vm.id() != cur_vm.id() && ethernet_send_to(&vm, nic, tx_iov, len) {
+            nic_list.push(nic.clone());
         }
-        if vm_type(vm_id) as usize != 0 {
-            continue;
-        }
-        if !ethernet_send_to(vm_id, tx_iov.clone(), len) {
-            continue;
-        }
-        trgt_vmid_map |= 1 << vm_id;
+    });
+    if nic_list.is_empty() {
+        None
+    } else {
+        Some(nic_list)
     }
-    (trgt_vmid_map != 0, trgt_vmid_map)
 }
 
 /// Sends an Ethernet frame to the specified virtual machine (`vmid`).
@@ -474,7 +445,7 @@ fn ethernet_send_to(vm: &Vm, nic: &VirtioMmio, tx_iov: &VirtioIov, len: usize) -
 
     let desc_idx_header = desc_header_idx_opt.unwrap();
     let mut desc_idx = desc_header_idx_opt.unwrap() as usize;
-    let rx_iov = VirtioIov::default();
+    let mut rx_iov = VirtioIov::default();
     let mut rx_len = 0;
 
     loop {
@@ -538,14 +509,9 @@ fn ethernet_is_arp(frame: &[u8]) -> bool {
 }
 
 /// Maps the MAC address in the Ethernet frame to the corresponding virtual machine ID.
-fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
-    for vm in VM_LIST.lock().iter() {
-        let vm_id = vm.id();
-        if vm_if_cmp_mac(vm_id, frame) {
-            return Ok(vm_id);
-        }
-    }
-    Err(())
+fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<Arc<VirtioMmio>, ()> {
+    let frame_mac = &frame[0..6];
+    super::mac::mac_to_nic(frame_mac).ok_or(())
 }
 
 /// Handles the VirtioNet announcement in a virtual machine (`vm`).

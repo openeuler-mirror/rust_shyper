@@ -32,8 +32,11 @@ impl VcpuArray {
     }
 
     #[inline]
-    pub fn pop_vcpu_through_vmid(&self, vm_id: usize) -> Option<Vcpu> {
-        self.array[vm_id].clone()
+    pub fn pop_vcpu_through_vmid(&self, vm_id: usize) -> Option<&Vcpu> {
+        match self.array.get(vm_id) {
+            Some(vcpu) => vcpu.as_ref(),
+            None => None,
+        }
     }
 
     #[inline]
@@ -44,24 +47,17 @@ impl VcpuArray {
     pub fn append_vcpu(&mut self, vcpu: Vcpu) {
         // There is only 1 VCPU from a VM in a PCPU
         let vm_id = vcpu.vm_id();
-
-        info!(
-            "append_vcpu: append VM[{}] vcpu {} on core {}",
-            vm_id,
-            vcpu.id(),
-            current_cpu().id
-        );
-
-        if vm_id >= self.array.len() {
-            panic!("vm_id > self.array.len()");
+        match self.array.get_mut(vm_id) {
+            Some(x) => match x {
+                Some(_) => error!("self.array[{vm_id}] is not None"),
+                None => {
+                    debug_assert_eq!(current_cpu().id, vcpu.phys_id());
+                    *x = Some(vcpu);
+                    self.len += 1;
+                }
+            },
+            None => error!("vm_id > self.array.len()"),
         }
-        if self.array[vm_id].is_some() {
-            panic!("self.array[vm_id].is_some()");
-        }
-        vcpu.set_phys_id(current_cpu().id);
-
-        self.array[vm_id] = Some(vcpu);
-        self.len += 1;
     }
 
     pub fn remove_vcpu(&mut self, vm_id: usize) -> Option<Vcpu> {
@@ -126,7 +122,7 @@ pub fn restore_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
 }
 
 /// save gic context for current vcpu
-pub fn save_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
+pub fn save_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: &Vcpu) {
     match cur_vcpu {
         None => {
             trgt_vcpu.gic_save_context();

@@ -8,15 +8,14 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::mem::size_of;
 use spin::Mutex;
 
 use crate::arch::{ContextFrame, ContextFrameTrait, GicContext, VmContext, timer_arch_get_counter};
-use crate::arch::cache::cache_invalidate_d;
-use crate::arch::tlb::tlb_invalidate_guest_all;
 use crate::board::PlatOperation;
+use crate::config::VmConfigEntry;
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
 use crate::utils::memcpy;
@@ -33,8 +32,9 @@ pub enum VcpuState {
 }
 
 struct VcpuInnerConst {
-    id: usize,
-    vm: Option<Vm>,
+    id: usize,      // vcpu id
+    vm: Weak<Vm>,   // weak ref to related vm
+    phys_id: usize, // binding physical CPU's id
 }
 
 pub struct VcpuInner {
@@ -48,20 +48,43 @@ pub struct Vcpu {
     pub inner: Arc<VcpuInner>,
 }
 
+impl PartialEq for Vcpu {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
 impl Vcpu {
-    pub fn new(vm: Vm, vcpu_id: usize) -> Self {
-        let this = Self {
+    pub fn new(vm: Weak<Vm>, vcpu_id: usize, phys_id: usize) -> Self {
+        Self {
             inner: Arc::new(VcpuInner {
                 inner_const: VcpuInnerConst {
                     id: vcpu_id,
-                    vm: Some(vm.clone()),
+                    vm,
+                    phys_id,
                 },
                 inner_mut: Mutex::new(VcpuInnerMut::new()),
             }),
+        }
+    }
+
+    pub fn init(&self, config: &VmConfigEntry) {
+        self.init_boot_info(config);
+        self.init_spsr();
+        self.reset_context();
+    }
+
+    pub fn init_boot_info(&self, config: &VmConfigEntry) {
+        let arg = match config.os_type {
+            VmType::VmTOs => config.device_tree_load_ipa(),
+            _ => {
+                let arg = &config.memory_region()[0];
+                arg.ipa_start + arg.length
+            }
         };
-        crate::arch::vcpu_arch_init(vm, this.clone());
-        this.reset_context();
-        this
+        let mut inner = self.inner.inner_mut.lock();
+        inner.vcpu_ctx.set_argument(arg);
+        inner.vcpu_ctx.set_exception_pc(config.kernel_entry_point());
     }
 
     /// shutdown this vcpu
@@ -145,22 +168,6 @@ impl Vcpu {
         }
     }
 
-    pub fn set_phys_id(&self, phys_id: usize) {
-        let mut inner = self.inner.inner_mut.lock();
-        debug!("set vcpu {} phys id {}", self.id(), phys_id);
-        inner.phys_id = phys_id;
-    }
-
-    pub fn set_gich_ctlr(&self, ctlr: u32) {
-        let mut inner = self.inner.inner_mut.lock();
-        inner.vm_ctx.gic_state.ctlr = ctlr;
-    }
-
-    pub fn set_hcr(&self, hcr: u64) {
-        let mut inner = self.inner.inner_mut.lock();
-        inner.vm_ctx.hcr_el2 = hcr;
-    }
-
     pub fn state(&self) -> VcpuState {
         let inner = self.inner.inner_mut.lock();
         inner.state
@@ -175,13 +182,13 @@ impl Vcpu {
         self.inner.inner_const.id
     }
 
-    pub fn vm(&self) -> Option<Vm> {
-        self.inner.inner_const.vm.clone()
+    pub fn vm(&self) -> Option<Arc<Vm>> {
+        self.inner.inner_const.vm.upgrade()
     }
 
+    #[inline]
     pub fn phys_id(&self) -> usize {
-        let inner = self.inner.inner_mut.lock();
-        inner.phys_id
+        self.inner.inner_const.phys_id
     }
 
     pub fn vm_id(&self) -> usize {
@@ -270,8 +277,7 @@ impl Vcpu {
                 inner.int_list.clear();
                 drop(inner);
                 for int in int_list {
-                    // println!("schedule: inject int {} for vm {}", int, vm.id());
-                    interrupt_vm_inject(vm.clone(), self.clone(), int);
+                    interrupt_vm_inject(&vm, self, int);
                 }
             }
         }
@@ -317,7 +323,6 @@ pub fn run_idle_thread() {
 }
 
 pub struct VcpuInnerMut {
-    pub phys_id: usize,
     pub state: VcpuState,
     pub int_list: Vec<usize>,
     pub vcpu_ctx: ContextFrame,
@@ -328,7 +333,6 @@ pub struct VcpuInnerMut {
 impl VcpuInnerMut {
     fn new() -> VcpuInnerMut {
         VcpuInnerMut {
-            phys_id: 0,
             state: VcpuState::Invalid,
             int_list: vec![],
             vcpu_ctx: ContextFrame::default(),

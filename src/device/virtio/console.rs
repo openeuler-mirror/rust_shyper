@@ -16,7 +16,6 @@ use crate::arch::PAGE_SIZE;
 use crate::device::{VirtioMmio, Virtq};
 use crate::device::DevDesc;
 use crate::device::VirtioIov;
-use crate::kernel::{active_vm, vm_ipa2pa};
 use crate::kernel::vm;
 use crate::kernel::Vm;
 use crate::utils::round_down;
@@ -141,10 +140,10 @@ pub fn virtio_console_notify_handler(vq: Arc<Virtq>, console: Arc<VirtioMmio>, v
     while next_desc_idx_opt.is_some() {
         let mut idx = next_desc_idx_opt.unwrap() as usize;
         let mut len = 0;
-        let tx_iov = VirtioIov::default();
+        let mut tx_iov = VirtioIov::default();
 
         loop {
-            let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
+            let addr = vm.ipa2pa(vq.desc_addr(idx));
             if addr == 0 {
                 error!("virtio_console_notify_handler: failed to desc addr");
                 return false;
@@ -232,10 +231,10 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
 
     let desc_idx_header = desc_header_idx_opt.unwrap();
     let mut desc_idx = desc_header_idx_opt.unwrap() as usize;
-    let rx_iov = VirtioIov::default();
+    let mut rx_iov = VirtioIov::default();
     let mut rx_len = 0;
     loop {
-        let dst = vm_ipa2pa(trgt_vm.clone(), rx_vq.desc_addr(desc_idx));
+        let dst = trgt_vm.ipa2pa(rx_vq.desc_addr(desc_idx));
         if dst == 0 {
             error!(
                 "virtio_console_recv: failed to get dst, desc_idx {}, avail idx {}",

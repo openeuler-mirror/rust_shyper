@@ -66,11 +66,11 @@ impl crate::arch::ContextFrameTrait for Aarch64ContextFrame {
     fn new(pc: usize, sp: usize, arg: usize) -> Self {
         let mut r = Aarch64ContextFrame {
             gpr: [0; 31],
-            spsr: (SPSR_EL1::M::EL1h
-                + SPSR_EL1::I::Masked
-                + SPSR_EL1::F::Masked
-                + SPSR_EL1::A::Masked
-                + SPSR_EL1::D::Masked)
+            spsr: (SPSR_EL2::M::EL1h
+                + SPSR_EL2::I::Masked
+                + SPSR_EL2::F::Masked
+                + SPSR_EL2::A::Masked
+                + SPSR_EL2::D::Masked)
                 .value,
             elr: pc as u64,
             sp: sp as u64,
@@ -112,11 +112,11 @@ impl Aarch64ContextFrame {
     pub fn default() -> Aarch64ContextFrame {
         Aarch64ContextFrame {
             gpr: [0; 31],
-            spsr: (SPSR_EL1::M::EL1h
-                + SPSR_EL1::I::Masked
-                + SPSR_EL1::F::Masked
-                + SPSR_EL1::A::Masked
-                + SPSR_EL1::D::Masked)
+            spsr: (SPSR_EL2::M::EL1h
+                + SPSR_EL2::I::Masked
+                + SPSR_EL2::F::Masked
+                + SPSR_EL2::A::Masked
+                + SPSR_EL2::D::Masked)
                 .value,
             elr: 0,
             sp: 0,
