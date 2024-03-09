@@ -217,11 +217,15 @@ We also built a Unikernel that can run upon Rust-Shyper, called [Unishyper](http
 #### About Us
 
 The developers of Rust-Shyper come from the OS research team of the School of Computer Science and Engineering, Beihang University. If you have any questions, please contact us via e-mail.
-- **Lei Wang**: [Homepage](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn
+- **Lei Wang**: [Homepage](https://scse.buaa.edu.cn/info/1078/8384.htm) wanglei@buaa.edu.cn
 - **Bo Jiang**: [Homepage](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
 - Siran Li: ohmrlsr@buaa.edu.cn
 - Keyang Hu: hky1999@buaa.edu.cn
 - Ce Mo: moce4917@buaa.edu.cn
+- Weiming Chen: cwm0327@buaa.edu.cn
+- Yuyang Cui: cuiyy369@buaa.edu.cn
+- Yukang Wang: wangyukang@buaa.edu.cn
+- Lianjie Wang: akari@buaa.edu.cn
 
 #### Contribution
 

@@ -223,11 +223,15 @@ sudo tools/shyper vm boot <VMID>
 #### 关于我们
 
 Rust-Shyper的开发者来自北京航空航天大学计算机学院操作系统研究团队。如果有什么问题，请您通过电子邮件联系我们。
-- **王雷**：[个人主页](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn
+- **王雷**：[个人主页](https://scse.buaa.edu.cn/info/1078/8384.htm) wanglei@buaa.edu.cn
 - **姜博**：[个人主页](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
 - 李思然：ohmrlsr@buaa.edu.cn
 - 胡柯洋：hky1999@buaa.edu.cn
 - 莫策：moce4917@buaa.edu.cn
+- 陈伟明：cwm0327@buaa.edu.cn
+- 崔宇洋：cuiyy369@buaa.edu.cn
+- 王宇康：wangyukang@buaa.edu.cn
+- 王廉杰：akari@buaa.edu.cn
 
 #### 参与贡献
 
