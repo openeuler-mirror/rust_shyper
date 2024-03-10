@@ -112,4 +112,8 @@ impl InterruptController for IntCtrl {
     fn vm_register(vm: &Vm, int_id: usize) {
         super::vgic_set_hw_int(vm, int_id);
     }
+
+    fn clear_current_irq(for_hypervisor: bool) {
+        gicc_clear_current_irq(for_hypervisor);
+    }
 }

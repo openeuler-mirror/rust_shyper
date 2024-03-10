@@ -11,8 +11,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use crate::arch::traits::InterruptController;
-use crate::arch::{power_arch_vm_shutdown_secondary_cores, IntCtrl};
+use crate::arch::{power_arch_vm_shutdown_secondary_cores, IntCtrl, InterruptController};
 use crate::config::{vm_id_list, vm_num};
 // use crate::config::{init_tmp_config_for_bma1, init_tmp_config_for_bma2, init_tmp_config_for_vm1, init_tmp_config_for_vm2};
 use crate::config::NAME_MAX_LEN;
@@ -118,7 +117,7 @@ pub fn vmm_boot_vm(vm_id: usize) {
                     error!("vmm_boot_vm: failed to get vcpu for vm {}, it is not configured", vm_id);
                 }
                 Some(vcpu) => {
-                    IntCtrl::clear();
+                    IntCtrl::clear_current_irq(true);
                     current_cpu().scheduler().yield_to(vcpu.clone());
                     vmm_boot();
                 }
