@@ -57,4 +57,5 @@ pub trait InterruptController {
     fn ipi_send(cpu_id: usize, ipi_id: usize);
     fn vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize);
     fn vm_register(vm: Vm, int_id: usize);
+    fn clear_current_irq(for_hypervisor: bool);
 }

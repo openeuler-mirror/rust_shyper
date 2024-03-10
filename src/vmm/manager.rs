@@ -234,7 +234,7 @@ pub fn vmm_boot_vm(vm_id: usize) {
             current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
         };
         let vcpu = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).unwrap();
-        IntCtrl::clear();
+        IntCtrl::clear_current_irq(true);
         // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
         current_cpu().scheduler().yield_to(vcpu);
         vmm_boot();
