@@ -6,7 +6,7 @@ A Reliable Embedded Hypervisor Supporting VM Migration and Hypervisor Live-Updat
 
 ## Introduction
 
-**Rust-Shyper** is an embedded type-1 hypervisor built with Rust, which has both high performance and high reliability. Designed for embedded platform, Rust-Shyper provides a small TCB and ensures isolation between different VMs. Furthermore, it can offer differentiated services for VMs such that the real-time performance of critical VMs are guaranteed. We have proposed low overhead VM migration and hypervisor live-update mechanisms to enable Rust-Shyper to tolerate hardware faults at runtime and dynamically fix hypervisor bugs. 
+**Rust-Shyper** is an embedded type-1 hypervisor built with Rust, which has both high performance and high reliability. Designed for embedded platform, Rust-Shyper provides a small TCB and ensures isolation between different VMs. Furthermore, it can offer differentiated services for VMs such that the real-time performance of critical VMs are guaranteed. We have proposed low overhead VM migration and hypervisor live-update mechanisms to enable Rust-Shyper to tolerate hardware faults at runtime and dynamically fix hypervisor bugs.
 
 Rust-Shyper was developed by the OS research team of the School of Computer Science and Engineering(SCSE), Beihang University(BUAA) with a funding of Huawei Technologies Co.,Ltd.
 
@@ -18,6 +18,7 @@ The list of supported (and work in progress) platforms is presented below:
 - [x] NVIDIA Jetson TX2
 - [x] Raspberry Pi 4 Model B
 - [x] QEMU (note that VM migration and Hypervisor Live-update is not supported on QEMU)
+- [x] Firefly ROC-RK3588S-PC (note that VM migration and Hypervisor Live-update is not supported on ROC-RK3588S-PC)
 
 ## How to Build
 
@@ -34,7 +35,7 @@ Simply run `make`
 make <platform>
 ```
 
-For example, `make tx2` is to build Rust-Shyper for TX2. 
+For example, `make tx2` is to build Rust-Shyper for TX2.
 
 Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to your requirements.
 
@@ -42,11 +43,11 @@ Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to
 
 MVM is a privileged VM that can monitor the status of other VMs through privileged interfaces provided by the hypervisor. We implement a dedicated Linux kernel module for MVM. Through this module, MVM can make a hypercall to realize specific functions, such as VM configuration, VM migration and hypervisor live-update. Generally, there is only one MVM, and it will monopolize core 0.
 
-The kernel module on NVIDIA L4T 32.6.1 (for Jestion TX2) as MVM has been tested.
+The kernel module on NVIDIA L4T 32.6.1 (for Jestion TX2), Linux 4.9.140/5.10.160 (for QEMU), Linux 5.10.160 (for Firefly ROC-RK3588S-PC) as MVM has been tested.
 
 ## How to Run Guest VM
 
-When starting Rust-Shyper, the MVM will boot automatically. Logging on to the MVM (a Linux priviledged VM), then can we configure and start the Guest VMs.
+When starting Rust-Shyper, the MVM will boot automatically. Logging on to the MVM (a Linux priviledged VM), take the QEMU configuration as an example, then can we configure and start the Guest VMs.
 
 **Step 1**: Install the kernel module
 
@@ -57,17 +58,14 @@ insmod tools/shyper.ko
 **Step 2**: Start the shyper-cli daemon
 
 ```bash
-# mediated-cfg.json is optional
 sudo tools/shyper system daemon [mediated-cfg.json] &
 ```
 
-mediated-cfg.json is used for guest VM as virtio block. For example:
+mediated-cfg.json is used for guest VM as virtio block. If it is a physical platform, you can connect external disk devices, such as /dev/sda2, /dev/nvme0n1p2. For example:
 
 ```
 {
     "mediated": [
-        "/dev/sda2",
-        "/dev/nvme0n1p2",
         "~/vm0.img"
     ]
 }
@@ -163,7 +161,7 @@ sudo tools/shyper vm config <vm-config.json>
         "passthrough_device_list": [
             {
                 "name": "gicv",
-                "base_pa": "0x3886000",
+                "base_pa": "0x8040000",
                 "base_ipa": "0x8010000",
                 "length": "0x2000",
                 "irq_num": 1,

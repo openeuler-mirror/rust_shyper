@@ -18,6 +18,7 @@ Rust-Shyper是由北航计算机学院操作系统研究团队，在华为技术
 - [x] NVIDIA Jetson TX2
 - [x] Raspberry Pi 4 Model B
 - [x] QEMU (note that VM migration and Hypervisor Live-update is not supported on QEMU)
+- [x] Firefly ROC-RK3588S-PC (note that VM migration and Hypervisor Live-update is not supported on ROC-RK3588S-PC)
 
 ## 如何编译
 
@@ -44,13 +45,13 @@ MVM 是一个可以通过Hypervisor提供的私有特权接口来监控其他虚
 
 通常情况下，MVM仅允许存在一个，且MVM会独占0号核心。
 
-该内核模块在如下系统作为MVM时，经测试可以正常运行：NVIDIA L4T 32.6.1 (for Jestion TX2).
+该内核模块在如下系统作为MVM时，经测试可以正常运行：NVIDIA L4T 32.6.1 (for Jestion TX2), Linux 4.9.140/5.10.160 (for QEMU), Linux 5.10.160 (for Firefly ROC-RK3588S-PC).
 
 ## 如何启动客户虚拟机（Guest VM）
 
 由boot-loader（如u-boot等）加载并启动Rust-Shyper镜像。Rust-Shyper完成初始化后，会自动启动MVM。
 
-登录到MVM中，按照如下步骤，就可以配置并启动客户虚拟机了。
+登录到MVM中，以QEMU为例，按照如下步骤，就可以配置并启动客户虚拟机了。
 
 **Step 1**: 安装内核模块
 
@@ -63,17 +64,14 @@ insmod tools/shyper.ko
 注：shyper-cli是Rust-Shyper配套的一个简单的命令行工具，以二进制的形式提供在tools目录下，其编译的目标平台为aarch64。
 
 ```bash
-# mediated-cfg.json is optional
 sudo tools/shyper system daemon [mediated-cfg.json] &
 ```
 
-mediated-cfg.json用于配置其他guest VM的virtio中介磁盘，示例如下：
+mediated-cfg.json用于配置其他guest VM的virtio中介磁盘（如果是物理平台可以外接磁盘设备，如/dev/sda2、/dev/nvme0n1p2）。示例如下：
 
 ```
 {
     "mediated": [
-        "/dev/sda2",
-        "/dev/nvme0n1p2",
         "~/vm0.img"
     ]
 }
@@ -169,7 +167,7 @@ sudo tools/shyper vm config <vm-config.json>
         "passthrough_device_list": [
             {
                 "name": "gicv",
-                "base_pa": "0x3886000",
+                "base_pa": "0x8040000",
                 "base_ipa": "0x8010000",
                 "length": "0x2000",
                 "irq_num": 1,
@@ -243,4 +241,3 @@ Rust-Shyper的开发者来自北京航空航天大学计算机学院操作系统
 4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
 5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
 6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
-

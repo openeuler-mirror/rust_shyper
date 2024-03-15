@@ -60,6 +60,15 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
+            name: String::from("virtio_console@a002000"),
+            base_ipa: 0xa002000,
+            length: 0x1000,
+            irq_id: 32 + 0x12,
+            cfg_list: vec![1, 0xa002000],
+            emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
+            mediated: false,
+        },
+        VmEmulatedDeviceConfig {
             name: String::from("shyper"),
             base_ipa: 0,
             length: 0,
