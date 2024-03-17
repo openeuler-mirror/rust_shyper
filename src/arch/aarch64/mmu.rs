@@ -71,22 +71,26 @@ register_bitfields! {u64,
     ]
 }
 
+enum MemoryType {
+    Normal,
+    Device,
+}
+
 #[derive(Copy, Clone)]
 #[repr(transparent)]
 struct BlockDescriptor(u64);
 
 impl BlockDescriptor {
-    fn new(output_addr: usize, device: bool) -> BlockDescriptor {
+    fn new(output_addr: usize, mem_type: MemoryType) -> BlockDescriptor {
         BlockDescriptor(
             (PageDescriptorS1::OUTPUT_PPN.val((output_addr >> PAGE_SHIFT) as u64)
                 + PageDescriptorS1::AF::True
                 + PageDescriptorS1::AP::RW_ELx
                 + PageDescriptorS1::TYPE::Block
                 + PageDescriptorS1::VALID::True
-                + if device {
-                    PageDescriptorS1::AttrIndx::Attr0 + PageDescriptorS1::SH::OuterShareable
-                } else {
-                    PageDescriptorS1::AttrIndx::Attr1 + PageDescriptorS1::SH::InnerShareable
+                + match mem_type {
+                    MemoryType::Device => PageDescriptorS1::AttrIndx::Attr0 + PageDescriptorS1::SH::OuterShareable,
+                    MemoryType::Normal => PageDescriptorS1::AttrIndx::Attr1 + PageDescriptorS1::SH::InnerShareable,
                 })
             .value,
         )
@@ -146,7 +150,7 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
             use crate::arch::LVL1_SHIFT;
             let output_addr = i << LVL1_SHIFT;
             lvl1_pt.entry[i] = if output_addr >= PLAT_DESC.mem_desc.base {
-                BlockDescriptor::new(output_addr, false)
+                BlockDescriptor::new(output_addr, MemoryType::Normal)
             } else {
                 BlockDescriptor::invalid()
             }
@@ -159,13 +163,13 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         // EMMC ~ 0x3400000 - 0x3600000 (0x3460000)
         // GIC  ~ 0x3800000 - 0x3a00000 (0x3881000)
         // SMMU ~ 0x12000000 - 0x13000000
-        lvl2_pt.entry[pt_lvl2_idx(0x3000000)] = BlockDescriptor::new(0x3000000, true);
-        lvl2_pt.entry[pt_lvl2_idx(0xc200000)] = BlockDescriptor::new(0xc200000, true);
-        // lvl2_pt.entry[pt_lvl2_idx(0x3400000)] = BlockDescriptor::new(0x3400000, true);
-        lvl2_pt.entry[pt_lvl2_idx(0x3800000)] = BlockDescriptor::new(0x3800000, true);
+        lvl2_pt.entry[pt_lvl2_idx(0x3000000)] = BlockDescriptor::new(0x3000000, MemoryType::Device);
+        lvl2_pt.entry[pt_lvl2_idx(0xc200000)] = BlockDescriptor::new(0xc200000, MemoryType::Device);
+        // lvl2_pt.entry[pt_lvl2_idx(0x3400000)] = BlockDescriptor::new(0x3400000, MemoryType::Device);
+        lvl2_pt.entry[pt_lvl2_idx(0x3800000)] = BlockDescriptor::new(0x3800000, MemoryType::Device);
         for i in 0..(0x100_0000 / 0x200000) {
             let addr = 0x12000000 + i * 0x200000;
-            lvl2_pt.entry[pt_lvl2_idx(addr)] = BlockDescriptor::new(addr, true);
+            lvl2_pt.entry[pt_lvl2_idx(addr)] = BlockDescriptor::new(addr, MemoryType::Device);
         }
     }
     #[cfg(feature = "pi4")]
@@ -176,23 +180,23 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         // crate::driver::putc('e' as u8);
         // println!("pt");
         // 0x0_0000_0000 ~ 0x0_c000_0000 --> normal memory (3GB)
-        lvl1_pt.entry[0] = BlockDescriptor::new(0, false);
-        lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, false);
-        lvl1_pt.entry[2] = BlockDescriptor::new(0x80000000, false);
+        lvl1_pt.entry[0] = BlockDescriptor::new(0, MemoryType::Normal);
+        lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, MemoryType::Normal);
+        lvl1_pt.entry[2] = BlockDescriptor::new(0x80000000, MemoryType::Normal);
         lvl1_pt.entry[3] = BlockDescriptor::table(lvl2_base);
         // 0x0_c000_0000 ~ 0x0_fc00_0000 --> normal memory (960MB)
         for i in 0..480 {
-            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), false);
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), MemoryType::Normal);
         }
         // 0x0_fc00_0000 ~ 0x1_0000_0000 --> device memory (64MB)
         for i in 480..512 {
-            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), true);
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), MemoryType::Device);
         }
         // 0x1_0000_0000 ~ 0x2_0000_0000 --> normal memory (4GB)
-        lvl1_pt.entry[4] = BlockDescriptor::new(0x100000000, false);
-        lvl1_pt.entry[5] = BlockDescriptor::new(0x140000000, false);
-        lvl1_pt.entry[6] = BlockDescriptor::new(0x180000000, false);
-        lvl1_pt.entry[7] = BlockDescriptor::new(0x1c0000000, false);
+        lvl1_pt.entry[4] = BlockDescriptor::new(0x100000000, MemoryType::Normal);
+        lvl1_pt.entry[5] = BlockDescriptor::new(0x140000000, MemoryType::Normal);
+        lvl1_pt.entry[6] = BlockDescriptor::new(0x180000000, MemoryType::Normal);
+        lvl1_pt.entry[7] = BlockDescriptor::new(0x1c0000000, MemoryType::Normal);
         for i in 8..512 {
             lvl1_pt.entry[i] = BlockDescriptor::invalid();
         }
@@ -204,38 +208,42 @@ pub extern "C" fn pt_populate(lvl1_pt: &mut PageTables, lvl2_pt: &mut PageTables
         for index in 0..PLATFORM_PHYSICAL_LIMIT_GB {
             use crate::arch::LVL1_SHIFT;
             let pa = index << LVL1_SHIFT;
-            lvl1_pt.entry[index] = BlockDescriptor::new(pa, pa < PLAT_DESC.mem_desc.base);
+            if pa < PLAT_DESC.mem_desc.base {
+                lvl1_pt.entry[index] = BlockDescriptor::new(pa, MemoryType::Device);
+            } else {
+                lvl1_pt.entry[index] = BlockDescriptor::new(pa, MemoryType::Normal);
+            }
         }
         lvl1_pt.entry[32] = BlockDescriptor::table(lvl2_base);
         for (index, pa) in (0..PLAT_DESC.mem_desc.base).step_by(1 << LVL2_SHIFT).enumerate() {
             if index >= 512 {
                 break;
             }
-            lvl2_pt.entry[index] = BlockDescriptor::new(pa, true);
+            lvl2_pt.entry[index] = BlockDescriptor::new(pa, MemoryType::Device);
         }
     }
     #[cfg(feature = "rk3588")]
     {
         use crate::arch::LVL2_SHIFT;
         // 0x0020_0000 ~ 0xc000_0000 --> normal memory (3GB)
-        lvl1_pt.entry[0] = BlockDescriptor::new(0, false);
-        lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, false);
-        lvl1_pt.entry[2] = BlockDescriptor::new(0x80000000, false);
+        lvl1_pt.entry[0] = BlockDescriptor::new(0, MemoryType::Normal);
+        lvl1_pt.entry[1] = BlockDescriptor::new(0x40000000, MemoryType::Normal);
+        lvl1_pt.entry[2] = BlockDescriptor::new(0x80000000, MemoryType::Normal);
         lvl1_pt.entry[3] = BlockDescriptor::table(lvl2_base);
         // 0xc000_0000 ~ 0xf000_0000 --> normal memory (768MB)
         const DEVICE_BOUND: usize = (0xf000_0000 - 0xc000_0000) / (1 << LVL2_SHIFT);
         for i in 0..DEVICE_BOUND {
-            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), false);
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), MemoryType::Normal);
         }
         // 0x0_f000_0000 ~ 0x1_0000_0000 --> device memory (256MB)
         for i in DEVICE_BOUND..512 {
-            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), true);
+            lvl2_pt.entry[i] = BlockDescriptor::new(0x0c0000000 + (i << LVL2_SHIFT), MemoryType::Device);
         }
         // 0x1_0000_0000 ~ 0x2_0000_0000 --> normal memory (4GB)
-        lvl1_pt.entry[4] = BlockDescriptor::new(0x100000000, false);
-        lvl1_pt.entry[5] = BlockDescriptor::new(0x140000000, false);
-        lvl1_pt.entry[6] = BlockDescriptor::new(0x180000000, false);
-        lvl1_pt.entry[7] = BlockDescriptor::new(0x1c0000000, false);
+        lvl1_pt.entry[4] = BlockDescriptor::new(0x100000000, MemoryType::Normal);
+        lvl1_pt.entry[5] = BlockDescriptor::new(0x140000000, MemoryType::Normal);
+        lvl1_pt.entry[6] = BlockDescriptor::new(0x180000000, MemoryType::Normal);
+        lvl1_pt.entry[7] = BlockDescriptor::new(0x1c0000000, MemoryType::Normal);
         for i in 8..512 {
             lvl1_pt.entry[i] = BlockDescriptor::invalid();
         }
