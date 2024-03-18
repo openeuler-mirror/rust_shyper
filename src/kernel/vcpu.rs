@@ -201,25 +201,7 @@ impl Vcpu {
 
     pub fn reset_context(&self) {
         let mut inner = self.inner.inner_mut.lock();
-        let mut vmpidr = 0;
-        vmpidr |= 1 << 31; //bit[31]:res1
-
-        if self.vm().as_ref().unwrap().config().cpu_num() == 1 {
-            vmpidr |= 1 << 30; //bit[30]: Indicates a Uniprocessor system
-        }
-
-        #[cfg(feature = "tx2")]
-        if self.vm_id() == 0 {
-            // A57 is cluster #1 for L4T
-            vmpidr |= 0x100;
-        }
-
-        vmpidr |= if cfg!(feature = "rk3588") {
-            0x100_0000 | (self.id() << 8)
-        } else {
-            self.id()
-        };
-        inner.vm_ctx.vmpidr_el2 = vmpidr as u64;
+        inner.vm_ctx.vmpidr_el2 = self.get_vmpidr() as u64;
         let vm_id = self.vm().unwrap().id();
         use crate::kernel::vm_if_get_type;
         if vm_if_get_type(vm_id) == VmType::VmTBma {
@@ -284,8 +266,12 @@ impl Vcpu {
     }
 
     pub fn get_vmpidr(&self) -> usize {
-        let inner = self.inner.inner_mut.lock();
-        inner.vm_ctx.vmpidr_el2 as usize
+        1 << 31
+            | if cfg!(feature = "rk3588") {
+                0x100_0000 | (self.id() << 8)
+            } else {
+                self.id()
+            }
     }
 }
 
