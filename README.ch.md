@@ -218,14 +218,20 @@ sudo tools/shyper vm boot <VMID>
 
 了解Rust-Shyper参见以下slides [基于Rust的嵌入式虚拟机监视器及热更新技术](./doc/%E5%9F%BA%E4%BA%8ERust%E7%9A%84%E5%B5%8C%E5%85%A5%E5%BC%8F%E8%99%9A%E6%8B%9F%E6%9C%BA%E7%9B%91%E8%A7%86%E5%99%A8%E5%8F%8A%E7%83%AD%E6%9B%B4%E6%96%B0%E6%8A%80%E6%9C%AF%EF%BC%88%E7%8E%8B%E9%9B%B7%EF%BC%89.pdf)
 
+我们还有一个可以与Rust-Shyper配合使用的Unikernel，叫做[Unishyper](https://gitee.com/unishyper/unishyper)。
+
 #### 关于我们
 
 Rust-Shyper的开发者来自北京航空航天大学计算机学院操作系统研究团队。如果有什么问题，请您通过电子邮件联系我们。
-- 王雷：教授，博士生导师。[个人主页](https://scse.buaa.edu.cn/info/1387/8398.htm) wanglei@buaa.edu.cn
-- 姜博：副教授，博士生导师。[个人主页](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
-- 李思然：硕士研究生 ohmrlsr@buaa.edu.cn
-- 胡柯洋：硕士研究生 hky1999@buaa.edu.cn
-- 莫策：硕士研究生 moce4917@buaa.edu.cn
+- **王雷**：[个人主页](https://scse.buaa.edu.cn/info/1078/8384.htm) wanglei@buaa.edu.cn
+- **姜博**：[个人主页](http://jiangbo.buaa.edu.cn) jiangbo@buaa.edu.cn
+- 李思然：ohmrlsr@buaa.edu.cn
+- 胡柯洋：hky1999@buaa.edu.cn
+- 莫策：moce4917@buaa.edu.cn
+- 陈伟明：cwm0327@buaa.edu.cn
+- 崔宇洋：cuiyy369@buaa.edu.cn
+- 王宇康：wangyukang@buaa.edu.cn
+- 王廉杰：akari@buaa.edu.cn
 
 #### 参与贡献
 
