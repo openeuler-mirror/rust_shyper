@@ -39,6 +39,10 @@ make <platform>
 
 主要注意的是，请在编译前，根据需求编辑管理虚拟机（MVM）的配置文件。该文件的路径是 src/config/\<plat\>_def.rs.
 
+**RK3588的支持**
+
+目前已经支持Firefly ROC-RK3588S-PC平台，并提供了完整的用户使用手册和相应的附件，具体可以参考[Firefly ROC-RK3588S-PC平台的使用](https://bhpan.buaa.edu.cn/link/AA90DE4F5ED6F447E1A9DE59F7B1A8FF72)。
+
 **MVM的需求**
 
 MVM 是一个可以通过Hypervisor提供的私有特权接口来监控其他虚拟机状态的特权虚拟机，通常情况是一个Linux。我们为MVM实现了一个单独的Linux内核模块。通过改内核模块，MVM可以发起Hypercall来实现诸如虚拟机配置、虚拟机迁移、Hypervisor动态升级等功能。
