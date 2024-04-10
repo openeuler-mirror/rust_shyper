@@ -8,8 +8,17 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-pub use self::aarch64::*;
-pub use self::traits::*;
+//! Architecture module, including architecture-specific functions and data structures.
 
+#[cfg(target_arch = "aarch64")]
+pub use self::aarch64::*;
+#[cfg(target_arch = "aarch64")]
 mod aarch64;
-mod traits;
+
+#[cfg(target_arch = "riscv64")]
+pub use self::riscv64::*;
+#[cfg(target_arch = "riscv64")]
+mod riscv64;
+
+pub use self::traits::*;
+pub mod traits;

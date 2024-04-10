@@ -117,7 +117,8 @@ fresh_cpu:
     add sp, sp, #8
     ret
 
-.global fresh_hyper
-fresh_hyper:
+.global fresh_hyper_asm
+fresh_hyper_asm:
     bl  fresh_cpu
     b   context_vm_entry
+

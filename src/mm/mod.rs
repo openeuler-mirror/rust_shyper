@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Memory management module, including heap and page frame allocator.
+
 pub use self::heap::*;
 pub use self::page_frame::*;
 

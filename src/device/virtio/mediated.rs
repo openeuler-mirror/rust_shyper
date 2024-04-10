@@ -17,11 +17,12 @@ use crate::kernel::{
     active_vm, async_task_exe, AsyncTaskState, finish_async_task, hvc_send_msg_to_vm, HvcDefaultMsg, HvcGuestMsg,
     IpiInnerMsg, set_front_io_task_state, vm, vm_ipa2pa, VM_LIST,
 };
-use crate::kernel::{ipi_register, IpiMessage, IpiType};
-use crate::lib::trace;
+use crate::kernel::IpiMessage;
 
+/// Mutex for the list of mediated block devices.
 pub static MEDIATED_BLK_LIST: Mutex<Vec<MediatedBlk>> = Mutex::new(Vec::new());
 
+/// Adds a mediated block to the list and assigns it to a VM if needed.
 pub fn mediated_blk_list_push(mut blk: MediatedBlk) {
     let mut list = MEDIATED_BLK_LIST.lock();
     for vm in VM_LIST.lock().iter() {
@@ -42,6 +43,8 @@ pub fn mediated_blk_list_push(mut blk: MediatedBlk) {
     list.push(blk);
 }
 
+/// Requests a mediated block device from the list.
+/// Returns the index of the available block device.
 // TODO: not concern abort the num of sectors
 pub fn mediated_blk_request() -> Result<usize, ()> {
     let mut list = MEDIATED_BLK_LIST.lock();
@@ -54,77 +57,101 @@ pub fn mediated_blk_request() -> Result<usize, ()> {
     Err(())
 }
 
+/// Frees a mediated block device back to the list.
 pub fn mediated_blk_free(idx: usize) {
     let mut list = MEDIATED_BLK_LIST.lock();
     list[idx].avail = true;
 }
 
+/// Retrieves a mediated block device from the list by index.
 pub fn mediated_blk_list_get(idx: usize) -> MediatedBlk {
     let list = MEDIATED_BLK_LIST.lock();
     list[idx].clone()
 }
 
+/// Retrieves a mediated block device from the list by physical address.
 pub fn mediated_blk_list_get_from_pa(pa: usize) -> Option<MediatedBlk> {
     let list = MEDIATED_BLK_LIST.lock();
     for blk in &*list {
-        if blk.base_addr == pa {
+        if blk.content as usize == pa {
             return Some(blk.clone());
         }
     }
     None
 }
 
+/// Represents a mediated block device.
 #[derive(Clone)]
 pub struct MediatedBlk {
-    pub base_addr: usize,
-    pub avail: bool, // mediated blk will not be removed after append
+    content: *mut MediatedBlkContent,
+    avail: bool, // mediated blk will not be removed after append
 }
 
+// SAFETY: MediatedBlk is only used in VM0 and VM0 is only one core when muti-vm is supported
+unsafe impl Send for MediatedBlk {}
+
 impl MediatedBlk {
-    pub fn content(&self) -> &mut MediatedBlkContent {
-        if trace() && self.base_addr < 0x1000 {
-            panic!("illeagal addr {:x}", self.base_addr);
+    /// # Safety:
+    /// Addr must be a valid MMIO address of virtio-blk config
+    pub unsafe fn from_addr(addr: usize) -> Self {
+        Self {
+            content: unsafe { &mut *(addr as *mut MediatedBlkContent) },
+            avail: true,
         }
-        unsafe { &mut *(self.base_addr as *mut MediatedBlkContent) }
     }
 
+    fn content(&self) -> &'static mut MediatedBlkContent {
+        // SAFETY: 'content' is a valid pointer after `from_addr`
+        unsafe { &mut *self.content }
+    }
+
+    /// Retrieves the maximum number of DMA blocks supported by the mediated block.
     pub fn dma_block_max(&self) -> usize {
         self.content().cfg.dma_block_max
     }
 
+    /// Retrieves the number of requests in the mediated block.
     pub fn nreq(&self) -> usize {
         self.content().nreq
     }
 
+    /// Retrieves the IPA (Intermediate Physical Address) of the cache associated with the mediated block.
     pub fn cache_ipa(&self) -> usize {
         self.content().cfg.cache_ipa
     }
 
+    /// Retrieves the physical address of the cache associated with the mediated block.
     pub fn cache_pa(&self) -> usize {
         self.content().cfg.cache_pa
     }
 
+    /// Sets the number of requests in the mediated block.
     pub fn set_nreq(&self, nreq: usize) {
         self.content().nreq = nreq;
     }
 
+    /// Sets the type of request for the mediated block.
     pub fn set_type(&self, req_type: usize) {
         self.content().req.req_type = req_type as u32;
     }
 
+    /// Sets the sector for the mediated block request.
     pub fn set_sector(&self, sector: usize) {
         self.content().req.sector = sector;
     }
 
+    /// Sets the count for the mediated block request.
     pub fn set_count(&self, count: usize) {
         self.content().req.count = count;
     }
 
+    /// Sets the physical address of the cache associated with the mediated block.
     pub fn set_cache_pa(&self, cache_pa: usize) {
         self.content().cfg.cache_pa = cache_pa;
     }
 }
 
+/// Represents the content of a mediated block.
 #[repr(C)]
 pub struct MediatedBlkContent {
     nreq: usize,
@@ -132,6 +159,7 @@ pub struct MediatedBlkContent {
     req: MediatedBlkReq,
 }
 
+/// Represents the configuration of a mediated block.
 #[repr(C)]
 pub struct MediatedBlkCfg {
     name: [u8; 32],
@@ -147,6 +175,7 @@ pub struct MediatedBlkCfg {
     cache_pa: usize,
 }
 
+/// Represents the request of a mediated block.
 #[repr(C)]
 pub struct MediatedBlkReq {
     req_type: u32,
@@ -154,20 +183,14 @@ pub struct MediatedBlkReq {
     count: usize,
 }
 
-pub fn mediated_dev_init() {
-    if !ipi_register(IpiType::IpiTMediatedDev, mediated_ipi_handler) {
-        panic!("mediated_dev_init: failed to register ipi IpiTMediatedDev");
-    }
-}
-
+/// Appends a mediated block device to VM0 and the mediated block list.
 // only run in vm0
 pub fn mediated_dev_append(_class_id: usize, mmio_ipa: usize) -> Result<usize, ()> {
     let vm = active_vm().unwrap();
     let blk_pa = vm_ipa2pa(vm.clone(), mmio_ipa);
-    let mediated_blk = MediatedBlk {
-        base_addr: blk_pa,
-        avail: true,
-    };
+    // TODO: check weather the blk_pa is valid
+    // SAFETY:'blk_pa' is valid MMIO address of virtio-blk config
+    let mediated_blk = unsafe { MediatedBlk::from_addr(blk_pa) };
     mediated_blk.set_nreq(0);
 
     let cache_pa = vm_ipa2pa(vm, mediated_blk.cache_ipa());
@@ -183,6 +206,7 @@ pub fn mediated_dev_append(_class_id: usize, mmio_ipa: usize) -> Result<usize, (
     Ok(0)
 }
 
+/// Handles the completion of a mediated block request and notifies the requested VM.
 // service VM finish blk request, and inform the requested VM
 pub fn mediated_blk_notify_handler(dev_ipa_reg: usize) -> Result<usize, ()> {
     let dev_pa_reg = vm_ipa2pa(active_vm().unwrap(), dev_ipa_reg);
@@ -191,48 +215,37 @@ pub fn mediated_blk_notify_handler(dev_ipa_reg: usize) -> Result<usize, ()> {
     let mediated_blk = match mediated_blk_list_get_from_pa(dev_pa_reg) {
         Some(blk) => blk,
         None => {
-            println!("illegal mediated blk pa {:x} ipa {:x}", dev_pa_reg, dev_ipa_reg);
+            error!("illegal mediated blk pa {:x} ipa {:x}", dev_pa_reg, dev_ipa_reg);
             return Err(());
         }
     };
-    if mediated_blk.avail == false {
+    if !mediated_blk.avail {
         // finish current IO task
         set_front_io_task_state(AsyncTaskState::Finish);
     } else {
-        println!("Mediated blk not belong to any VM");
+        warn!("Mediated blk not belong to any VM");
     }
     // invoke the excuter to handle finished IO task
     async_task_exe();
     Ok(0)
 }
 
-fn check_sum(addr: usize, len: usize) -> usize {
-    let slice = unsafe { core::slice::from_raw_parts(addr as *const usize, len / 8) };
-    let mut sum = 0;
-    for num in slice {
-        sum ^= num;
-    }
-    sum
-}
-
 // call by normal VMs ipi request (generated by mediated virtio blk)
 pub fn mediated_ipi_handler(msg: &IpiMessage) {
     // println!("core {} mediated_ipi_handler", current_cpu().id);
-    match &msg.ipi_message {
-        IpiInnerMsg::MediatedMsg(mediated_msg) => {
-            let src_id = mediated_msg.src_id;
-            let vm = vm(src_id).unwrap();
-            // generate IO request in `virtio_blk_notify_handler`
-            virtio_blk_notify_handler(mediated_msg.vq.clone(), mediated_msg.blk.clone(), vm);
-            // mark the ipi task as finish (pop it from the ipi queue)
-            finish_async_task(true);
-            // invoke the executor to do IO request
-            async_task_exe();
-        }
-        _ => {}
+    if let IpiInnerMsg::MediatedMsg(mediated_msg) = &msg.ipi_message {
+        let src_id = mediated_msg.src_id;
+        let vm = vm(src_id).unwrap();
+        // generate IO request in `virtio_blk_notify_handler`
+        virtio_blk_notify_handler(mediated_msg.vq.clone(), mediated_msg.blk.clone(), vm);
+        // mark the ipi task as finish (pop it from the ipi queue)
+        finish_async_task(true);
+        // invoke the executor to do IO request
+        async_task_exe();
     }
 }
 
+/// Initiates a read operation on a mediated block device.
 pub fn mediated_blk_read(blk_idx: usize, sector: usize, count: usize) {
     let mediated_blk = mediated_blk_list_get(blk_idx);
     let nreq = mediated_blk.nreq();
@@ -247,10 +260,11 @@ pub fn mediated_blk_read(blk_idx: usize, sector: usize, count: usize) {
     };
 
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::Default(med_msg)) {
-        println!("mediated_blk_read: failed to notify VM 0");
+        error!("mediated_blk_read: failed to notify VM 0");
     }
 }
 
+/// Initiates a write operation on a mediated block device.
 pub fn mediated_blk_write(blk_idx: usize, sector: usize, count: usize) {
     let mediated_blk = mediated_blk_list_get(blk_idx);
     let nreq = mediated_blk.nreq();
@@ -266,6 +280,6 @@ pub fn mediated_blk_write(blk_idx: usize, sector: usize, count: usize) {
 
     // println!("mediated_blk_write send msg to vm0");
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::Default(med_msg)) {
-        println!("mediated_blk_write: failed to notify VM 0");
+        error!("mediated_blk_write: failed to notify VM 0");
     }
 }

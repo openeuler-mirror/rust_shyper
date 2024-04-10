@@ -14,35 +14,37 @@ use alloc::vec::Vec;
 
 use spin::Mutex;
 
+use crate::arch::traits::InterruptController;
 use crate::board::{Platform, PlatOperation};
 use crate::config::vm_cfg_add_vm_entry;
 use crate::device::EmuDeviceType;
-use crate::kernel::{HVC_IRQ, INTERRUPT_IRQ_GUEST_TIMER, VmType};
+use crate::kernel::{HVC_IRQ, VmType};
 
 use super::{
-    PassthroughRegion, vm_cfg_set_config_name, VmConfigEntry, VmCpuConfig, VMDtbDevConfigList, VmEmulatedDeviceConfig,
+    PassthroughRegion, vm_cfg_set_config_name, VmConfigEntry, VmCpuConfig, VmEmulatedDeviceConfig,
     VmEmulatedDeviceConfigList, VmImageConfig, VmMemoryConfig, VmPassthroughDeviceConfig, VmRegion,
 };
 
+/// Initializes the configuration for the manager VM (VM0).
 #[rustfmt::skip]
 pub fn mvm_config_init() {
-    println!("mvm_config_init() init config for VM0, which is manager VM");
+    info!("mvm_config_init() init config for VM0, which is manager VM");
 
     vm_cfg_set_config_name("tx2-default");
 
     // vm0 emu
     let emu_dev_config = vec![
         VmEmulatedDeviceConfig {
-            name: Some(String::from("interrupt-controller@3881000")),
+            name: String::from("interrupt-controller@3881000"),
             base_ipa: Platform::GICD_BASE,
             length: 0x1000,
-            irq_id: 0,
+            irq_id: 25,
             cfg_list: Vec::new(),
             emu_type: EmuDeviceType::EmuDeviceTGicd,
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_net@a001000")),
+            name: String::from("virtio_net@a001000"),
             base_ipa: 0xa001000,
             length: 0x1000,
             irq_id: 32 + 0x100,
@@ -51,7 +53,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@a002000")),
+            name: String::from("virtio_console@a002000"),
             base_ipa: 0xa002000,
             length: 0x1000,
             irq_id: 32 + 0x101,
@@ -60,7 +62,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("virtio_console@a003000")),
+            name: String::from("virtio_console@a003000"),
             base_ipa: 0xa003000,
             length: 0x1000,
             irq_id: 32 + 0x102,
@@ -69,7 +71,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("iommu")),
+            name: String::from("iommu"),
             base_ipa: 0x12000000,
             length: 0x1000000,
             irq_id: 0,
@@ -78,7 +80,7 @@ pub fn mvm_config_init() {
             mediated: false,
         },
         VmEmulatedDeviceConfig {
-            name: Some(String::from("vm_service")),
+            name: String::from("vm_service"),
             base_ipa: 0,
             length: 0,
             irq_id: HVC_IRQ,
@@ -149,6 +151,7 @@ pub fn mvm_config_init() {
         // PassthroughRegion { ipa: 0x03b41000, pa: 0x03b41000, length: 0x1000 },
         PassthroughRegion { ipa: 0x03c00000, pa: 0x03c00000, length: 0xa0000, dev_property: true },
         PassthroughRegion { ipa: Platform::GICC_BASE, pa: Platform::GICV_BASE, length: 0x2000, dev_property: true },
+        // PassthroughRegion { ipa: Platform::GICC_BASE, pa: Platform::GICC_BASE, length: 0x2000, dev_property: true },
         PassthroughRegion { ipa: 0x8010000, pa: 0x8010000, length: 0x1000, dev_property: true },
         PassthroughRegion { ipa: 0x08030000, pa: 0x08030000, length: 0x1000, dev_property: true },
         PassthroughRegion { ipa: 0x08050000, pa: 0x08050000, length: 0x1000, dev_property: true },
@@ -201,7 +204,7 @@ pub fn mvm_config_init() {
     ];
     // 146 is UART_INT
     pt_dev_config.irqs = vec![
-        INTERRUPT_IRQ_GUEST_TIMER, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 49, 56, 57, 58, 59, 60, 62, 63, 64, 65, 67, 68,
+        crate::arch::IntCtrl::IRQ_GUEST_TIMER, 32, 33, 34, 35, 36, 37, 38, 39, 40, 48, 49, 56, 57, 58, 59, 60, 62, 63, 64, 65, 67, 68,
         69, 70, 71, 72, 74, 76, 79, 82, 85, 88, 91, 92, 94, 95, 96, 97, 102, 103, 104, 105, 107,
         108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125,
         126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, Platform::UART_0_INT, 151, 152,
@@ -231,10 +234,10 @@ pub fn mvm_config_init() {
     // vm0 config
     let mvm_config_entry = VmConfigEntry {
         id: 0,
-        name: Some(String::from("privileged")),
+        name: String::from("privileged"),
         os_type: VmType::VmTOs,
         cmdline:
-        // String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/nvme0n1p2 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),
+        // String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/nvme0n1p1 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=4\0"),
         String::from("earlycon=uart8250,mmio32,0x3100000 console=ttyS0,115200n8 root=/dev/sda1 rw audit=0 rootwait default_hugepagesz=32M hugepagesz=32M hugepages=5\0"),
 
         image: Arc::new(Mutex::new(VmImageConfig {
@@ -256,7 +259,7 @@ pub fn mvm_config_init() {
         })),
         vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config })),
         vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
-        vm_dtb_devs: Arc::new(Mutex::new(VMDtbDevConfigList::default())),
+        ..Default::default()
     };
     let _ = vm_cfg_add_vm_entry(mvm_config_entry);
 }

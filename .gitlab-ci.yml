@@ -1,0 +1,40 @@
+stages:
+  - style
+  - build
+
+default:
+  cache:
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - target
+
+variables:
+  CROSS_COMPILE: aarch64-linux-gnu-
+  RUST_BACKTRACE: full
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+fmt:
+  stage: style
+  script:
+    - cargo fmt -v --check --all
+
+build:
+  stage: build
+  parallel:
+    matrix:
+      - BOARD: qemu
+        FEATURES:
+          - ""
+          - gicv3
+          - secondary_start
+          - gicv3,secondary_start
+      - BOARD: [tx2, pi4]
+      - BOARD: rk3588
+        FEATURES:
+          - ""
+          - rk3588-noeth
+  script:
+    - make clippy
+    - make doc
+    - make

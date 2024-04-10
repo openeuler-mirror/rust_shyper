@@ -13,11 +13,16 @@ use alloc::vec::Vec;
 use crate::arch::{
     emu_intc_handler, emu_intc_init, emu_smmu_handler, partial_passthrough_intc_handler, partial_passthrough_intc_init,
 };
-use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL};
+#[cfg(feature = "gicv3")]
+use crate::arch::{vgic_icc_sre_handler, vgic_icc_sgir_handler, emu_vgicr_init, emul_vgicr_handler};
+use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL, PTE_S2_NORMALNOCACHE};
 use crate::arch::PAGE_SIZE;
+#[cfg(not(feature = "gicv3"))]
 use crate::board::*;
 use crate::config::vm_cfg_entry;
-use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init};
+use crate::device::{emu_register_dev, emu_virtio_mmio_handler, emu_virtio_mmio_init, meta};
+#[cfg(feature = "gicv3")]
+use crate::device::{emu_register_reg, EmuRegType};
 use crate::device::create_fdt;
 use crate::device::EmuDeviceType::*;
 use crate::kernel::{
@@ -29,12 +34,15 @@ use crate::kernel::{vm, Vm};
 use crate::kernel::{active_vcpu_id, vcpu_run};
 use crate::kernel::interrupt_vm_register;
 use crate::kernel::VM_NUM_MAX;
-use crate::lib::trace;
+use crate::utils::trace;
+use crate::error::Result;
+
+use fdt::binding::*;
 
 #[cfg(feature = "ramdisk")]
-pub static CPIO_RAMDISK: &'static [u8] = include_bytes!("../../image/net_rootfs.cpio");
+pub static CPIO_RAMDISK: &[u8] = include_bytes!("../../image/net_rootfs.cpio");
 #[cfg(not(feature = "ramdisk"))]
-pub static CPIO_RAMDISK: &'static [u8] = &[];
+pub static CPIO_RAMDISK: &[u8] = &[];
 
 fn vmm_init_memory(vm: Vm) -> bool {
     let result = mem_page_alloc();
@@ -46,7 +54,7 @@ fn vmm_init_memory(vm: Vm) -> bool {
         vm.set_pt(pt_dir_frame);
         vm.set_mem_region_num(config.memory_region().len());
     } else {
-        println!("vmm_init_memory: page alloc failed");
+        error!("vmm_init_memory: page alloc failed");
         return false;
     }
 
@@ -55,15 +63,15 @@ fn vmm_init_memory(vm: Vm) -> bool {
         vm_mem_size += vm_region.length;
 
         if pa == 0 {
-            println!("vmm_init_memory: vm memory region is not large enough");
+            error!("vmm_init_memory: vm memory region is not large enough");
             return false;
         }
 
-        println!(
+        info!(
             "VM {} memory region: ipa=<0x{:x}>, pa=<0x{:x}>, size=<0x{:x}>",
             vm_id, vm_region.ipa_start, pa, vm_region.length
         );
-        vm.pt_map_range(vm_region.ipa_start, vm_region.length, pa, PTE_S2_NORMAL, vm_id == 0);
+        vm.pt_map_range(vm_region.ipa_start, vm_region.length, pa, PTE_S2_NORMAL, false);
 
         vm.add_region(VmPa {
             pa_start: pa,
@@ -86,7 +94,7 @@ pub fn vmm_load_image(vm: Vm, bin: &[u8]) {
         }
 
         let offset = load_ipa - region.ipa_start;
-        println!(
+        info!(
             "VM {} loads kernel: ipa=<0x{:x}>, pa=<0x{:x}>, size=<{}K>",
             vm.id(),
             load_ipa,
@@ -96,6 +104,9 @@ pub fn vmm_load_image(vm: Vm, bin: &[u8]) {
         if trace() && vm.pa_start(idx) + offset < 0x1000 {
             panic!("illegal addr {:x}", vm.pa_start(idx) + offset);
         }
+        // SAFETY:
+        // The 'vm.pa_start(idx) + offset' is in range of our memory configuration.
+        // The 'size' is the length of Image binary.
         let dst = unsafe { core::slice::from_raw_parts_mut((vm.pa_start(idx) + offset) as *mut u8, size) };
         dst.clone_from_slice(bin);
         return;
@@ -103,12 +114,23 @@ pub fn vmm_load_image(vm: Vm, bin: &[u8]) {
     panic!("vmm_load_image: Image config conflicts with memory config");
 }
 
+fn overlay_fdt(vm: &Vm, dtb: &[u8], overlay: &mut [u8]) -> Result<FdtBuf> {
+    let fdt = Fdt::from_bytes(dtb)?;
+    debug!("VM[{}] dtb old size {}", vm.id(), fdt.len());
+    let mut buf = FdtBuf::from_fdt_capacity(fdt, (dtb.len() + overlay.len()) * 2)?;
+    let fdt_overlay = Fdt::from_bytes_mut(overlay)?;
+    buf.overlay_apply(fdt_overlay)?;
+    buf.pack()?;
+    debug!("VM[{}] dtb new size {}", vm.id(), buf.len());
+    Ok(buf)
+}
+
 pub fn vmm_init_image(vm: Vm) -> bool {
     let vm_id = vm.id();
     let config = vm.config();
 
     if config.kernel_load_ipa() == 0 {
-        println!("vmm_init_image: kernel load ipa is null");
+        error!("vmm_init_image: kernel load ipa is null");
         return false;
     }
 
@@ -121,30 +143,72 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             Some(name) => {
                 #[cfg(feature = "tx2")]
                 if name == "L4T" {
-                    println!("MVM {} loading Image", vm.id());
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/L4T"));
+                    info!("MVM {} loading Image", vm.id());
+                    // vmm_load_image(vm.clone(), include_bytes!("../../image/L4T"));
+                    extern "C" {
+                        fn _binary_vm0img_start();
+                        fn _binary_vm0img_size();
+                    }
+                    // SAFETY:
+                    // The '_binary_vm0img_start' and '_binary_vm0img_size' are valid from linker script.
+                    let vm0image = unsafe {
+                        core::slice::from_raw_parts(
+                            _binary_vm0img_start as usize as *const u8,
+                            _binary_vm0img_size as usize,
+                        )
+                    };
+                    vmm_load_image(vm.clone(), vm0image);
                 } else if name == "Image_vanilla" {
-                    println!("VM {} loading default Linux Image", vm.id());
+                    info!("VM {} loading default Linux Image", vm.id());
                     #[cfg(feature = "static-config")]
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
                     #[cfg(not(feature = "static-config"))]
-                    println!("*** Please enable feature `static-config`");
+                    info!("*** Please enable feature `static-config`");
                 } else {
                     warn!("Image {} is not supported", name);
                 }
-                #[cfg(feature = "pi4")]
+                #[cfg(any(feature = "qemu", feature = "pi4"))]
                 if name.is_empty() {
                     panic!("kernel image name empty")
                 } else {
-                    vmm_load_image(vm.clone(), include_bytes!("../../image/Image_pi4_5.4.83_tlb"));
+                    extern "C" {
+                        fn _binary_vm0img_start();
+                        fn _binary_vm0img_size();
+                    }
+                    // SAFETY:
+                    // The '_binary_vm0img_start' and '_binary_vm0img_size' are valid from linker script.
+                    let vm0image = unsafe {
+                        core::slice::from_raw_parts(
+                            _binary_vm0img_start as usize as *const u8,
+                            _binary_vm0img_size as usize,
+                        )
+                    };
+                    vmm_load_image(vm.clone(), vm0image);
                 }
-                // vmm_load_image(vm.clone(), include_bytes!("../../image/Image_pi4_5.4.78"));
-                // vmm_load_image(vm.clone(), include_bytes!("../../image/Image_pi4"));
-                #[cfg(feature = "qemu")]
-                if name.is_empty() {
-                    panic!("kernel image name empty")
-                } else {
+                #[cfg(feature = "rk3588")]
+                if name == "Linux-5.10" {
+                    info!("MVM {} loading Image", vm.id());
+                    extern "C" {
+                        fn _binary_vm0img_start();
+                        fn _binary_vm0img_size();
+                    }
+                    // SAFETY:
+                    // The '_binary_vm0img_start' and '_binary_vm0img_size' are valid from linker script.
+                    let vm0image = unsafe {
+                        core::slice::from_raw_parts(
+                            _binary_vm0img_start as usize as *const u8,
+                            _binary_vm0img_size as usize,
+                        )
+                    };
+                    vmm_load_image(vm.clone(), vm0image);
+                } else if name == "Image_vanilla" {
+                    info!("VM {} loading default Linux Image", vm.id());
+                    #[cfg(feature = "static-config")]
                     vmm_load_image(vm.clone(), include_bytes!("../../image/Image_vanilla"));
+                    #[cfg(not(feature = "static-config"))]
+                    info!("*** Please enable feature `static-config`");
+                } else {
+                    panic!("kernel image name empty")
                 }
             }
             None => {
@@ -159,22 +223,56 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             // Init dtb for MVM.
             use crate::SYSTEM_FDT;
             let offset = config.device_tree_load_ipa() - config.memory_region()[0].ipa_start;
-            println!("MVM[{}] dtb addr 0x{:x}", vm_id, vm.pa_start(0) + offset);
+            debug!("MVM[{}] dtb addr 0x{:x}", vm_id, vm.pa_start(0) + offset);
             vm.set_dtb((vm.pa_start(0) + offset) as *mut fdt::myctypes::c_void);
+            // SAFETY:
+            // Offset is computed from config.device_tree_load_ipa() and config.memory_region()[0].ipa_start which are both valid.
+            // The 'vm.pa_start(0) + offset' is in range of our memory configuration.
+            // The 'vm.dtb' have been set to vm.pa_start(0) + offset which is in range of our memory configuration.
             unsafe {
                 let src = SYSTEM_FDT.get().unwrap();
                 let len = src.len();
                 let dst = core::slice::from_raw_parts_mut((vm.pa_start(0) + offset) as *mut u8, len);
-                dst.clone_from_slice(&src);
+                dst.clone_from_slice(src);
                 vmm_setup_fdt(vm.clone());
             }
         } else {
             // Init dtb for GVM.
             match create_fdt(config.clone()) {
                 Ok(dtb) => {
+                    let mut overlay = config.fdt_overlay.lock();
                     let offset = config.device_tree_load_ipa() - vm.config().memory_region()[0].ipa_start;
-                    println!("GVM[{}] dtb addr 0x{:x}", vm.id(), vm.pa_start(0) + offset);
-                    crate::lib::memcpy_safe((vm.pa_start(0) + offset) as *const u8, dtb.as_ptr(), dtb.len());
+                    let target = (vm.pa_start(0) + offset) as *mut u8;
+                    debug!(
+                        "GVM[{}] dtb addr 0x{:x} overlay {}",
+                        vm.id(),
+                        target as usize,
+                        overlay.len()
+                    );
+                    if overlay.is_empty() {
+                        // SAFETY:
+                        // The 'target' is in range of our memory configuration.
+                        // The 'src' is a temporary buffer and is valid.
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(dtb.as_ptr(), target, dtb.len());
+                        }
+                    } else {
+                        let buf = match overlay_fdt(&vm, &dtb, &mut overlay) {
+                            Ok(x) => x,
+                            Err(e) => {
+                                error!("overlay_fdt failed: {:?}", e);
+                                return false;
+                            }
+                        };
+                        overlay.clear();
+                        overlay.shrink_to_fit();
+                        // SAFETY:
+                        // The 'target' is in range of our memory configuration.
+                        // The 'buf' is a vaild value from stack.
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(buf.as_ptr(), target, buf.len());
+                        }
+                    }
                 }
                 _ => {
                     panic!("vmm_setup_config: create fdt for vm{} fail", vm.id());
@@ -182,7 +280,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
             }
         }
     } else {
-        println!(
+        warn!(
             "VM {} id {} device tree load ipa is not set",
             vm_id,
             vm.config().vm_name()
@@ -193,9 +291,12 @@ pub fn vmm_init_image(vm: Vm) -> bool {
     // Todo: support loading ramdisk from MVM shyper-cli.
     // ...
     if config.ramdisk_load_ipa() != 0 {
-        println!("VM {} use ramdisk CPIO_RAMDISK", vm_id);
+        info!("VM {} use ramdisk CPIO_RAMDISK", vm_id);
         let offset = config.ramdisk_load_ipa() - config.memory_region()[0].ipa_start;
         let len = CPIO_RAMDISK.len();
+        // SAFETY:
+        // The 'vm.pa_start(0) + offset' is in range of our memory configuration.
+        // The 'len' is the length of CPIO_RAMDISK binary.
         let dst = unsafe { core::slice::from_raw_parts_mut((vm.pa_start(0) + offset) as *mut u8, len) };
         dst.clone_from_slice(CPIO_RAMDISK);
     }
@@ -204,7 +305,7 @@ pub fn vmm_init_image(vm: Vm) -> bool {
 }
 
 fn vmm_init_emulated_device(vm: Vm) -> bool {
-    let config = vm.config().emulated_device_list();
+    let config: Vec<crate::config::VmEmulatedDeviceConfig> = vm.config().emulated_device_list();
 
     for (idx, emu_dev) in config.iter().enumerate() {
         match emu_dev.emu_type {
@@ -294,6 +395,40 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
                     return false;
                 }
             }
+            #[cfg(feature = "gicv3")]
+            EmuDeviceTICCSRE => {
+                emu_register_reg(EmuRegType::SysReg, emu_dev.base_ipa, vgic_icc_sre_handler);
+            }
+            #[cfg(feature = "gicv3")]
+            EmuDeviceTSGIR => {
+                emu_register_reg(EmuRegType::SysReg, emu_dev.base_ipa, vgic_icc_sgir_handler);
+            }
+            #[cfg(feature = "gicv3")]
+            EmuDeviceTGICR => {
+                emu_register_dev(
+                    EmuDeviceTGICR,
+                    vm.id(),
+                    idx,
+                    emu_dev.base_ipa,
+                    emu_dev.length,
+                    emul_vgicr_handler,
+                );
+                emu_vgicr_init(vm.clone(), idx);
+            }
+            EmuDeviceTMeta => {
+                if meta::register(idx, &vm, emu_dev).is_ok() {
+                    emu_register_dev(
+                        EmuDeviceTMeta,
+                        vm.id(),
+                        idx,
+                        emu_dev.base_ipa,
+                        emu_dev.length,
+                        meta::emu_meta_handler,
+                    );
+                } else {
+                    return false;
+                }
+            }
             _ => {
                 warn!("vmm_init_emulated_device: unknown emulated device");
                 return false;
@@ -313,10 +448,12 @@ fn vmm_init_emulated_device(vm: Vm) -> bool {
 
 fn vmm_init_passthrough_device(vm: Vm) -> bool {
     for region in vm.config().passthrough_device_regions() {
+        // TODO: specify the region property more accurately.
+        // The 'dev_property' in a device region means cacheable here.
         if region.dev_property {
             vm.pt_map_range(region.ipa, region.length, region.pa, PTE_S2_DEVICE, true);
         } else {
-            vm.pt_map_range(region.ipa, region.length, region.pa, PTE_S2_NORMAL, true);
+            vm.pt_map_range(region.ipa, region.length, region.pa, PTE_S2_NORMALNOCACHE, true);
         }
 
         debug!(
@@ -348,6 +485,9 @@ fn vmm_init_iommu_device(vm: Vm) -> bool {
     true
 }
 
+/// # Safety:
+/// This function is unsafe because it trusts the caller to pass a valid pointer to a valid dtb.
+/// So the caller must ensure that the vm.dtb() have configured correctly before calling this function.
 pub unsafe fn vmm_setup_fdt(vm: Vm) {
     use fdt::*;
     let config = vm.config();
@@ -366,45 +506,51 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@200000\0".as_ptr());
             #[cfg(feature = "qemu")]
             fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@50000000\0".as_ptr());
+            #[cfg(feature = "rk3588")]
+            fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@10000000\0".as_ptr());
             // FDT+TIMER
-            fdt_add_timer(dtb, 0x8);
+            //fdt_add_timer(dtb, 0x04);
             // FDT+BOOTCMD
             fdt_set_bootcmd(dtb, config.cmdline.as_ptr());
             #[cfg(feature = "tx2")]
             fdt_set_stdout_path(dtb, "/serial@3100000\0".as_ptr());
             // #[cfg(feature = "pi4")]
             // fdt_set_stdout_path(dtb, "/serial@fe340000\0".as_ptr());
+            #[cfg(feature = "rk3588")]
+            fdt_set_stdout_path(dtb, "/serial@feba0000\0".as_ptr());
 
-            if config.emulated_device_list().len() > 0 {
+            if !config.emulated_device_list().is_empty() {
                 for emu_cfg in config.emulated_device_list() {
                     match emu_cfg.emu_type {
-                        EmuDeviceTGicd => {
+                        EmuDeviceTGicd | EmuDeviceTGPPT => {
+                            print!("trace fdt_setup_gic\n");
+                            #[cfg(not(feature = "gicv3"))]
                             #[cfg(any(feature = "tx2", feature = "qemu"))]
                             fdt_setup_gic(
                                 dtb,
                                 Platform::GICD_BASE as u64,
                                 Platform::GICC_BASE as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
+                                emu_cfg.name.as_ptr(),
                             );
                             #[cfg(feature = "pi4")]
                             let _r = fdt_setup_gic(
                                 dtb,
                                 (Platform::GICD_BASE | 0xF_0000_0000) as u64,
                                 (Platform::GICC_BASE | 0xF_0000_0000) as u64,
-                                emu_cfg.name.unwrap().as_ptr(),
+                                emu_cfg.name.as_ptr(),
                             );
                         }
                         EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
-                            #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_virtio(
                                 dtb,
-                                emu_cfg.name.unwrap().as_ptr(),
+                                emu_cfg.name.as_ptr(),
                                 emu_cfg.irq_id as u32 - 0x20,
                                 emu_cfg.base_ipa as u64,
                             );
                         }
                         EmuDeviceTShyper => {
-                            #[cfg(any(feature = "tx2", feature = "qemu"))]
+                            #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
                             fdt_add_vm_service(
                                 dtb,
                                 emu_cfg.irq_id as u32 - 0x20,
@@ -412,20 +558,14 @@ pub unsafe fn vmm_setup_fdt(vm: Vm) {
                                 emu_cfg.length as u64,
                             );
                         }
-                        EmuDeviceTIOMMU => {
-                            #[cfg(feature = "tx2")]
-                            trace!("EmuDeviceTIOMMU");
-                        }
-                        _ => {
-                            todo!();
-                        }
+                        _ => {}
                     }
                 }
             }
-            println!("after dtb size {}", fdt_size(dtb));
+            debug!("after dtb size {}", fdt_size(dtb));
         }
         None => {
-            println!("None dtb");
+            warn!("None dtb");
         }
     }
 }
@@ -451,10 +591,10 @@ pub fn vmm_setup_config(vm_id: usize) {
         }
     };
 
-    println!(
+    debug!(
         "vmm_setup_config VM[{}] name {:?} current core {}",
         vm_id,
-        config.name.unwrap(),
+        config.name,
         current_cpu().id
     );
 
@@ -480,7 +620,7 @@ pub fn vmm_setup_config(vm_id: usize) {
     }
 
     add_async_used_info(vm_id);
-    info!("VM {} id {} init ok", vm.id(), vm.config().name.unwrap());
+    info!("VM {} id {} init ok", vm.id(), vm.config().name);
 }
 
 pub fn vmm_cpu_assign_vcpu(vm_id: usize) {
@@ -514,13 +654,14 @@ pub fn vmm_cpu_assign_vcpu(vm_id: usize) {
             Some(vcpu) => vcpu,
         };
         if vcpu.id() == 0 {
-            println!("* Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
+            info!("* Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
         } else {
-            println!("Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
+            info!("Core {} is assigned => vm {}, vcpu {}", cpu_id, vm_id, vcpu.id());
         }
         current_cpu().vcpu_array.append_vcpu(vcpu);
     }
 
+    #[cfg(not(feature = "secondary_start"))]
     if cfg_cpu_num == vm.cpu_num() {
         vm.set_ready(true);
     }
@@ -534,17 +675,17 @@ pub fn vm_init() {
         super::vmm_init_gvm(0);
         #[cfg(feature = "static-config")]
         {
+            #[cfg(not(feature = "gicv3"))]
             crate::config::init_tmp_config_for_vm1();
-            crate::config::init_tmp_config_for_vm2();
+            #[cfg(feature = "gicv3")]
+            crate::config::init_gicv3_config_for_vm1();
             super::vmm_init_gvm(1);
-            super::vmm_init_gvm(2);
         }
     }
 }
 
 pub fn vmm_boot() {
     if current_cpu().assigned() && active_vcpu_id() == 0 {
-        // active_vm().unwrap().set_migration_state(false);
         info!("Core {} start running", current_cpu().id);
         vcpu_run(false);
     } else {
@@ -552,13 +693,4 @@ pub fn vmm_boot() {
         info!("Core {} idle", current_cpu().id);
         cpu_idle();
     }
-}
-
-pub fn vmm_migrate_boot() {
-    let vcpu = current_cpu().active_vcpu.clone().unwrap();
-    vcpu.reset_vmpidr();
-    vcpu.reset_vtimer_offset();
-
-    // println!("Core[{}] start running", current_cpu().id);
-    vcpu_run(true);
 }

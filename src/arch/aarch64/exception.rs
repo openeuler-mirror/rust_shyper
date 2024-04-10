@@ -12,14 +12,12 @@ use core::arch::global_asm;
 
 use tock_registers::interfaces::*;
 
-use crate::arch::{ContextFrameTrait, data_abort_handler, hvc_handler, smc_handler};
+use crate::arch::{ContextFrameTrait, data_abort_handler, hvc_handler, smc_handler, sysreg_handler, isb, at, HPFAR_EL2};
+use crate::arch::aarch64::regs::ReadableReg;
 use crate::arch::{gicc_clear_current_irq, gicc_get_current_irq};
 use crate::arch::ContextFrame;
-use crate::kernel::{active_vm_id, current_cpu, FRESH_IRQ_LOGIC_LOCK, FRESH_LOGIC_LOCK, fresh_status, FreshStatus};
+use crate::kernel::{active_vm_id, current_cpu};
 use crate::kernel::interrupt_handler;
-use crate::lib::time_current_us;
-
-// use crate::lib::time_current_us;
 
 global_asm!(include_str!("exception.S"));
 
@@ -45,24 +43,13 @@ fn exception_far() -> usize {
 
 #[inline(always)]
 fn exception_hpfar() -> usize {
-    let hpfar: u64;
-    mrs!(hpfar, HPFAR_EL2);
-    hpfar as usize
+    HPFAR_EL2::read() as usize
 }
 
 #[allow(non_upper_case_globals)]
 const ESR_ELx_S1PTW_SHIFT: usize = 7;
 #[allow(non_upper_case_globals)]
 const ESR_ELx_S1PTW: usize = 1 << ESR_ELx_S1PTW_SHIFT;
-
-macro_rules! arm_at {
-    ($at_op:expr, $addr:expr) => {
-        unsafe {
-            core::arch::asm!(concat!("AT ", $at_op, ", {0}"), in(reg) $addr, options(nomem, nostack));
-            core::arch::asm!("isb");
-        }
-    };
-}
 
 fn translate_far_to_hpfar(far: usize) -> Result<usize, ()> {
     /*
@@ -79,7 +66,8 @@ fn translate_far_to_hpfar(far: usize) -> Result<usize, ()> {
     use cortex_a::registers::PAR_EL1;
 
     let par = PAR_EL1.get();
-    arm_at!("s1e1r", far);
+    at::s1e1r(far);
+    isb();
     let tmp = PAR_EL1.get();
     PAR_EL1.set(par);
     if (tmp & PAR_EL1::F::TranslationAborted.value) != 0 {
@@ -95,7 +83,7 @@ pub fn exception_fault_addr() -> usize {
     let far = exception_far();
     let hpfar = if (exception_esr() & ESR_ELx_S1PTW) == 0 && exception_data_abort_is_permission_fault() {
         translate_far_to_hpfar(far).unwrap_or_else(|_| {
-            println!("error happen in translate_far_to_hpfar");
+            debug!("error happen in translate_far_to_hpfar");
             0
         })
     } else {
@@ -104,6 +92,7 @@ pub fn exception_fault_addr() -> usize {
     (far & 0xfff) | (hpfar << 8)
 }
 
+/// Get the length of the instruction that caused the exception
 /// \return 1 means 32-bit instruction, 0 means 16-bit instruction
 #[inline(always)]
 fn exception_instruction_length() -> usize {
@@ -172,7 +161,6 @@ extern "C" fn current_el_sp0_synchronous() {
 
 #[no_mangle]
 extern "C" fn current_el_sp0_irq() {
-    // lower_aarch64_irq(ctx);
     panic!("current_el_sp0_irq");
 }
 
@@ -195,8 +183,7 @@ extern "C" fn current_el_spx_synchronous() {
 }
 
 #[no_mangle]
-extern "C" fn current_el_spx_irq(ctx: *mut ContextFrame) {
-    // println!("current_el_spx_irq");
+extern "C" fn current_el_spx_irq(ctx: &mut ContextFrame) {
     lower_aarch64_irq(ctx);
 }
 
@@ -206,23 +193,16 @@ extern "C" fn current_el_spx_serror() {
 }
 
 #[no_mangle]
-extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
-    // println!("lower_aarch64_synchronous");
-    let status = fresh_status();
-    if status != FreshStatus::None {
-        if status != FreshStatus::Finish {
-            println!("lower_aarch64_synchronous: illegal fresh status {:#?}", status);
-            let time0 = time_current_us();
-            FRESH_LOGIC_LOCK.lock();
-            let time1 = time_current_us();
-            println!("lower_aarch64_synchronous: wait live update {} us", time1 - time0);
-        }
+extern "C" fn lower_aarch64_synchronous(ctx: &mut ContextFrame) {
+    unsafe {
+        current_cpu().set_ctx(ctx);
     }
-    current_cpu().set_ctx(ctx);
     match exception_class() {
         0x24 => {
-            // println!("Core[{}] data_abort_handler", cpu_id());
             data_abort_handler();
+        }
+        0x18 => {
+            sysreg_handler(exception_iss() as u32);
         }
         0x17 => {
             smc_handler();
@@ -230,78 +210,43 @@ extern "C" fn lower_aarch64_synchronous(ctx: *mut ContextFrame) {
         0x16 => {
             hvc_handler();
         }
-        _ => unsafe {
-            println!(
+        _ => {
+            debug!(
                 "x0 {:x}, x1 {:x}, x29 {:x}",
                 (*ctx).gpr(0),
                 (*ctx).gpr(1),
                 (*ctx).gpr(29)
             );
             panic!(
-                "core {} vm {}: handler not presents for EC_{} @ipa 0x{:x}, @pc 0x{:x}",
+                "core {} vm {}: handler not presents for EC_{:b} @ipa 0x{:x}, @pc 0x{:x}",
                 current_cpu().id,
                 active_vm_id(),
                 exception_class(),
                 exception_fault_addr(),
                 (*ctx).exception_pc()
             );
-        },
+        }
     }
     current_cpu().clear_ctx();
 }
 
 #[no_mangle]
-extern "C" fn lower_aarch64_irq(ctx: *mut ContextFrame) {
-    current_cpu().set_ctx(ctx);
-    let (id, src) = gicc_get_current_irq();
-    // if current_cpu().id == 2 {
-    //     println!(
-    //         "Core[{}] lower_aarch64_irq {} 0x{:x}  x30 {:x} x19 {:x} x0 {:x}",
-    //         current_cpu().id,
-    //         id,
-    //         current_cpu().get_elr(),
-    //         current_cpu().get_gpr(30),
-    //         current_cpu().get_gpr(19),
-    //         current_cpu().get_gpr(0)
-    //     );
-    // }
-    match fresh_status() {
-        FreshStatus::FreshVM | FreshStatus::Start => {
-            // if active_vm().unwrap().has_interrupt(id) {
-            // println!("lower_aarch64_irq: wait for fresh vm and vcpu");
-            // let time0 = time_current_us();
-            FRESH_IRQ_LOGIC_LOCK.lock();
-            // let time1 = time_current_us();
-            // println!("lower_aarch64_irq: wait {} us", time1 - time0);
-            // } else {
-            //     FRESH_LOGIC_LOCK.lock();
-            // }
+extern "C" fn lower_aarch64_irq(ctx: &mut ContextFrame) {
+    unsafe {
+        current_cpu().set_ctx(ctx);
+    }
+    if let Some(id) = gicc_get_current_irq() {
+        if id >= 1022 {
+            return;
         }
-        // FreshStatus::FreshVCPU => {
-        //     if !active_vm().unwrap().has_interrupt(id) {
-        //         FRESH_LOGIC_LOCK.lock();
-        //     }
-        // }
-        _ => {}
-    }
+        // use crate::lib::time_current_us;
+        // let begin = time_current_us();
+        let handled_by_hypervisor = interrupt_handler(id);
+        // let end = time_current_us();
 
-    if id >= 1022 {
-        return;
+        gicc_clear_current_irq(handled_by_hypervisor);
     }
-    // use crate::lib::time_current_us;
-    // let begin = time_current_us();
-    let handled_by_hypervisor = interrupt_handler(id, src);
-    // let end = time_current_us();
-
-    gicc_clear_current_irq(handled_by_hypervisor);
     current_cpu().clear_ctx();
-    // if current_cpu().active_vcpu.is_some()
-    //     && current_cpu().active_vcpu.as_ref().unwrap().vm().is_some()
-    //     && active_vm_id() == 2
-    //     && current_cpu().id == 2
-    // {
-    //     println!("Core{} VM2 end lower_aarch64_irq irq {}", current_cpu().id, id);
-    // }
 }
 
 #[no_mangle]

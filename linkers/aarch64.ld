@@ -1,4 +1,7 @@
 ENTRY(_start)
+TARGET(binary)
+INPUT("vm0img")
+OUTPUT_FORMAT(default)
 SECTIONS
 {
     . = TEXT_START;
@@ -21,21 +24,18 @@ SECTIONS
 
     .data : {
         *(.data*)
+        vm0img(.vm0image)
     }
 
-    . = ALIGN(4096);
-    _bss_begin = .;
     .bss (NOLOAD) : ALIGN(4096) {
+        *(.bss.stack)
+
+        . = ALIGN(4096);
+        _bss_begin = .;
         *(.bss*)
+        . = ALIGN(4096);
+        _bss_end = .;
     }
-    . = ALIGN(4096);
-    _bss_end = .;
 
     _image_end = ABSOLUTE(.);
-    
-    . = 0x400000000;
-
-    .cpu_private (NOLOAD) : ALIGN(4096) {
-        *(.cpu_private)
-    }
 }

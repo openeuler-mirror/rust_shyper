@@ -8,9 +8,9 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::INTERRUPT_IRQ_HYPERVISOR_TIMER;
-// use crate::board::PLATFORM_CPU_NUM_MAX;
-use crate::kernel::{current_cpu, InterruptHandler, Scheduler};
+use crate::arch::traits::InterruptController;
+use crate::arch::IntCtrl;
+use crate::kernel::{current_cpu, Scheduler};
 
 // #[derive(Copy, Clone)]
 // struct Timer(bool);
@@ -28,30 +28,32 @@ use crate::kernel::{current_cpu, InterruptHandler, Scheduler};
 // static TIMER_LIST: Mutex<[Timer; PLATFORM_CPU_NUM_MAX]> =
 //     Mutex::new([Timer::default(); PLATFORM_CPU_NUM_MAX]);
 
+/// initialize timer on current cpu (This function needs to be executed on each cpu)
 pub fn timer_init() {
     crate::arch::timer_arch_init();
     timer_enable(false);
 
-    crate::lib::barrier();
+    #[cfg(not(feature = "secondary_start"))]
+    crate::utils::barrier();
+
     if current_cpu().id == 0 {
-        crate::kernel::interrupt_reserve_int(
-            INTERRUPT_IRQ_HYPERVISOR_TIMER,
-            InterruptHandler::TimeIrqHandler(timer_irq_handler),
-        );
-        println!("Timer frequency: {}Hz", crate::arch::timer_arch_get_frequency());
-        println!("Timer init ok");
+        crate::kernel::interrupt_reserve_int(IntCtrl::IRQ_HYPERVISOR_TIMER, timer_irq_handler);
+        info!("Timer frequency: {}Hz", crate::arch::timer_arch_get_frequency());
+        info!("Timer init ok");
     }
 }
 
+/// enable timer on current cpu
 pub fn timer_enable(val: bool) {
     // println!(
     //     "Core {} {} EL2 timer",
     //     current_cpu().id,
     //     if val { "enable" } else { "disable" }
     // );
-    super::interrupt::interrupt_cpu_enable(INTERRUPT_IRQ_HYPERVISOR_TIMER, val);
+    super::interrupt::interrupt_cpu_enable(IntCtrl::IRQ_HYPERVISOR_TIMER, val);
 }
 
+/// trigger timer interrupt after X ms
 fn timer_notify_after(ms: usize) {
     use crate::arch::{timer_arch_enable_irq, timer_arch_set};
     if ms == 0 {
@@ -62,7 +64,7 @@ fn timer_notify_after(ms: usize) {
     timer_arch_enable_irq();
 }
 
-pub fn timer_irq_handler(_arg: usize) {
+pub fn timer_irq_handler() {
     use crate::arch::timer_arch_disable_irq;
 
     timer_arch_disable_irq();

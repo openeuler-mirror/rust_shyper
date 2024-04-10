@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Device module, including device tree, device model, and device emulation.
+
 pub use self::device::*;
 pub use self::device_tree::*;
 pub use self::emu::*;
@@ -16,4 +18,5 @@ pub use self::virtio::*;
 mod device;
 mod device_tree;
 mod emu;
+pub mod meta;
 mod virtio;

@@ -15,6 +15,11 @@ license = "MulanPSL-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+crate-type = ["staticlib"]
+test = false
+bench = false
+
 [profile.dev]
 panic = "abort"
 
@@ -23,26 +28,50 @@ lto = true
 panic = "abort"
 debug = true
 
+[build-dependencies]
+chrono = "0.4.23"
+built = { version = "0.6.1", features = [] }
+gethostname = "0.4.3"
+
 [dependencies]
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
-fdt = { path = "libfdt-binding" }
+fdt = { git = "https://github.com/karin0/libfdt-rs" }
 log = { version = "0.4", features = [
     "max_level_trace",
     "release_max_level_info",
 ] }
 spin = { version = "0.9.4", features = ["use_ticket_mutex"] }
-cortex-a = "7.4.0"
 buddy_system_allocator = "0.8.0"
+memoffset = { version = "0.8", default-features = false, features = [
+    "unstable_const",
+] }
+cfg-if = "1.0.0"
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+cortex-a = { package = "aarch64-cpu", version = "9.3.1" }
+smccc = "0.1.1"
 
 [dependencies.tock-registers]
-version = "0.7.0"
+version = "0.8.0"
 default-features = false
 features = ["register_types"]
 
+[dependencies.fdt-rs]
+version = "x"
+default-features = false
+
 [features]
-tx2 = []
-qemu = []
-pi4 = []
-update = []
+tx2 = ["ns16550"]
+qemu = ["pl011"]
+pi4 = ["pl011"]
+rk3588 = ["ns16550", "gicv3"]
+gicv3 = []
 ramdisk = []
 static-config = []
+lvl4 = []
+secondary_start = []
+rk3588-noeth = ["rk3588"]
+ns16550 = []
+pl011 = []
+unilib = []
+doc = []

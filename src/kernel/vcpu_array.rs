@@ -12,6 +12,7 @@ use alloc::slice::{Iter, IterMut};
 use crate::board::{PLAT_DESC, SchedRule};
 use crate::kernel::{current_cpu, SchedType, SchedulerRR, Vcpu, VM_NUM_MAX, interrupt_cpu_enable};
 
+/// vcpu array for storing vcpu objects
 pub struct VcpuArray {
     array: [Option<Vcpu>; VM_NUM_MAX],
     len: usize,
@@ -43,6 +44,14 @@ impl VcpuArray {
     pub fn append_vcpu(&mut self, vcpu: Vcpu) {
         // There is only 1 VCPU from a VM in a PCPU
         let vm_id = vcpu.vm_id();
+
+        info!(
+            "append_vcpu: append VM[{}] vcpu {} on core {}",
+            vm_id,
+            vcpu.id(),
+            current_cpu().id
+        );
+
         if vm_id >= self.array.len() {
             panic!("vm_id > self.array.len()");
         }
@@ -50,12 +59,7 @@ impl VcpuArray {
             panic!("self.array[vm_id].is_some()");
         }
         vcpu.set_phys_id(current_cpu().id);
-        info!(
-            "append_vcpu: append VM[{}] vcpu {} on core {}",
-            vm_id,
-            vcpu.id(),
-            current_cpu().id
-        );
+
         self.array[vm_id] = Some(vcpu);
         self.len += 1;
     }
@@ -104,8 +108,8 @@ pub fn cpu_sched_init() {
     }
 }
 
+/// restore gic context for current vcpu
 pub fn restore_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
-    // println!("restore_vcpu_gic");
     match cur_vcpu {
         None => {
             // println!("None cur vmid trgt {}", trgt_vcpu.vm_id());
@@ -121,8 +125,8 @@ pub fn restore_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
     }
 }
 
+/// save gic context for current vcpu
 pub fn save_vcpu_gic(cur_vcpu: Option<Vcpu>, trgt_vcpu: Vcpu) {
-    // println!("save_vcpu_gic");
     match cur_vcpu {
         None => {
             trgt_vcpu.gic_save_context();

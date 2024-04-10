@@ -10,8 +10,8 @@
 
 use alloc::vec::Vec;
 
-use crate::arch::gicc_clear_current_irq;
-use crate::arch::power_arch_vm_shutdown_secondary_cores;
+use crate::arch::traits::InterruptController;
+use crate::arch::{power_arch_vm_shutdown_secondary_cores, IntCtrl};
 use crate::board::PLATFORM_CPU_NUM_MAX;
 use crate::config::{vm_id_list, vm_num};
 // use crate::config::{init_tmp_config_for_bma1, init_tmp_config_for_bma2, init_tmp_config_for_vm1, init_tmp_config_for_vm2};
@@ -29,8 +29,7 @@ use crate::kernel::HVC_CONFIG;
 use crate::kernel::HVC_CONFIG_UPLOAD_KERNEL_IMAGE;
 use crate::kernel::HVC_VMM;
 use crate::kernel::HVC_VMM_REBOOT_VM;
-use crate::lib::sleep;
-use crate::lib::{bit_extract, memcpy_safe, memset_safe};
+use crate::utils::{bit_extract, memcpy, memset};
 use crate::vmm::{vmm_cpu_assign_vcpu, vmm_boot, vmm_init_image, vmm_setup_config, vmm_cpu_remove_vcpu};
 
 #[derive(Copy, Clone)]
@@ -39,11 +38,12 @@ pub enum VmmEvent {
     VmmReboot,
     VmmShutdown,
     VmmAssignCpu,
+    VmmAssignVcpu,
     VmmRemoveCpu,
 }
 
 pub fn vmm_shutdown_secondary_vm() {
-    println!("Shutting down all VMs...");
+    info!("Shutting down all VMs...");
 }
 
 /* Generate VM structure and push it to VM.
@@ -59,7 +59,7 @@ pub fn vmm_push_vm(vm_id: usize) {
     let vm_cfg = match vm_cfg_entry(vm_id) {
         Some(vm_cfg) => vm_cfg,
         None => {
-            println!("vmm_push_vm: failed to find config for vm {}", vm_id);
+            error!("vmm_push_vm: failed to find config for vm {}", vm_id);
             return;
         }
     };
@@ -82,17 +82,11 @@ pub fn vmm_alloc_vcpu(vm_id: usize) {
     };
 
     for i in 0..vm.config().cpu_num() {
-        use crate::kernel::vcpu_alloc;
-        if let Some(vcpu) = vcpu_alloc() {
-            vcpu.init(vm.clone(), i);
-            vm.push_vcpu(vcpu.clone());
-        } else {
-            println!("failed to allocte vcpu");
-            return;
-        }
+        let vcpu = crate::kernel::Vcpu::new(vm.clone(), i);
+        vm.push_vcpu(vcpu);
     }
 
-    println!(
+    info!(
         "VM {} init cpu: cores=<{}>, allocat_bits=<0b{:b}>",
         vm.id(),
         vm.config().cpu_num(),
@@ -106,7 +100,7 @@ pub fn vmm_alloc_vcpu(vm_id: usize) {
  * @param[in] vm_id: new added VM id.
  */
 pub fn vmm_set_up_cpu(vm_id: usize) {
-    println!("vmm_set_up_cpu: set up vm {} on cpu {}", vm_id, current_cpu().id);
+    info!("vmm_set_up_cpu: set up vm {} on cpu {}", vm_id, current_cpu().id);
     let vm = match vm(vm_id) {
         None => {
             panic!(
@@ -125,16 +119,38 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
     let mut cpu_num = 0;
     while cpu_allocate_bitmap != 0 && target_cpu_id < PLATFORM_CPU_NUM_MAX {
         if cpu_allocate_bitmap & 1 != 0 {
-            println!("vmm_set_up_cpu: vm {} physical cpu id {}", vm_id, target_cpu_id);
+            info!("vmm_set_up_cpu: vm {} physical cpu id {}", vm_id, target_cpu_id);
             cpu_num += 1;
 
-            if target_cpu_id != current_cpu().id {
+            if cfg!(feature = "secondary_start") {
+                // Judge if current cpu is allocated.
+                let vcpu = match vm.select_vcpu2assign(target_cpu_id) {
+                    None => panic!("core {} vm {} cannot find proper vcpu to assign", target_cpu_id, vm_id),
+                    Some(vcpu) => vcpu,
+                };
+                if vcpu.id() == 0 {
+                    info!(
+                        "* Core {} is assigned => vm {}, vcpu {}",
+                        target_cpu_id,
+                        vm_id,
+                        vcpu.id()
+                    );
+                } else {
+                    info!("Core {} is assigned => vm {}, vcpu {}", target_cpu_id, vm_id, vcpu.id());
+                }
+                vcpu.set_phys_id(target_cpu_id);
+
+                let cfg_master = vm.config().cpu_master();
+                if target_cpu_id == cfg_master && target_cpu_id == current_cpu().id {
+                    current_cpu().vcpu_array.append_vcpu(vcpu);
+                }
+            } else if target_cpu_id != current_cpu().id {
                 let m = IpiVmmMsg {
                     vmid: vm_id,
                     event: VmmEvent::VmmAssignCpu,
                 };
                 if !ipi_send_msg(target_cpu_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
-                    println!("vmm_set_up_cpu: failed to send ipi to Core {}", target_cpu_id);
+                    error!("vmm_set_up_cpu: failed to send ipi to Core {}", target_cpu_id);
                 }
             } else {
                 vmm_cpu_assign_vcpu(vm_id);
@@ -143,7 +159,7 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
         cpu_allocate_bitmap >>= 1;
         target_cpu_id += 1;
     }
-    println!(
+    info!(
         "vmm_set_up_cpu: vm {} total physical cpu num {} bitmap {:#b}",
         vm_id,
         cpu_num,
@@ -151,15 +167,17 @@ pub fn vmm_set_up_cpu(vm_id: usize) {
     );
 
     // Waiting till others set up.
-    println!(
+    info!(
         "vmm_set_up_cpu: on core {}, waiting VM [{}] to be set up",
         current_cpu().id,
         vm_id
     );
+    #[cfg(not(feature = "secondary_start"))]
     while !vm.ready() {
+        use crate::utils::sleep;
         sleep(10);
     }
-    println!("vmm_set_up_cpu: VM [{}] is ready", vm_id);
+    info!("vmm_set_up_cpu: VM [{}] is ready", vm_id);
 }
 
 /* Init VM before boot.
@@ -191,36 +209,35 @@ pub fn vmm_init_gvm(vm_id: usize) {
  */
 pub fn vmm_boot_vm(vm_id: usize) {
     let phys_id = vm_if_get_cpu_id(vm_id);
-    // println!(
-    //     "vmm_boot_vm: current_cpu {} target vm {} get phys_id {}",
-    //     current_cpu().id,
-    //     vm_id,
-    //     phys_id
-    // );
     if phys_id != current_cpu().id {
-        let m = IpiVmmMsg {
-            vmid: vm_id,
-            event: VmmEvent::VmmBoot,
-        };
-        if !ipi_send_msg(phys_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
-            println!("vmm_boot_vm: failed to send ipi to Core {}", phys_id);
+        use crate::kernel::{CPU_IF_LIST, CpuState};
+        use crate::arch::psci_vm_maincpu_on;
+        let state = CPU_IF_LIST.lock().get(phys_id).unwrap().state_for_start;
+        if state == CpuState::CpuInv {
+            let vmpidr = vm(vm_id).unwrap().pcpuid_to_vcpuid(phys_id).unwrap();
+            info!("now start cpu on! vmpidr={vmpidr}");
+            psci_vm_maincpu_on(vmpidr, vmm_boot_vm as usize, 0, vm_id);
+        } else {
+            let m = IpiVmmMsg {
+                vmid: vm_id,
+                event: VmmEvent::VmmBoot,
+            };
+            if !ipi_send_msg(phys_id, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
+                error!("vmm_boot_vm: failed to send ipi to Core {}", phys_id);
+            }
         }
     } else {
-        match current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id) {
-            None => {
-                panic!(
-                    "vmm_boot_vm: VM[{}] does not have vcpu on Core {}",
-                    vm_id,
-                    current_cpu().id
-                );
-            }
-            Some(vcpu) => {
-                gicc_clear_current_irq(true);
-                // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
-                current_cpu().scheduler().yield_to(vcpu);
-                vmm_boot();
-            }
+        if current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).is_none() {
+            let vm = vm(vm_id).unwrap();
+            let vcpuid = vm.pcpuid_to_vcpuid(phys_id).unwrap();
+            let vcpu = vm.vcpuid_to_vcpu(vcpuid);
+            current_cpu().vcpu_array.append_vcpu(vcpu.unwrap());
         };
+        let vcpu = current_cpu().vcpu_array.pop_vcpu_through_vmid(vm_id).unwrap();
+        IntCtrl::clear_current_irq(true);
+        // TODO: try to use `wakeup` (still bugs when booting multi-shared-core VM using wakeup)
+        current_cpu().scheduler().yield_to(vcpu);
+        vmm_boot();
     }
 }
 
@@ -235,7 +252,7 @@ pub fn vmm_reboot_vm(arg: usize) {
     let force = bit_extract(arg, 16, 16) != 0;
     let cur_vm = active_vm().unwrap();
 
-    println!("vmm_reboot VM [{}] force:{}", vm_id, force);
+    info!("vmm_reboot VM [{}] force:{}", vm_id, force);
 
     if force {
         if cur_vm.id() == vm_id {
@@ -247,7 +264,7 @@ pub fn vmm_reboot_vm(arg: usize) {
                 event: VmmEvent::VmmReboot,
             };
             if !ipi_send_msg(cpu_trgt, IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
-                println!("vmm_reboot_vm: failed to send ipi to Core {}", cpu_trgt);
+                error!("vmm_reboot_vm: failed to send ipi to Core {}", cpu_trgt);
             }
         }
         return;
@@ -259,7 +276,7 @@ pub fn vmm_reboot_vm(arg: usize) {
         vm_id,
     };
     if !hvc_send_msg_to_vm(vm_id, &HvcGuestMsg::Manage(msg)) {
-        println!("vmm_reboot_vm: failed to notify VM 0");
+        error!("vmm_reboot_vm: failed to notify VM 0");
     }
 }
 
@@ -273,14 +290,18 @@ pub fn vmm_reboot() {
     if vm.id() == 0 {
         vmm_shutdown_secondary_vm();
         use crate::board::{PlatOperation, Platform};
-        Platform::sys_reboot();
+        // SAFETY:
+        // Here we are ready to reboot the system.
+        unsafe {
+            Platform::sys_reboot();
+        }
     }
 
     // Reset GVM.
     let vcpu = current_cpu().active_vcpu.clone().unwrap();
-    println!("VM [{}] reset...", vm.id());
+    info!("VM [{}] reset...", vm.id());
     power_arch_vm_shutdown_secondary_cores(vm.clone());
-    println!(
+    info!(
         "Core {} (VM [{}] vcpu {}) shutdown ok",
         current_cpu().id,
         vm.id(),
@@ -289,7 +310,7 @@ pub fn vmm_reboot() {
 
     // Clear memory region.
     for idx in 0..vm.mem_region_num() {
-        println!(
+        info!(
             "Core {} (VM [{}] vcpu {}) reset mem region start {:x} size {:x}",
             current_cpu().id,
             vm.id(),
@@ -297,7 +318,11 @@ pub fn vmm_reboot() {
             vm.pa_start(idx),
             vm.pa_length(idx)
         );
-        memset_safe(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        // SAFETY:
+        // The 'vm_pa_region' is writable for the Hypervisor in EL2.
+        unsafe {
+            memset(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        }
     }
 
     // Reset image.
@@ -309,7 +334,7 @@ pub fn vmm_reboot() {
     vm_if_set_ivc_arg(vm.id(), 0);
     vm_if_set_ivc_arg_ptr(vm.id(), 0);
 
-    crate::arch::interrupt_arch_clear();
+    IntCtrl::clear();
     crate::arch::vcpu_arch_init(vm.clone(), vm.vcpu(0).unwrap());
     vcpu.reset_context();
 
@@ -327,7 +352,7 @@ pub fn vmm_load_image_from_mvm(vm: Vm) {
     };
     // println!("mediated_blk_write send msg to vm0");
     if !hvc_send_msg_to_vm(0, &HvcGuestMsg::Manage(msg)) {
-        println!("vmm_load_image_from_mvm: failed to notify VM 0");
+        error!("vmm_load_image_from_mvm: failed to notify VM 0");
     }
 }
 
@@ -339,9 +364,10 @@ pub fn get_vm_id(id_ipa: usize) -> bool {
     let vm = active_vm().unwrap();
     let id_pa = vm_ipa2pa(vm.clone(), id_ipa);
     if id_pa == 0 {
-        println!("illegal id_pa {:x}", id_pa);
+        error!("illegal id_pa {:x}", id_pa);
         return false;
     }
+    // SAFETY: The 'id_pa' is a valid address checked by shyper.ko
     unsafe {
         *(id_pa as *mut usize) = vm.id();
     }
@@ -367,14 +393,15 @@ struct VMInfoList {
  * @param[in] vm_info_ipa : vm info list ipa.
  */
 pub fn vmm_list_vm(vm_info_ipa: usize) -> Result<usize, ()> {
-    #[cfg(feature = "update")]
-    println!("Rust-Shyper list vm");
     let vm_info_pa = vm_ipa2pa(active_vm().unwrap(), vm_info_ipa);
     if vm_info_pa == 0 {
-        println!("illegal vm_info_ipa {:x}", vm_info_ipa);
+        error!("illegal vm_info_ipa {:x}", vm_info_ipa);
         return Err(());
     }
 
+    // SAFETY:
+    // The 'vm_info_pa' is a valid address checked by shyper.ko
+    // And we have checked the vm_info_pa by vm_ipa2pa to make sure it is in range of vm memory.
     let vm_info = unsafe { &mut *(vm_info_pa as *mut VMInfoList) };
 
     // Get VM num.
@@ -384,7 +411,7 @@ pub fn vmm_list_vm(vm_info_ipa: usize) -> Result<usize, ()> {
         let vm_cfg = match vm_cfg_entry(*vmid) {
             Some(vm_cfg) => vm_cfg,
             None => {
-                println!("Failed to get VM config entry for VM[{}]", *vmid);
+                error!("Failed to get VM config entry for VM[{}]", *vmid);
                 continue;
             }
         };
@@ -398,11 +425,16 @@ pub fn vmm_list_vm(vm_info_ipa: usize) -> Result<usize, ()> {
         vm_info.info_list[idx].vm_state = vm_state as u32;
 
         let vm_name_u8: Vec<u8> = vm_cfg.vm_name().as_bytes().to_vec();
-        memcpy_safe(
-            vm_info.info_list[idx].vm_name.as_ptr() as *const _ as *const u8,
-            vm_name_u8.as_ptr(),
-            NAME_MAX_LEN,
-        );
+        // SAFETY:
+        // We have both read and write access to the src and dst memory regions.
+        // The copied size will not exceed the memory region.
+        unsafe {
+            memcpy(
+                vm_info.info_list[idx].vm_name.as_ptr(),
+                vm_name_u8.as_ptr(),
+                NAME_MAX_LEN,
+            );
+        }
         vm_info.info_list[idx].vm_name[vm_name_u8.len()] = 0;
     }
     Ok(0)
@@ -418,7 +450,7 @@ pub fn vmm_ipi_handler(msg: &IpiMessage) {
                 vmm_reboot();
             }
             VmmEvent::VmmAssignCpu => {
-                println!(
+                info!(
                     "vmm_ipi_handler: core {} receive assign vcpu request for vm[{}]",
                     current_cpu().id,
                     vmm.vmid
@@ -426,7 +458,7 @@ pub fn vmm_ipi_handler(msg: &IpiMessage) {
                 vmm_cpu_assign_vcpu(vmm.vmid);
             }
             VmmEvent::VmmRemoveCpu => {
-                println!(
+                info!(
                     "vmm_ipi_handler: core {} remove vcpu for vm[{}]",
                     current_cpu().id,
                     vmm.vmid
@@ -438,8 +470,7 @@ pub fn vmm_ipi_handler(msg: &IpiMessage) {
             }
         },
         _ => {
-            println!("vmm_ipi_handler: illegal ipi type");
-            return;
+            error!("vmm_ipi_handler: illegal ipi type");
         }
     }
 }

@@ -8,12 +8,15 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Panic handler
+
 use core::panic::PanicInfo;
 
 #[cfg_attr(target_os = "none", panic_handler)]
-#[no_mangle]
 fn panic(info: &PanicInfo) -> ! {
     println!("[Panic]");
     println!("{}", info);
-    loop {}
+    loop {
+        core::hint::spin_loop();
+    }
 }

@@ -8,6 +8,7 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-pub use self::platform::*;
+//! Raspberry Pi 4 platform configuration
 
+pub use self::platform::*;
 mod platform;

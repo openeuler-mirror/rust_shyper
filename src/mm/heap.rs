@@ -21,11 +21,18 @@ struct HeapRegion([u8; HEAP_SIZE]);
 static mut HEAP_REGION: HeapRegion = HeapRegion([0; HEAP_SIZE]);
 
 #[global_allocator]
+/// Global heap allocator
 pub static HEAP_ALLOCATOR: LockedHeap<32> = LockedHeap::empty();
 
+/// Initialize heap allocator
 pub fn heap_init() {
-    println!("init buddy system");
+    // SAFEFY:
+    // HEAP_REGION is aligned and HEAP_SIZE is a multiple of PAGE_SIZE
     unsafe {
+        println!(
+            "init buddy system, heap start from {:x}",
+            HEAP_REGION.0.as_mut_ptr() as usize
+        );
         HEAP_ALLOCATOR
             .lock()
             .init(HEAP_REGION.0.as_mut_ptr() as usize, HEAP_SIZE);

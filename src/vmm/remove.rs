@@ -10,14 +10,14 @@
 
 use crate::arch::{GIC_SGIS_NUM, gicc_clear_current_irq};
 use crate::config::vm_cfg_remove_vm_entry;
-use crate::device::emu_remove_dev;
+use crate::device::{emu_remove_dev, EmuDeviceType, meta};
 use crate::kernel::{
     current_cpu, interrupt_vm_remove, ipi_send_msg, IpiInnerMsg, IpiType, IpiVmmMsg, mem_vm_region_free,
-    remove_async_used_info, remove_vm, remove_vm_async_task, vcpu_remove, vm, Vm, Scheduler, cpu_idle,
+    remove_async_used_info, remove_vm, remove_vm_async_task, vm, Vm, Scheduler, cpu_idle,
 };
 use crate::kernel::vm_if_reset;
 use crate::vmm::VmmEvent;
-use crate::lib::memset_safe;
+use crate::utils::memset;
 
 pub fn vmm_remove_vm(vm_id: usize) {
     if vm_id == 0 {
@@ -27,7 +27,7 @@ pub fn vmm_remove_vm(vm_id: usize) {
 
     let vm = match vm(vm_id) {
         None => {
-            println!("vmm_remove_vm: vm[{}] not exist", vm_id);
+            error!("vmm_remove_vm: vm[{}] not exist", vm_id);
             return;
         }
         Some(vm) => vm,
@@ -39,7 +39,11 @@ pub fn vmm_remove_vm(vm_id: usize) {
     vm_if_reset(vm_id);
     // free mem
     for idx in 0..vm.region_num() {
-        memset_safe(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        // SAFETY:
+        // The 'vm_pa_region' is writable for the Hypervisor in EL2.
+        unsafe {
+            memset(vm.pa_start(idx) as *mut u8, 0, vm.pa_length(idx));
+        }
         mem_vm_region_free(vm.pa_start(idx), vm.pa_length(idx));
     }
     // emu dev
@@ -55,7 +59,8 @@ pub fn vmm_remove_vm(vm_id: usize) {
     // remove vm cfg
     vm_cfg_remove_vm_entry(vm_id);
     // remove vm unilib
-    crate::lib::unilib::unilib_fs_remove(vm_id);
+    #[cfg(feature = "unilib")]
+    crate::utils::unilib::unilib_fs_remove(vm_id);
     info!("remove vm[{}] successfully", vm_id);
 }
 
@@ -79,8 +84,6 @@ pub fn vmm_cpu_remove_vcpu(vmid: usize) {
 fn vmm_remove_vcpu(vm: Vm) {
     for idx in 0..vm.cpu_num() {
         let vcpu = vm.vcpu(idx).unwrap();
-        // remove vcpu from VCPU_LIST
-        vcpu_remove(vcpu.clone());
         if vcpu.phys_id() == current_cpu().id {
             vmm_cpu_remove_vcpu(vm.id());
         } else {
@@ -102,6 +105,9 @@ fn vmm_remove_emulated_device(vm: Vm) {
         if !emu_dev.emu_type.removable() {
             warn!("vmm_remove_emulated_device: cannot remove device {}", emu_dev.emu_type);
             return;
+        }
+        if emu_dev.emu_type == EmuDeviceType::EmuDeviceTMeta {
+            meta::unregister(idx);
         }
         emu_remove_dev(vm.id(), idx, emu_dev.base_ipa, emu_dev.length);
         // println!(

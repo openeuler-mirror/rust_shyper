@@ -8,6 +8,8 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Virtual machine monitor module, including VM manager and VM initialization.
+
 pub use self::init::*;
 pub use self::manager::*;
 pub use self::remove::*;

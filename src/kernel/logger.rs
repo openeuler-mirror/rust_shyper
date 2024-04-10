@@ -32,7 +32,13 @@ impl log::Log for SimpleLogger {
                 Level::Debug => "[D]",
                 Level::Trace => "[T]",
             };
-            println!("{}[{}] {}", level, record.target(), record.args());
+            println!(
+                "{}>{}[{}] {}",
+                level,
+                crate::kernel::current_cpu().id,
+                record.target(),
+                record.args()
+            );
         }
     }
 
@@ -41,6 +47,7 @@ impl log::Log for SimpleLogger {
 
 static LOGGER: SimpleLogger = SimpleLogger;
 
+/// Initialize global logger, setting log level to `Trace`.
 pub fn logger_init() -> Result<(), SetLoggerError> {
     log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace))
 }

@@ -9,8 +9,10 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::vec::Vec;
-use crate::kernel::{Vcpu, Scheduler, SchedulerUpdate, current_cpu, VcpuState, timer_enable, vm};
+use crate::kernel::{Vcpu, Scheduler, SchedulerUpdate, current_cpu, VcpuState, timer_enable, vm, run_idle_thread};
 
+#[derive(Default)]
+/// Round-Robin Scheduler struct
 pub struct SchedulerRR {
     queue: Vec<Vcpu>,
     active_idx: usize,
@@ -27,19 +29,10 @@ impl SchedulerRR {
     }
 }
 
-impl Default for SchedulerRR {
-    fn default() -> Self {
-        Self {
-            queue: Default::default(),
-            active_idx: Default::default(),
-            base_slice: Default::default(),
-        }
-    }
-}
-
 impl Scheduler for SchedulerRR {
     fn init(&mut self) {}
 
+    /// Select the next vcpu object in the round-robin queue
     fn next(&mut self) -> Option<Vcpu> {
         let queue = &self.queue;
         let len = queue.len();
@@ -47,7 +40,7 @@ impl Scheduler for SchedulerRR {
             let idx = (self.active_idx + i) % len;
             match queue.get(idx) {
                 Some(vcpu) => match vcpu.state() {
-                    VcpuState::VcpuInv => {}
+                    VcpuState::Invalid => {}
                     _ => {
                         self.active_idx = idx;
                         return Some(vcpu.clone());
@@ -59,11 +52,25 @@ impl Scheduler for SchedulerRR {
         None
     }
 
+    /// Schedule to the next vcpu object
     fn do_schedule(&mut self) {
-        let next_vcpu = self.next().unwrap();
-        current_cpu().schedule_to(next_vcpu);
+        // let next_vcpu = self.next().unwrap();
+        // current_cpu().schedule_to(next_vcpu);
+        if let Some(next_vcpu) = self.next() {
+            current_cpu().schedule_to(next_vcpu);
+        } else {
+            match current_cpu().ctx_ptr() {
+                None => {
+                    error!("run_idle_thread: cpu{} ctx is NULL", current_cpu().id);
+                }
+                Some(_ctx) => {
+                    run_idle_thread();
+                }
+            }
+        }
     }
 
+    /// put vcpu into sleep, and remove it from scheduler
     fn sleep(&mut self, vcpu: Vcpu) {
         // println!(
         //     "SchedulerRR: Core {} sleep VM[{}] vcpu {}",
@@ -74,22 +81,22 @@ impl Scheduler for SchedulerRR {
         let mut need_schedule = false;
         {
             let queue = &mut self.queue;
-            match queue.iter().position(|x| x.vm_id() == vcpu.vm_id()) {
-                Some(idx) => {
-                    queue.remove(idx);
-                    if idx < self.active_idx {
+            if let Some(idx) = queue.iter().position(|x| x.vm_id() == vcpu.vm_id()) {
+                queue.remove(idx);
+                match idx.cmp(&self.active_idx) {
+                    core::cmp::Ordering::Less => {
                         self.active_idx -= 1;
-                    } else if idx == self.active_idx {
+                    }
+                    core::cmp::Ordering::Equal => {
                         // cpu.active_vcpu need remove
                         current_cpu().set_active_vcpu(None);
-                        if !queue.is_empty() {
-                            need_schedule = true;
-                        }
+                        need_schedule = true;
                     }
+                    _ => {}
                 }
-                None => {}
             }
         }
+        vcpu.set_state(VcpuState::Sleep);
         if self.queue.len() <= 1 {
             timer_enable(false);
         }
@@ -98,9 +105,10 @@ impl Scheduler for SchedulerRR {
         }
     }
 
+    /// wakeup a vcpu, meaning that the vcpu is ready to be scheduled
     fn wakeup(&mut self, vcpu: Vcpu) {
         let queue = &mut self.queue;
-        vcpu.set_state(VcpuState::VcpuPend);
+        vcpu.set_state(VcpuState::Ready);
         queue.push(vcpu);
         if queue.len() > 1 {
             timer_enable(true);
@@ -110,6 +118,7 @@ impl Scheduler for SchedulerRR {
         }
     }
 
+    /// yield to another cpu, only used when vcpu is new added and want to be excuted immediately
     fn yield_to(&mut self, vcpu: Vcpu) {
         let queue = &mut self.queue;
         queue.push(vcpu.clone());
@@ -121,7 +130,6 @@ impl Scheduler for SchedulerRR {
     }
 }
 
-// #[cfg(feature = "update")]
 impl SchedulerUpdate for SchedulerRR {
     fn update(&self) -> Self {
         let src_rr = self;
@@ -136,22 +144,11 @@ impl SchedulerUpdate for SchedulerRR {
         new_rr.base_slice = src_rr.base_slice;
 
         let active_vcpu = if src_rr.active_idx < src_rr.queue.len() {
-            println!(
-                "Core[{}] is some, active_idx {}, addr {:x}",
-                current_cpu().id,
-                src_rr.active_idx,
-                unsafe { *(&new_rr.queue[src_rr.active_idx].clone() as *const _ as *const usize) }
-            );
             Some(new_rr.queue[src_rr.active_idx].clone())
         } else {
-            println!("Core[{}] is none", current_cpu().id);
+            debug!("Core[{}] is none", current_cpu().id);
             None
         };
-        if active_vcpu.is_some() {
-            println!("core[{}] update active_vcpu addr {:x}", current_cpu().id, unsafe {
-                *(&active_vcpu.clone().unwrap() as *const _ as *const usize)
-            });
-        }
         current_cpu().set_active_vcpu(active_vcpu);
         new_rr
     }

@@ -22,7 +22,7 @@ use crate::device::EmuContext;
 use crate::kernel::VM_NUM_MAX;
 use crate::kernel::Vm;
 use crate::kernel::{active_vm, active_vm_id, current_cpu};
-use crate::lib::{bit_extract, FlexBitmap};
+use crate::utils::{bit_extract, FlexBitmap, device_ref::DeviceRef};
 
 pub struct SmmuDesc {
     pub base: usize,
@@ -67,7 +67,8 @@ const SMMUV2_TCR_TG0_4K: usize = 0;
 const SMMUV2_TCR_IRGN0_WB_RA_WA: usize = 1 << 8;
 const SMMUV2_TCR_ORGN0_WB_RA_WA: usize = 1 << 10;
 const SMMUV2_TCR_SH0_IS: usize = 0x3 << 12;
-const SMMUV2_TCR_SL0_1: usize = 0x1 << 6;
+const SMMUV2_TCR_SL0_12: usize = 0x1 << 6;
+const SMMUV2_TCR_SL0_01: usize = 0x2 << 6;
 
 const SMMUV2_SCTLR_CFIE: usize = 1 << 6;
 const SMMUV2_SCTLR_CFRE: usize = 1 << 5;
@@ -96,7 +97,7 @@ macro_rules! bit_mask {
 
 register_structs! {
     #[allow(non_snake_case)]
-    pub SmmuGlobalRegisterSpace0 {
+    SmmuGlbRS0  {
         (0x0000 => CR0: ReadWrite<u32>),
         (0x0004 => SCR1: ReadWrite<u32>),
         (0x0008 => CR2: ReadWrite<u32>),
@@ -181,31 +182,12 @@ register_structs! {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct SmmuGlbRS0 {
-    base_addr: usize,
-}
-
-impl core::ops::Deref for SmmuGlbRS0 {
-    type Target = SmmuGlobalRegisterSpace0;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr() }
-    }
-}
-
-impl SmmuGlbRS0 {
-    const fn new(base_addr: usize) -> SmmuGlbRS0 {
-        SmmuGlbRS0 { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const SmmuGlobalRegisterSpace0 {
-        self.base_addr as *const SmmuGlobalRegisterSpace0
-    }
-}
+// SAFETY: SmmuGlbRS0 is a MMIO device.
+unsafe impl Sync for SmmuGlbRS0 {}
 
 register_structs! {
     #[allow(non_snake_case)]
-    pub SmmuGlobalRegisterSpace1 {
+    pub SmmuGlbRS1 {
         (0x0000 => CBAR: [ReadWrite<u32>; 128]),
         (0x0200 => reserved_0),
         (0x0400 => CBFRSYNRA: [ReadWrite<u32>; 128]),
@@ -216,31 +198,12 @@ register_structs! {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct SmmuGlbRS1 {
-    base_addr: usize,
-}
-
-impl core::ops::Deref for SmmuGlbRS1 {
-    type Target = SmmuGlobalRegisterSpace1;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr() }
-    }
-}
-
-impl SmmuGlbRS1 {
-    const fn new(base_addr: usize) -> SmmuGlbRS1 {
-        SmmuGlbRS1 { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const SmmuGlobalRegisterSpace1 {
-        self.base_addr as *const SmmuGlobalRegisterSpace1
-    }
-}
+//SAFETY: SmmuGlbRS1 is a MMIO device.
+unsafe impl Sync for SmmuGlbRS1 {}
 
 register_structs! {
     #[allow(non_snake_case)]
-    pub SmmuStage2TranslationContextBankAddressSpace {
+    pub SmmuContextBank {
         (0x0000 => SCTLR: ReadWrite<u32>),
         (0x0004 => ACTLR: ReadWrite<u32>),
         (0x0008 => RESUME: WriteOnly<u32>),
@@ -262,9 +225,9 @@ register_structs! {
         (0x07F0 => TLBSYNC: WriteOnly<u32>),
         (0x07F4 => TLBSTATUS: ReadOnly<u32>),
         (0x07F8 => reserved_5),
-        (0x0e00 => PMEVCNTRm: ReadWrite<u32>),   // what about 0xe04~0xe38
+        (0x0e00 => PMEVCNTR: [ReadWrite<u32>; 15]),
         (0x0e3c => reserved_6),
-        (0x0e80 => PMEVTYPERm: ReadWrite<u32>),   // what about 0xe84~0xeB8
+        (0x0e80 => PMEVTYPER: [ReadWrite<u32>; 15]),
         (0x0ebc => reserved_7),
         (0x0f00 => PMCFGR: ReadOnly<u32>),
         (0x0f04 => PMCR: ReadWrite<u32>),
@@ -286,59 +249,55 @@ register_structs! {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct SmmuContextBank {
-    base_addr: usize,
-}
+// SAFETY: SmmuContextBank is a MMIO device.
+unsafe impl Sync for SmmuContextBank {}
 
-impl core::ops::Deref for SmmuContextBank {
-    type Target = SmmuStage2TranslationContextBankAddressSpace;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr() }
-    }
-}
+struct SmmuV2 {
+    glb_rs0: &'static SmmuGlbRS0,
+    glb_rs1: &'static SmmuGlbRS1,
+    context_s2_idx: usize,
+    context_bank: Vec<DeviceRef<'static, SmmuContextBank>>,
+    context_alloc_bitmap: Option<FlexBitmap>,
 
-impl SmmuContextBank {
-    pub const fn new(base_addr: usize) -> SmmuContextBank {
-        SmmuContextBank { base_addr }
-    }
-
-    pub fn ptr(&self) -> *const SmmuStage2TranslationContextBankAddressSpace {
-        self.base_addr as *const SmmuStage2TranslationContextBankAddressSpace
-    }
-}
-
-pub struct SmmuV2 {
-    pub glb_rs0: Option<SmmuGlbRS0>,
-    pub glb_rs1: Option<SmmuGlbRS1>,
-    pub context_s2_idx: usize,
-    pub context_bank: Vec<SmmuContextBank>,
-    pub context_alloc_bitmap: Option<FlexBitmap>,
-
-    pub smr_num: usize,
-    pub smr_alloc_bitmap: Option<FlexBitmap>,
-    pub group_alloc_bitmap: Option<FlexBitmap>,
+    smr_num: usize,
+    smr_alloc_bitmap: Option<FlexBitmap>,
+    group_alloc_bitmap: Option<FlexBitmap>,
 }
 
 impl SmmuV2 {
-    pub const fn new() -> SmmuV2 {
-        SmmuV2 {
-            glb_rs0: None,
-            glb_rs1: None,
+    fn new() -> Self {
+        let smmu_base_addr = PLAT_DESC.arch_desc.smmu_desc.base;
+
+        // SAFETY: The reference of glb_rs0 is a MMIO address
+        let glb_rs0 = unsafe { &*(smmu_base_addr as *const SmmuGlbRS0) };
+        /* IDR1 */
+        let idr1 = glb_rs0.IDR1.get() as usize;
+        let page_size = if (idr1 & SMMUV2_IDR1_PAGESIZE_BIT) == 0 {
+            0x1000
+        } else {
+            0x10000
+        };
+
+        // SAFETY: The reference of glb_rs1 is a MMIO address
+        let glb_rs1 = unsafe { &*((smmu_base_addr + page_size) as *const SmmuGlbRS1) };
+        let mut r = Self {
+            glb_rs0,
+            glb_rs1,
             context_s2_idx: 0,
             context_bank: vec![],
             context_alloc_bitmap: None,
             smr_num: 0,
             smr_alloc_bitmap: None,
             group_alloc_bitmap: None,
-        }
+        };
+        r.init();
+        r
     }
 
-    pub fn init(&mut self) {
-        let smmu_base_addr = PLAT_DESC.arch_desc.smmu_desc.base + 0x8_0000_0000;
+    fn init(&mut self) {
+        let smmu_base_addr = PLAT_DESC.arch_desc.smmu_desc.base;
 
-        self.glb_rs0 = Some(SmmuGlbRS0::new(smmu_base_addr));
-        let rs0 = self.glb_rs0.as_ref().unwrap();
+        let rs0 = self.glb_rs0;
         /* IDR1 */
         let idr1 = rs0.IDR1.get() as usize;
         let page_size = if (idr1 & SMMUV2_IDR1_PAGESIZE_BIT) == 0 {
@@ -346,14 +305,13 @@ impl SmmuV2 {
         } else {
             0x10000
         };
-
-        self.glb_rs1 = Some(SmmuGlbRS1::new(smmu_base_addr + page_size));
         let num_pages = 1 << (1 + bit_extract(idr1, SMMUV2_IDR1_NUMPAGEDXB_OFF, SMMUV2_IDR1_NUMPAGEDXB_LEN));
         let context_bank_num = bit_extract(idr1, SMMUV2_IDR1_NUMCB_OFF, SMMUV2_IDR1_NUMCB_LEN);
         let context_base = smmu_base_addr + num_pages * page_size;
         for i in 0..context_bank_num {
+            // SAFETY: The reference of Context bank is a MMIO address
             self.context_bank
-                .push(SmmuContextBank::new(context_base + page_size * i));
+                .push(unsafe { DeviceRef::new((context_base + page_size * i) as *const _) });
         }
         let stage2_context_bank_num = bit_extract(idr1, SMMUV2_IDR1_NUMS2CB_OFF, SMMUV2_IDR1_NUMS2CB_LEN);
         // TODO: not a good way to seperate context bank into 2 parts,
@@ -374,7 +332,7 @@ impl SmmuV2 {
         rs0.GFSR.set(rs0.GFSR.get());
         rs0.NSGFSR.set(rs0.NSGFSR.get());
 
-        println!(
+        info!(
             concat!(
                 "SMMU info:\n",
                 "  page size {:#x}, num pages {}, context base {:#x}\n",
@@ -402,8 +360,8 @@ impl SmmuV2 {
         rs0.CR0.set(cr0 as u32);
     }
 
-    pub fn check_features(&self) {
-        let glb_rs0 = self.glb_rs0.as_ref().unwrap();
+    fn check_features(&self) {
+        let glb_rs0 = self.glb_rs0;
         let version = bit_extract(glb_rs0.IDR7.get() as usize, 4, 4);
         if version != 2 {
             panic!("smmu unspoorted version: {}", version);
@@ -411,10 +369,8 @@ impl SmmuV2 {
 
         if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_S2TS_BIT == 0 {
             panic!("smmuv2 does not support 2nd stage translation");
-        } else {
-            if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_NTS_BIT == 0 {
-                panic!("smmuv2 does not support Nested Translation (Stage 1 followed by stage 2 translation)");
-            }
+        } else if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_NTS_BIT == 0 {
+            panic!("smmuv2 does not support Nested Translation (Stage 1 followed by stage 2 translation)");
         }
 
         if glb_rs0.IDR0.get() as usize & SMMUV2_IDR0_SMS_BIT == 0 {
@@ -459,43 +415,35 @@ impl SmmuV2 {
 
     #[inline]
     fn smr_get_context(&self, smr: usize) -> usize {
-        bit_extract(
-            self.glb_rs0.as_ref().unwrap().S2CR[smr].get() as usize,
-            S2CR_CBNDX_OFF,
-            S2CR_CBNDX_LEN,
-        )
+        bit_extract(self.glb_rs0.S2CR[smr].get() as usize, S2CR_CBNDX_OFF, S2CR_CBNDX_LEN)
     }
 
     #[inline]
     fn smr_get_id(&self, smr: usize) -> u16 {
-        bit_extract(
-            self.glb_rs0.as_ref().unwrap().SMR[smr].get() as usize,
-            SMMU_SMR_ID_OFF,
-            SMMU_SMR_ID_LEN,
-        ) as u16
+        bit_extract(self.glb_rs0.SMR[smr].get() as usize, SMMU_SMR_ID_OFF, SMMU_SMR_ID_LEN) as u16
     }
 
     #[inline]
     fn smr_get_mask(&self, smr: usize) -> u16 {
         bit_extract(
-            self.glb_rs0.as_ref().unwrap().SMR[smr].get() as usize,
+            self.glb_rs0.SMR[smr].get() as usize,
             SMMU_SMR_MASK_OFF,
             SMMU_SMR_MASK_LEN,
         ) as u16
     }
 
-    pub fn alloc_smr(&mut self) -> Option<usize> {
-        let alloc_bitmap = self.smr_alloc_bitmap.as_mut().unwrap();
-        for i in 0..alloc_bitmap.vec_len() * 8 {
+    fn alloc_smr(&mut self) -> Option<usize> {
+        let alloc_bitmap = self.smr_alloc_bitmap.as_ref().unwrap();
+        for i in 0..alloc_bitmap.vec_len() {
             if alloc_bitmap.get(i) == 0 {
-                alloc_bitmap.set(i, true);
+                self.smr_alloc_bitmap.as_mut().unwrap().set(i, true);
                 return Some(i);
             }
         }
         None
     }
 
-    pub fn compatible_smr_exists(&mut self, mask: u16, id: u16, context_id: usize, group: bool) -> bool {
+    fn compatible_smr_exists(&mut self, mask: u16, id: u16, context_id: usize, group: bool) -> bool {
         for smr in 0..self.smr_num {
             let bit = self.smr_alloc_bitmap.as_ref().unwrap().get(smr);
             if bit == 0 {
@@ -520,17 +468,18 @@ impl SmmuV2 {
                 }
             }
         }
+        debug!("now, no compatible!");
         false
     }
 
-    pub fn write_smr(&mut self, smr: usize, mask: u16, id: u16, group: bool) {
+    fn write_smr(&mut self, smr: usize, mask: u16, id: u16, group: bool) {
         if self.smr_alloc_bitmap.as_ref().unwrap().get(smr) == 0 {
             panic!("smmu: trying to write unallocated smr {}", smr);
         } else {
             let mut val: usize = (mask as usize) << SMMU_SMR_MASK_OFF;
             val |= (id & bit_mask!(SMMU_SMR_ID_OFF, SMMU_SMR_ID_LEN)) as usize;
             val |= SMMUV2_SMR_VALID;
-            self.glb_rs0.as_ref().unwrap().SMR[smr].set(val as u32);
+            self.glb_rs0.SMR[smr].set(val as u32);
             if group {
                 self.group_alloc_bitmap.as_mut().unwrap().set(smr, true);
             }
@@ -538,20 +487,20 @@ impl SmmuV2 {
     }
 
     // Stream-to-Context
-    pub fn write_s2c(&mut self, smr: usize, context_id: usize) {
+    fn write_s2c(&mut self, smr: usize, context_id: usize) {
         if self.smr_alloc_bitmap.as_ref().unwrap().get(smr) == 0 {
             panic!("smmu: trying to write unallocated s2c {}", smr);
         } else {
-            let mut s2cr: usize = self.glb_rs0.as_ref().unwrap().S2CR[smr].get() as usize;
+            let mut s2cr: usize = self.glb_rs0.S2CR[smr].get() as usize;
             s2cr &= bit_mask!(S2CR_IMPL_OFF, S2CR_IMPL_LEN);
             s2cr |= S2CR_DFLT;
             s2cr |= context_id & bit_mask!(S2CR_CBNDX_OFF, S2CR_CBNDX_LEN);
 
-            self.glb_rs0.as_ref().unwrap().S2CR[smr].set(s2cr as u32);
+            self.glb_rs0.S2CR[smr].set(s2cr as u32);
         }
     }
 
-    pub fn alloc_ctxbnk(&mut self) -> Option<usize> {
+    fn alloc_ctxbnk(&mut self) -> Option<usize> {
         let bitmap = match &mut self.context_alloc_bitmap {
             None => panic!("smmu_alloc_ctxbnk: smmu v2 context_alloc_bitmap not init"),
             Some(bitmap) => bitmap,
@@ -566,24 +515,38 @@ impl SmmuV2 {
         None
     }
 
-    pub fn write_ctxbnk(&mut self, context_id: usize, root_pt: usize, vm_id: usize) {
+    fn write_ctxbnk(&mut self, context_id: usize, root_pt: usize, vm_id: usize) {
         if self.context_alloc_bitmap.is_none() || self.context_alloc_bitmap.as_ref().unwrap().get(context_id) == 0 {
             panic!("smmu ctx {} not allocated", context_id);
         }
-        let rs1 = self.glb_rs1.as_ref().unwrap();
+        let rs1 = self.glb_rs1;
         // Set type as stage 2 only.
         rs1.CBAR[context_id].set((vm_id as u32) & 0xFF);
         rs1.CBA2R[context_id].set(1); // CBA2R_RW64_64BIT
 
-        let ps = 1; // PASize, 36-bit
-        let t0sz = 28;
-        let tcr = ((ps & 0x7) << SMMUV2_TCR_PS_OFF)
-            | (t0sz & 0x1F)
-            | SMMUV2_TCR_TG0_4K
-            | SMMUV2_TCR_ORGN0_WB_RA_WA
-            | SMMUV2_TCR_IRGN0_WB_RA_WA
-            | SMMUV2_TCR_SH0_IS
-            | SMMUV2_TCR_SL0_1;
+        let ps = if cfg!(feature = "lvl4") {
+            0b100 // PASize, 44-bit
+        } else {
+            1 // PASize, 36-bit
+        };
+        let t0sz = if cfg!(feature = "lvl4") { 64 - 44 } else { 28 };
+        let tcr = if cfg!(feature = "lvl4") {
+            ((ps & 0x7) << SMMUV2_TCR_PS_OFF)
+                | (t0sz & 0x1F)
+                | SMMUV2_TCR_TG0_4K
+                | SMMUV2_TCR_ORGN0_WB_RA_WA
+                | SMMUV2_TCR_IRGN0_WB_RA_WA
+                | SMMUV2_TCR_SH0_IS
+                | SMMUV2_TCR_SL0_01
+        } else {
+            ((ps & 0x7) << SMMUV2_TCR_PS_OFF)
+                | (t0sz & 0x1F)
+                | SMMUV2_TCR_TG0_4K
+                | SMMUV2_TCR_ORGN0_WB_RA_WA
+                | SMMUV2_TCR_IRGN0_WB_RA_WA
+                | SMMUV2_TCR_SH0_IS
+                | SMMUV2_TCR_SL0_12
+        };
         self.context_bank[context_id].TCR.set(tcr as u32);
         self.context_bank[context_id]
             .TTBR0
@@ -596,21 +559,20 @@ impl SmmuV2 {
             root_pt
         );
         let mut sctlr = self.context_bank[context_id].SCTLR.get() as usize;
-        sctlr = (sctlr) & (0xF << 28 | 0x1 << 20 | 0xF << 9 | 0x1 << 11);
+        sctlr &= 0xF << 28 | 0x1 << 20 | 0xF << 9 | 0x1 << 11;
         sctlr |= SMMUV2_SCTLR_CFRE | SMMUV2_SCTLR_CFIE | SMMUV2_SCTLR_M;
         self.context_bank[context_id].SCTLR.set(sctlr as u32);
     }
 }
 
-pub static SMMU_V2: Mutex<SmmuV2> = Mutex::new(SmmuV2::new());
+static SMMU_V2: spin::Once<Mutex<SmmuV2>> = spin::Once::new();
 
 pub fn smmu_init() {
-    let mut smmu = SMMU_V2.lock();
-    smmu.init();
+    SMMU_V2.call_once(|| Mutex::new(SmmuV2::new()));
 }
 
 pub fn smmu_vm_init(vm: Vm) -> bool {
-    let mut smmu_v2 = SMMU_V2.lock();
+    let mut smmu_v2 = SMMU_V2.get().unwrap().lock();
     match smmu_v2.alloc_ctxbnk() {
         Some(context_id) => {
             smmu_v2.write_ctxbnk(context_id, vm.pt_dir(), vm.id());
@@ -622,7 +584,7 @@ pub fn smmu_vm_init(vm: Vm) -> bool {
 }
 
 pub fn smmu_add_device(context_id: usize, stream_id: usize) -> bool {
-    let mut smmu_v2 = SMMU_V2.lock();
+    let mut smmu_v2 = SMMU_V2.get().unwrap().lock();
     let prep_id = (stream_id & bit_mask!(SMMU_SMR_ID_OFF, SMMU_SMR_ID_LEN)) as u16;
 
     if !smmu_v2.compatible_smr_exists(0, prep_id, context_id, false) {
@@ -641,10 +603,10 @@ pub fn smmu_add_device(context_id: usize, stream_id: usize) -> bool {
 }
 
 fn emu_smmu_revise_cbar(emu_ctx: &EmuContext) {
-    let smmu_v2 = SMMU_V2.lock();
+    let smmu_v2 = SMMU_V2.get().unwrap().lock();
 
-    let cbar_addr = smmu_v2.glb_rs1.as_ref().unwrap().CBAR.as_ptr() as usize;
-    let context_id = (emu_ctx.address - (cbar_addr - 0x8_0000_0000)) / size_of::<u32>();
+    let cbar_addr = smmu_v2.glb_rs1.CBAR.as_ptr() as usize;
+    let context_id = (emu_ctx.address - cbar_addr) / size_of::<u32>();
     let vm_context_id = active_vm().unwrap().iommu_ctx_id();
     debug!(
         "emu_smmu_revise_cbar: vm {} access context id {}, vm context is {}",
@@ -658,44 +620,44 @@ fn emu_smmu_revise_cbar(emu_ctx: &EmuContext) {
     // The SMMUv2 manual suggests that we should use identical VMID for both stages' CBAR
     cbar |= (vm_context_id & 0xFF) << 8;
     cbar |= active_vm_id() & 0xFF;
-    smmu_v2.glb_rs1.as_ref().unwrap().CBAR[context_id].set(cbar as u32);
+    smmu_v2.glb_rs1.CBAR[context_id].set(cbar as u32);
 }
 
 pub fn emu_smmu_handler(_emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
     let address = emu_ctx.address;
-    let smmu_v2 = SMMU_V2.lock();
+    let smmu_v2 = SMMU_V2.get().unwrap().lock();
 
     let mut permit_write = true;
-    let cbar = &smmu_v2.glb_rs1.as_ref().unwrap().CBAR;
-    if cbar.as_ptr_range().contains(&((address + 0x8_0000_0000) as *const _)) && emu_ctx.write {
+    let cbar = &smmu_v2.glb_rs1.CBAR;
+    if cbar.as_ptr_range().contains(&(address as *const _)) && emu_ctx.write {
         drop(smmu_v2);
         emu_smmu_revise_cbar(emu_ctx);
         return true;
-    } else if address + 0x8_0000_0000 >= smmu_v2.context_bank[smmu_v2.context_s2_idx].base_addr {
+    } else if address >= smmu_v2.context_bank[smmu_v2.context_s2_idx].addr() {
         // Forbid writing hypervisor's context banks.
         permit_write = false;
     }
 
     if !emu_ctx.write {
         let val = if emu_ctx.width > 4 {
-            unsafe { ptr::read_volatile((address + 0x8_0000_0000) as *const usize) }
+            unsafe { ptr::read_volatile(address as *const usize) }
         } else {
-            unsafe { ptr::read_volatile((address + 0x8_0000_0000) as *const u32) as usize }
+            unsafe { ptr::read_volatile(address as *const u32) as usize }
         };
         current_cpu().set_gpr(emu_ctx.reg, val);
     } else {
         let val = current_cpu().get_gpr(emu_ctx.reg);
         if permit_write {
             if emu_ctx.width > 4 {
-                unsafe { ptr::write_volatile((address + 0x8_0000_0000) as *mut usize, val) };
+                unsafe { ptr::write_volatile(address as *mut usize, val) };
             } else {
-                unsafe { ptr::write_volatile((address + 0x8_0000_0000) as *mut u32, val as u32) };
+                unsafe { ptr::write_volatile(address as *mut u32, val as u32) };
             };
         } else {
             info!(
                 "emu_smmu_handler: vm {} is not allowed to access context[{}]",
                 active_vm_id(),
-                (address - (smmu_v2.context_bank[0].base_addr as usize - 0x8_0000_0000)) / 0x10000,
+                (address - smmu_v2.context_bank.first().unwrap().addr()) / 0x10000,
             );
         }
     }

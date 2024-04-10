@@ -8,6 +8,9 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! The rust-shyper hypervisor kernel code.
+//!
+
 pub use self::async_task::*;
 pub use self::cpu::*;
 pub use self::hvc::*;
@@ -15,11 +18,8 @@ pub use self::interrupt::*;
 pub use self::iommu::*;
 pub use self::ipi::*;
 pub use self::ivc::*;
-pub use self::live_update::*;
 pub use self::logger::*;
 pub use self::mem::*;
-pub use self::mem_region::*;
-pub use self::migrate::*;
 pub use self::sched::*;
 // pub use self::task::*;
 pub use self::timer::*;
@@ -34,11 +34,9 @@ mod hvc;
 mod interrupt;
 mod ipi;
 mod ivc;
-mod live_update;
 mod logger;
 mod mem;
 mod mem_region;
-mod migrate;
 // mod task;
 mod iommu;
 mod sched;

@@ -1,0 +1,35 @@
+ENTRY(_start)
+SECTIONS
+{
+    . = TEXT_START;
+
+    _image_start = ABSOLUTE(.);
+
+    .boot : {
+        *(.text.boot)
+        *(.data.boot)
+    }
+
+    .text : {
+        *(.text*)
+    }
+
+    .rodata : {
+        *(.rodata*)
+    }
+
+
+    .data : {
+        *(.data*)
+    }
+
+    . = ALIGN(4096);
+    _bss_begin = .;
+    .bss (NOLOAD) : ALIGN(4096) {
+        *(.bss*)
+    }
+    . = ALIGN(4096);
+    _bss_end = .;
+
+    _image_end = ABSOLUTE(.);
+}

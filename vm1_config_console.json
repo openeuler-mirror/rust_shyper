@@ -1,0 +1,123 @@
+{
+    "name": "guest-os-1",
+    "type": "VM_T_LINUX",
+    "cmdline": "earlycon=uart8250,mmio32,0xfeb50000 console=hvc0 root=/dev/vda rw audit=0",
+    "image": {
+        "kernel_filename": "Image_vanilla",
+        "kernel_load_ipa": "0x80080000",
+        "kernel_entry_point": "0x80080000",
+        "device_tree_filename": "-",
+        "device_tree_load_ipa": "0x80000000",
+        "ramdisk_filename": "initrd.gz",
+        "ramdisk_load_ipa": "0"
+    },
+    "memory": {
+        "num": 1,
+        "region": [
+            {
+                "ipa_start": "0x80000000",
+                "length": "0x40000000"
+            }
+        ]
+    },
+    "cpu": {
+        "num": 1,
+        "allocate_bitmap": "0b0010",
+        "master" : 1
+    },
+    "emulated_device" : {
+        "num": 4,
+        "emulated_device_list": [
+            {
+                "name": "intc@fe600000",
+                "base_ipa": "0xfe600000",
+                "length": "0x10000",
+                "irq_id": 0,
+                "type": "EMU_DEVICE_T_GICD"
+            },
+            {
+                "name": "GICR@fe680000",
+                "base_ipa": "0xfe680000",
+                "length": "0x100000",
+                "irq_id": 0,
+                "type": "EMU_DEVICE_T_GICR"
+            },
+            {
+                "name": "virtio_blk@f0020000",
+                "base_ipa": "0xf0020000",
+                "length": "0x1000",
+                "irq_id": 498,
+                "cfg_num": 2,
+                "cfg_list": [
+                    0,
+                    8192000
+                ],
+                "type": "EMU_DEVICE_T_VIRTIO_BLK_MEDIATED"
+            },
+            {
+                "name": "virtio_net@f0000000",
+                "base_ipa": "0xf0000000",
+                "length": "0x1000",
+                "irq_id": 499,
+                "cfg_num": 6,
+                "cfg_list": [
+                    "0x74",
+                    "0x56",
+                    "0xaa",
+                    "0x0f",
+                    "0x47",
+                    "0xd1"
+                ],
+                "type": "EMU_DEVICE_T_VIRTIO_NET"
+            },
+            {
+                "name": "virtio_console@f0040000",
+                "base_ipa": "0xf0040000",
+                "length": "0x10000",
+                "irq_id": 500,
+                "cfg_num": 2,
+                "cfg_list": [
+                    "0",
+                    "0xf0010000"
+                ],
+                "type": "EMU_DEVICE_T_VIRTIO_CONSOLE"
+            }
+        ]
+    },
+    "passthrough_device": {
+        "passthrough_device_list": [
+            {
+                "name": "serial1",
+                "base_pa": "0xfeb50000",
+                "base_ipa": "0xfeb50000",
+                "length": "0x1000",
+                "irq_num": 1,
+                "irq_list": [
+                    27
+                ]
+            }
+        ]
+    },
+
+    "dtb_device" : {
+        "num": 3,
+        "dtb_device_list": [
+            {
+                "name": "gicd",
+                "type": "DTB_DEVICE_T_GICD",
+                "irq_num": 0,
+                "irq_list": [],
+                "addr_region_ipa": "0xfe600000",
+                "addr_region_length": "0x10000"
+            },
+            {
+                "name": "gicr",
+                "type": "DTB_DEVICE_T_GICR",
+                "irq_num": 0,
+                "irq_list": [],
+                "addr_region_ipa": "0xfe680000",
+                "addr_region_length": "0x100000"
+            }
+	]
+    }
+}

@@ -38,6 +38,11 @@ For example, `make tx2` is to build Rust-Shyper for TX2.
 
 Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to your requirements.
 
+
+**RK3588 support**
+
+Currently, the Firefly ROC-RK3588S-PC platform is supported, and a complete user manual and corresponding accessories are provided. For details, please refer to [ROC-RK3588S-PC platform](https://bhpan.buaa.edu.cn/link/AA90DE4F5ED6F447E1A9DE59F7B1A8FF72).
+
 **MVM Requirements**
 
 MVM is a privileged VM that can monitor the status of other VMs through privileged interfaces provided by the hypervisor. We implement a dedicated Linux kernel module for MVM. Through this module, MVM can make a hypercall to realize specific functions, such as VM configuration, VM migration and hypervisor live-update. Generally, there is only one MVM, and it will monopolize core 0.

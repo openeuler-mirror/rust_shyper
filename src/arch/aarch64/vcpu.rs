@@ -14,9 +14,10 @@ use crate::arch::traits::ContextFrameTrait;
 use crate::kernel::{Vcpu, Vm};
 use crate::kernel::VmType;
 
+/// vcpu init function for specific architecture
 pub fn vcpu_arch_init(vm: Vm, vcpu: Vcpu) {
     let config = vm.config();
-    let mut vcpu_inner = vcpu.inner.lock();
+    let mut vcpu_inner = vcpu.inner.inner_mut.lock();
     match config.os_type {
         VmType::VmTOs => {
             vcpu_inner.vcpu_ctx.set_argument(config.device_tree_load_ipa());

@@ -18,11 +18,11 @@ use crate::device::{
     virtio_net_handle_ctrl, virtio_net_notify_handler,
 };
 use crate::device::{EmuDevs, VirtioDeviceType};
-use crate::device::{VirtioQueue, Virtq};
+use crate::device::{VirtioQueue, Virtq, VirtqData};
 use crate::device::{VIRTQUEUE_BLK_MAX_SIZE, VIRTQUEUE_CONSOLE_MAX_SIZE, VIRTQUEUE_NET_MAX_SIZE};
-use crate::device::VirtDev;
+use crate::device::{VirtDev, VirtDevData};
 use crate::device::VIRTQ_READY;
-use crate::kernel::{current_cpu, ipi_send_msg, IpiInnerMsg, IpiIntInjectMsg, IpiType, VirtioMmioData, vm_ipa2pa, VmPa};
+use crate::kernel::{current_cpu, ipi_send_msg, IpiInnerMsg, IpiIntInjectMsg, IpiType, vm_ipa2pa};
 use crate::kernel::{active_vm, active_vm_id};
 use crate::kernel::Vm;
 
@@ -56,6 +56,7 @@ pub const VIRTIO_MMIO_REGS_END: usize = 0x200;
 pub const VIRTIO_MMIO_INT_VRING: u32 = 1 << 0;
 pub const VIRTIO_MMIO_INT_CONFIG: u32 = 1 << 1;
 
+/// Represents the registers of a Virtio MMIO device.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct VirtMmioRegs {
@@ -74,7 +75,19 @@ pub struct VirtMmioRegs {
     dev_stat: u32,
 }
 
+/// Represents the data structure for Virtio MMIO device.
+pub struct VirtioMmioData {
+    pub id: usize,
+    pub driver_features: usize,
+    pub driver_status: usize,
+    pub regs: VirtMmioRegs,
+    pub dev: VirtDevData,
+    pub oppo_dev: VirtDevData,
+    pub vq: [VirtqData; 4], // TODO: 4 is hard code for vq max len
+}
+
 impl VirtMmioRegs {
+    /// Creates a default instance of VirtMmioRegs.
     pub fn default() -> VirtMmioRegs {
         VirtMmioRegs {
             magic: 0,
@@ -93,6 +106,7 @@ impl VirtMmioRegs {
         }
     }
 
+    /// Initializes the VirtMmioRegs with specified VirtioDeviceType.
     pub fn init(&mut self, id: VirtioDeviceType) {
         self.magic = 0x74726976;
         self.version = 0x2;
@@ -102,30 +116,16 @@ impl VirtMmioRegs {
         self.drv_feature = 0;
         self.q_sel = 0;
     }
-
-    pub fn save_regs(&mut self, src: &VirtMmioRegs) {
-        self.magic = src.magic;
-        self.version = src.version;
-        self.device_id = src.device_id;
-        self.vendor_id = src.vendor_id;
-        self.dev_feature = src.dev_feature;
-        self.dev_feature_sel = src.dev_feature_sel;
-        self.drv_feature = src.drv_feature;
-        self.drv_feature_sel = src.drv_feature_sel;
-        self.q_sel = src.q_sel;
-        self.q_num_max = src.q_num_max;
-        self.irt_stat = src.irt_stat;
-        self.irt_ack = src.irt_ack;
-        self.dev_stat = src.dev_stat;
-    }
 }
 
+/// Represents a Virtio MMIO device.
 #[derive(Clone)]
 pub struct VirtioMmio {
     inner: Arc<Mutex<VirtioMmioInner>>,
 }
 
 impl VirtioQueue for VirtioMmio {
+    /// Initializes the Virtio queue based on the specified VirtioDeviceType.
     fn virtio_queue_init(&self, dev_type: VirtioDeviceType) {
         match dev_type {
             VirtioDeviceType::Block => {
@@ -170,6 +170,7 @@ impl VirtioQueue for VirtioMmio {
         }
     }
 
+    /// Resets the Virtio queue at the specified index.
     fn virtio_queue_reset(&self, index: usize) {
         let inner = self.inner.lock();
         inner.vq[index].reset(index);
@@ -177,12 +178,14 @@ impl VirtioQueue for VirtioMmio {
 }
 
 impl VirtioMmio {
+    /// Creates a new instance of VirtioMmio with the specified ID.
     pub fn new(id: usize) -> VirtioMmio {
         VirtioMmio {
             inner: Arc::new(Mutex::new(VirtioMmioInner::new(id))),
         }
     }
 
+    /// Notifies the specified VM about the configuration changes.
     pub fn notify_config(&self, vm: Vm) {
         let mut inner = self.inner.lock();
         inner.regs.irt_stat |= VIRTIO_MMIO_INT_CONFIG;
@@ -191,15 +194,16 @@ impl VirtioMmio {
         drop(inner);
         use crate::kernel::interrupt_vm_inject;
         if trgt_id == current_cpu().id {
-            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id, 0);
+            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id);
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(trgt_id, IpiType::IpiTIntInject, IpiInnerMsg::IntInjectMsg(m)) {
-                println!("notify_config: failed to send ipi to Core {}", trgt_id);
+                error!("notify_config: failed to send ipi to Core {}", trgt_id);
             }
         }
     }
 
+    /// Notifies the specified VM.
     pub fn notify(&self, vm: Vm) {
         let mut inner = self.inner.lock();
         inner.regs.irt_stat |= VIRTIO_MMIO_INT_VRING;
@@ -208,20 +212,22 @@ impl VirtioMmio {
         drop(inner);
         use crate::kernel::interrupt_vm_inject;
         if trgt_id == current_cpu().id {
-            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id, 0);
+            interrupt_vm_inject(vm.clone(), vm.vcpu(0).unwrap(), int_id);
         } else {
             let m = IpiIntInjectMsg { vm_id: vm.id(), int_id };
             if !ipi_send_msg(trgt_id, IpiType::IpiTIntInject, IpiInnerMsg::IntInjectMsg(m)) {
-                println!("notify_config: failed to send ipi to Core {}", trgt_id);
+                error!("notify_config: failed to send ipi to Core {}", trgt_id);
             }
         }
     }
 
+    /// Initializes the MMIO registers based on the specified VirtioDeviceType.
     pub fn mmio_reg_init(&self, dev_type: VirtioDeviceType) {
         let mut inner = self.inner.lock();
         inner.reg_init(dev_type);
     }
 
+    /// Initializes the Virtio device based on the specified parameters.
     pub fn dev_init(&self, dev_type: VirtioDeviceType, config: &VmEmulatedDeviceConfig, mediated: bool) {
         let inner = self.inner.lock();
         inner.dev.init(dev_type, config, mediated)
@@ -240,101 +246,121 @@ impl VirtioMmio {
         inner.dev.set_activated(false);
     }
 
+    /// Sets the Interrupt Status (IRT_STAT) for the Virtio MMIO device.
     pub fn set_irt_stat(&self, irt_stat: u32) {
         let mut inner = self.inner.lock();
         inner.regs.irt_stat = irt_stat;
     }
 
+    /// Sets the Interrupt Acknowledge (IRT_ACK) for the Virtio MMIO device.
     pub fn set_irt_ack(&self, irt_ack: u32) {
         let mut inner = self.inner.lock();
         inner.regs.irt_ack = irt_ack;
     }
 
+    /// Sets the selected queue index (Q_SEL) for the Virtio MMIO device.
     pub fn set_q_sel(&self, q_sel: u32) {
         let mut inner = self.inner.lock();
         inner.regs.q_sel = q_sel;
     }
 
+    /// Sets the Device Status (DEV_STAT) for the Virtio MMIO device.
     pub fn set_dev_stat(&self, dev_stat: u32) {
         let mut inner = self.inner.lock();
         inner.regs.dev_stat = dev_stat;
     }
 
+    /// Sets the maximum queue number (Q_NUM_MAX) for the Virtio MMIO device.
     pub fn set_q_num_max(&self, q_num_max: u32) {
         let mut inner = self.inner.lock();
         inner.regs.q_num_max = q_num_max;
     }
 
+    /// Sets the Device Features (DEV_FEATURE) for the Virtio MMIO device.
     pub fn set_dev_feature(&self, dev_feature: u32) {
         let mut inner = self.inner.lock();
         inner.regs.dev_feature = dev_feature;
     }
 
+    /// Sets the Device Features Selector (DEV_FEATURE_SEL) for the Virtio MMIO device.
     pub fn set_dev_feature_sel(&self, dev_feature_sel: u32) {
         let mut inner = self.inner.lock();
         inner.regs.dev_feature_sel = dev_feature_sel;
     }
 
+    /// Sets the Driver Features (DRV_FEATURE) for the Virtio MMIO device.
     pub fn set_drv_feature(&self, drv_feature: u32) {
         let mut inner = self.inner.lock();
         inner.regs.drv_feature = drv_feature;
     }
 
+    /// Sets the Driver Features Selector (DRV_FEATURE_SEL) for the Virtio MMIO device.
     pub fn set_drv_feature_sel(&self, drv_feature_sel: u32) {
         let mut inner = self.inner.lock();
         inner.regs.drv_feature = drv_feature_sel;
     }
 
+    /// Performs a bitwise OR operation on the Driver Features (DRV_FEATURE) with the specified value.
     pub fn or_driver_feature(&self, driver_features: usize) {
         let mut inner = self.inner.lock();
         inner.driver_features |= driver_features;
     }
 
+    /// Retrieves a clone of the VirtioDev associated with the Virtio MMIO device.
     pub fn dev(&self) -> VirtDev {
         let inner = self.inner.lock();
         inner.dev.clone()
     }
 
+    /// Retrieves the selected queue index (Q_SEL) for the Virtio MMIO device.
     pub fn q_sel(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.q_sel
     }
 
+    /// Retrieves the magic value from the Virtio MMIO registers.
     pub fn magic(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.magic
     }
 
+    /// Retrieves the version value from the Virtio MMIO registers.
     pub fn version(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.version
     }
 
+    /// Retrieves the device ID from the Virtio MMIO registers.
     pub fn device_id(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.device_id
     }
 
+    /// Retrieves the vendor ID from the Virtio MMIO registers.
     pub fn vendor_id(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.vendor_id
     }
 
+    /// Retrieves the device status (DEV_STAT) from the Virtio MMIO registers.
     pub fn dev_stat(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.dev_stat
     }
 
+    /// Retrieves the Device Features Selector (DEV_FEATURE_SEL) from the Virtio MMIO registers.
     pub fn dev_feature_sel(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.dev_feature_sel
     }
 
+    /// Retrieves the Driver Features Selector (DRV_FEATURE_SEL) from the Virtio MMIO registers.
     pub fn drv_feature_sel(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.drv_feature_sel
     }
 
+    /// Retrieves the maximum queue number (Q_NUM_MAX) from the Virtio MMIO registers.
     pub fn q_num_max(&self) -> u32 {
         let inner = self.inner.lock();
         inner.regs.q_num_max
@@ -345,19 +371,24 @@ impl VirtioMmio {
         inner.regs.irt_stat
     }
 
+    /// Retrieves a clone of the Virtq associated with the specified index, wrapped in a Result.
+    /// Returns an Err variant if the index is out of bounds.
     pub fn vq(&self, idx: usize) -> Result<Virtq, ()> {
         let inner = self.inner.lock();
         if idx >= inner.vq.len() {
             return Err(());
         }
-        return Ok(inner.vq[idx].clone());
+        Ok(inner.vq[idx].clone())
     }
 
+    /// Retrieves the ID of the Virtio MMIO device.
     pub fn id(&self) -> usize {
         let inner = self.inner.lock();
         inner.id
     }
 
+    /// Calls the notify handler for the Virtq associated with the specified index.
+    /// Returns true if the operation is successful, otherwise false.
     pub fn notify_handler(&self, idx: usize) -> bool {
         let inner = self.inner.lock();
         if idx >= inner.vq.len() {
@@ -365,71 +396,11 @@ impl VirtioMmio {
         }
         let vq = inner.vq[idx].clone();
         drop(inner);
-        return vq.call_notify_handler(self.clone());
-    }
-
-    // use for migration restore
-    pub fn restore_mmio_data(&self, mmio_data: &VirtioMmioData, pa_region: &Vec<VmPa>) {
-        let mut inner = self.inner.lock();
-        // inner.id = mmio_data.id;
-        inner.driver_features = mmio_data.driver_features;
-        inner.driver_status = mmio_data.driver_status;
-        inner.regs = mmio_data.regs;
-        inner.dev.restore_virt_dev_data(&mmio_data.dev);
-        for (idx, vq) in inner.vq.iter().enumerate() {
-            vq.restore_vq_data(&mmio_data.vq[idx], pa_region);
-        }
-    }
-
-    // use for migration save
-    pub fn save_mmio_data(&self, mmio_data: &mut VirtioMmioData, pa_region: &Vec<VmPa>) {
-        let inner = self.inner.lock();
-        mmio_data.id = inner.id;
-        mmio_data.driver_features = inner.driver_features;
-        mmio_data.driver_status = inner.driver_status;
-        mmio_data.regs = inner.regs;
-        inner.dev.save_virt_dev_data(&mut mmio_data.dev);
-        for (idx, vq) in inner.vq.iter().enumerate() {
-            vq.save_vq_data(&mut mmio_data.vq[idx], pa_region);
-        }
-
-        // if let DevDescData::ConsoleDesc(desc_data) = &mmio_data.dev.desc {
-        //     let oppo_vm_id = desc_data.oppo_end_vmid;
-        //     let oppo_vm_ipa = desc_data.oppo_end_ipa;
-        //     if oppo_vm_id != 0 {
-        //         return;
-        //     }
-        //     let vm = vm(oppo_vm_id as usize).unwrap();
-        //     if let EmuDevs::VirtioConsole(console_mmio) = vm.emu_console_dev(oppo_vm_ipa as usize) {
-        //         console_mmio.dev().save_virt_dev_data(&mut mmio_data.oppo_dev);
-        //     }
-        // }
-    }
-
-    // use for live update
-    pub fn save_mmio(&self, virtio_mmio: VirtioMmio, notify_handler: Option<fn(Virtq, VirtioMmio, Vm) -> bool>) {
-        // println!("save mmio notify_handler addr {:x}", unsafe { *(&(notify_handler.unwrap()) as *const _ as *const usize) });
-        let mut dst_dev = self.inner.lock();
-        let src_dev = virtio_mmio.inner.lock();
-        let is_net = src_dev.dev.is_net();
-        dst_dev.id = src_dev.id;
-        dst_dev.driver_features = src_dev.driver_features;
-        dst_dev.driver_status = src_dev.driver_status;
-        dst_dev.regs.save_regs(&src_dev.regs);
-        dst_dev.dev.save_virt_dev(src_dev.dev.clone());
-        for (idx, vq) in src_dev.vq.iter().enumerate() {
-            let new_vq = Virtq::default();
-            if is_net && idx == src_dev.vq.len() - 1 && idx % 2 == 0 {
-                // control queue
-                new_vq.save_vq(vq.clone(), Some(virtio_net_handle_ctrl));
-            } else {
-                new_vq.save_vq(vq.clone(), notify_handler);
-            }
-            dst_dev.vq.push(new_vq);
-        }
+        vq.call_notify_handler(self.clone())
     }
 }
 
+/// Represents the inner data structure of VirtioMmio.
 struct VirtioMmioInner {
     id: usize,
     driver_features: usize,
@@ -441,6 +412,7 @@ struct VirtioMmioInner {
 }
 
 impl VirtioMmioInner {
+    /// Creates a new `VirtioMmioInner` instance with the given ID.
     fn new(id: usize) -> VirtioMmioInner {
         VirtioMmioInner {
             id,
@@ -452,11 +424,13 @@ impl VirtioMmioInner {
         }
     }
 
+    /// Initializes the registers of the `VirtioMmioInner` with the specified device type.
     fn reg_init(&mut self, dev_type: VirtioDeviceType) {
         self.regs.init(dev_type);
     }
 }
 
+/// Handles prologue access to Virtio MMIO registers.
 fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize, write: bool) {
     if !write {
         let value;
@@ -485,7 +459,7 @@ fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: u
                 value = mmio.dev_stat();
             }
             _ => {
-                println!("virtio_be_init_handler wrong reg_read, address=0x{:x}", emu_ctx.address);
+                error!("virtio_be_init_handler wrong reg_read, address=0x{:x}", emu_ctx.address);
                 return;
             }
         }
@@ -521,13 +495,13 @@ fn virtio_mmio_prologue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: u
                 }
             }
             _ => {
-                println!("virtio_mmio_prologue_access: wrong reg write 0x{:x}", emu_ctx.address);
-                return;
+                error!("virtio_mmio_prologue_access: wrong reg write 0x{:x}", emu_ctx.address);
             }
         }
     }
 }
 
+/// Handles queue access to Virtio MMIO registers.
 fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize, write: bool) {
     if !write {
         let value;
@@ -549,7 +523,7 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                 }
             }
             _ => {
-                println!(
+                error!(
                     "virtio_mmio_queue_access: wrong reg_read, address {:x}",
                     emu_ctx.address
                 );
@@ -621,10 +595,15 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                     virtq.or_desc_table_addr(value << 32);
                     let desc_table_addr = vm_ipa2pa(active_vm().unwrap(), virtq.desc_table_addr());
                     if desc_table_addr == 0 {
-                        println!("virtio_mmio_queue_access: invalid desc_table_addr");
+                        error!("virtio_mmio_queue_access: invalid desc_table_addr");
                         return;
                     }
-                    virtq.set_desc_table(desc_table_addr);
+                    // SAFETY:
+                    // The 'desc_table_addr' is valid MMIO address of virtio-blk config
+                    // And it is checked by vm_ipa2pa to gurantee that it is in the range of vm config memory
+                    unsafe {
+                        virtq.set_desc_table(desc_table_addr);
+                    }
                 }
                 Err(_) => {
                     panic!(
@@ -649,10 +628,15 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                     virtq.or_avail_addr(value << 32);
                     let avail_addr = vm_ipa2pa(active_vm().unwrap(), virtq.avail_addr());
                     if avail_addr == 0 {
-                        println!("virtio_mmio_queue_access: invalid avail_addr");
+                        error!("virtio_mmio_queue_access: invalid avail_addr");
                         return;
                     }
-                    virtq.set_avail(avail_addr);
+                    // SAFETY:
+                    // The 'avail_addr' is valid MMIO address of virtio-blk config
+                    // And it is checked by vm_ipa2pa to gurantee that it is in the range of vm config memory
+                    unsafe {
+                        virtq.set_avail(avail_addr);
+                    }
                 }
                 Err(_) => {
                     panic!(
@@ -677,10 +661,15 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                     virtq.or_used_addr(value << 32);
                     let used_addr = vm_ipa2pa(active_vm().unwrap(), virtq.used_addr());
                     if used_addr == 0 {
-                        println!("virtio_mmio_queue_access: invalid used_addr");
+                        error!("virtio_mmio_queue_access: invalid used_addr");
                         return;
                     }
-                    virtq.set_used(used_addr);
+                    // SAFETY:
+                    // The 'used_addr' is valid MMIO address of virtio-blk config
+                    // And it is checked by vm_ipa2pa to gurantee that it is in the range of vm config memory
+                    unsafe {
+                        virtq.set_used(used_addr);
+                    }
                 }
                 Err(_) => {
                     panic!(
@@ -690,43 +679,47 @@ fn virtio_mmio_queue_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usiz
                 }
             },
             _ => {
-                println!("virtio_mmio_queue_access: wrong reg write 0x{:x}", emu_ctx.address);
+                error!("virtio_mmio_queue_access: wrong reg write 0x{:x}", emu_ctx.address);
             }
         }
     }
 }
 
+/// Handles config space access to Virtio MMIO registers.
 fn virtio_mmio_cfg_access(mmio: VirtioMmio, emu_ctx: &EmuContext, offset: usize, write: bool) {
     if !write {
         let value;
+        let width = emu_ctx.width;
         match offset {
             VIRTIO_MMIO_CONFIG_GENERATION => {
-                value = mmio.dev().generation() as u32;
+                value = mmio.dev().generation();
             }
             VIRTIO_MMIO_CONFIG..=0x1ff => match mmio.dev().desc() {
                 super::DevDesc::BlkDesc(blk_desc) => {
-                    value = blk_desc.offset_data(offset - VIRTIO_MMIO_CONFIG);
+                    // SAFETY: Offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
+                    value = unsafe { blk_desc.offset_data(offset - VIRTIO_MMIO_CONFIG, width) };
                 }
                 super::DevDesc::NetDesc(net_desc) => {
-                    value = net_desc.offset_data(offset - VIRTIO_MMIO_CONFIG);
+                    // SAFETY: Offset is between VIRTIO_MMIO_CONFIG..VIRTIO_MMIO_REGS_END ,so is valid
+                    value = unsafe { net_desc.offset_data(offset - VIRTIO_MMIO_CONFIG, width) };
                 }
                 _ => {
                     panic!("unknow desc type");
                 }
             },
             _ => {
-                println!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
+                error!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
                 return;
             }
         }
         let idx = emu_ctx.reg;
-        let val = value as usize;
-        current_cpu().set_gpr(idx, val);
+        current_cpu().set_gpr(idx, value);
     } else {
-        println!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
+        error!("virtio_mmio_cfg_access: wrong reg write 0x{:x}", emu_ctx.address);
     }
 }
 
+/// Initializes the Virtio MMIO device for a virtual machine.
 pub fn emu_virtio_mmio_init(vm: Vm, emu_dev_id: usize, mediated: bool) -> bool {
     let virt_dev_type: VirtioDeviceType;
     let vm_cfg = vm.config();
@@ -745,7 +738,7 @@ pub fn emu_virtio_mmio_init(vm: Vm, emu_dev_id: usize, mediated: bool) -> bool {
             vm.set_emu_devs(emu_dev_id, EmuDevs::VirtioConsole(mmio.clone()));
         }
         _ => {
-            println!("emu_virtio_mmio_init: unknown emulated device type");
+            error!("emu_virtio_mmio_init: unknown emulated device type");
             return false;
         }
     }
@@ -758,8 +751,11 @@ pub fn emu_virtio_mmio_init(vm: Vm, emu_dev_id: usize, mediated: bool) -> bool {
     true
 }
 
+/// Handles Virtio MMIO events for the specified emulated device.
 pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool {
-    // println!("emu_virtio_mmio_handler active_vcpu addr {:x}", unsafe { *(&current_cpu().active_vcpu as *const _ as *const usize) });
+    trace!("emu_virtio_mmio_handler active_vcpu addr {:x}", unsafe {
+        *(&current_cpu().active_vcpu as *const _ as *const usize)
+    });
     let vm = match active_vm() {
         Some(vm) => vm,
         None => {
@@ -780,22 +776,13 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
     let offset = addr - vm.config().emulated_device_list()[emu_dev_id].base_ipa;
     let write = emu_ctx.write;
 
-    // if vm.vm_id() == 1 && emu_dev_id == 2 {
-    //     println!("### emu_virtio_mmio_handler offset {:x} ###", offset);
-    // }
     if offset == VIRTIO_MMIO_QUEUE_NOTIFY && write {
-        mmio.set_irt_stat(VIRTIO_MMIO_INT_VRING as u32);
-        // let q_sel = mmio.q_sel();
-        // if q_sel as usize != current_cpu().get_gpr(emu_ctx.reg) {
-        // println!("{} {}", q_sel as usize, current_cpu().get_gpr(emu_ctx.reg));
-        // }
-        // println!("in VIRTIO_MMIO_QUEUE_NOTIFY");
+        mmio.set_irt_stat(VIRTIO_MMIO_INT_VRING);
 
         if !mmio.notify_handler(current_cpu().get_gpr(emu_ctx.reg)) {
-            println!("Failed to handle virtio mmio request!");
+            error!("Failed to handle virtio mmio request!");
         }
     } else if offset == VIRTIO_MMIO_INTERRUPT_STATUS && !write {
-        // println!("in VIRTIO_MMIO_INTERRUPT_STATUS");
         let idx = emu_ctx.reg;
         let val = mmio.irt_stat() as usize;
         current_cpu().set_gpr(idx, val);
@@ -804,19 +791,16 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
         let val = mmio.irt_stat();
         mmio.set_irt_stat(val & !(current_cpu().get_gpr(idx) as u32));
         mmio.set_irt_ack(current_cpu().get_gpr(idx) as u32);
-    } else if (VIRTIO_MMIO_MAGIC_VALUE <= offset && offset <= VIRTIO_MMIO_GUEST_FEATURES_SEL)
+    } else if (VIRTIO_MMIO_MAGIC_VALUE..=VIRTIO_MMIO_GUEST_FEATURES_SEL).contains(&offset)
         || offset == VIRTIO_MMIO_STATUS
     {
-        // println!("in virtio_mmio_prologue_access");
         virtio_mmio_prologue_access(mmio, emu_ctx, offset, write);
-    } else if VIRTIO_MMIO_QUEUE_SEL <= offset && offset <= VIRTIO_MMIO_QUEUE_USED_HIGH {
-        // println!("in virtio_mmio_queue_access");
+    } else if (VIRTIO_MMIO_QUEUE_SEL..=VIRTIO_MMIO_QUEUE_USED_HIGH).contains(&offset) {
         virtio_mmio_queue_access(mmio, emu_ctx, offset, write);
-    } else if VIRTIO_MMIO_CONFIG_GENERATION <= offset && offset <= VIRTIO_MMIO_REGS_END {
-        // println!("in virtio_mmio_cfg_access");
+    } else if (VIRTIO_MMIO_CONFIG_GENERATION..=VIRTIO_MMIO_REGS_END).contains(&offset) {
         virtio_mmio_cfg_access(mmio, emu_ctx, offset, write);
     } else {
-        println!(
+        error!(
             "emu_virtio_mmio_handler: regs wrong {}, address 0x{:x}, offset 0x{:x}",
             if write { "write" } else { "read" },
             addr,
@@ -824,5 +808,5 @@ pub fn emu_virtio_mmio_handler(emu_dev_id: usize, emu_ctx: &EmuContext) -> bool 
         );
         return false;
     }
-    return true;
+    true
 }

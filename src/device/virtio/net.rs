@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
+
 use core::mem::size_of;
 use spin::Mutex;
 
@@ -19,14 +19,14 @@ use crate::device::{DevDesc, VirtioMmio, Virtq, VIRTQ_DESC_F_NEXT, VIRTQ_DESC_F_
 use crate::device::EmuDevs;
 use crate::device::VirtioIov;
 use crate::kernel::{
-    active_vm, active_vm_id, current_cpu, NetDescData, vm_if_cmp_mac, vm_if_get_cpu_id, vm_if_set_mem_map_bit,
-    vm_ipa2pa, VM_LIST, VM_STATE_FLAG,
+    active_vm, active_vm_id, current_cpu, vm_if_cmp_mac, vm_if_get_cpu_id, vm_if_set_mem_map_bit, vm_ipa2pa, VM_LIST,
+    VM_STATE_FLAG,
 };
 use crate::kernel::{ipi_send_msg, IpiEthernetMsg, IpiInnerMsg, IpiType};
 use crate::kernel::IpiMessage;
 use crate::kernel::vm;
 use crate::kernel::Vm;
-use crate::lib::{round_down, trace};
+use crate::utils::{round_down, trace};
 
 const VIRTIO_NET_OK: u8 = 0;
 const VIRTIO_NET_ERR: u8 = 1;
@@ -69,6 +69,7 @@ const VIRTIO_NET_HDR_F_DATA_VALID: usize = 2;
 
 const VIRTIO_NET_HDR_GSO_NONE: usize = 0;
 
+/// Represents the header structure for VirtioNet.
 #[repr(C)]
 struct VirtioNetHdr {
     pub flags: u8,
@@ -80,27 +81,23 @@ struct VirtioNetHdr {
     pub num_buffers: u16,
 }
 
+/// A cloneable wrapper for the `NetDescInner` structure.
 #[derive(Clone)]
 pub struct NetDesc {
     inner: Arc<Mutex<NetDescInner>>,
 }
 
+/// Holds data related to the network device.
+pub struct NetDescData {
+    pub mac: [u8; 6],
+    pub status: u16,
+}
+
 impl NetDesc {
+    /// Creates a new `NetDesc` instance with default values.
     pub fn default() -> NetDesc {
         NetDesc {
             inner: Arc::new(Mutex::new(NetDescInner::default())),
-        }
-    }
-
-    // use for live update
-    pub fn back_up(&self) -> NetDesc {
-        let current_inner = self.inner.lock();
-        let inner = NetDescInner {
-            mac: current_inner.mac,
-            status: current_inner.status,
-        };
-        NetDesc {
-            inner: Arc::new(Mutex::new(inner)),
         }
     }
 
@@ -109,12 +106,14 @@ impl NetDesc {
         inner.status = status;
     }
 
+    /// Retrieves the status of the network device.
     pub fn status(&self) -> u16 {
         let inner = self.inner.lock();
         inner.status
     }
 
-    pub fn cfg_init(&self, mac: &Vec<usize>) {
+    /// Initializes the configuration of the network device with the provided MAC address.
+    pub fn cfg_init(&self, mac: &[usize]) {
         let mut inner = self.inner.lock();
         inner.mac[0] = mac[0] as u8;
         inner.mac[1] = mac[1] as u8;
@@ -124,34 +123,29 @@ impl NetDesc {
         inner.mac[5] = mac[5] as u8;
     }
 
-    pub fn offset_data(&self, offset: usize) -> u32 {
+    /// Computes the offset data within the `NetDesc` structure.
+    /// # SAFETY:
+    /// Caller must ensure offset is valid
+    /// Offset must valid for virtio_mmio
+    pub unsafe fn offset_data(&self, offset: usize, width: usize) -> usize {
         let inner = self.inner.lock();
         let start_addr = &inner.mac[0] as *const _ as usize;
-        if trace() && start_addr + offset < 0x1000 {
-            println!("value addr is {}", start_addr + offset);
+        match width {
+            1 => unsafe { *((start_addr + offset) as *const u8) as usize },
+            2 => unsafe { *((start_addr + offset) as *const u16) as usize },
+            4 => unsafe { *((start_addr + offset) as *const u32) as usize },
+            8 => unsafe { *((start_addr + offset) as *const u64) as usize },
+            _ => 0,
         }
-        let value = unsafe { *((start_addr + offset) as *const u32) };
-        return value;
-    }
-
-    // use for migration
-    pub fn restore_net_data(&self, desc_data: &NetDescData) {
-        let mut inner = self.inner.lock();
-        inner.mac = desc_data.mac;
-        inner.status = desc_data.status;
-    }
-
-    // use for migration
-    pub fn save_net_data(&self, desc_data: &mut NetDescData) {
-        let inner = self.inner.lock();
-        desc_data.mac = inner.mac;
-        desc_data.status = inner.status;
     }
 }
 
+/// Constant representing the network link being up.
 pub const VIRTIO_NET_S_LINK_UP: u16 = 1;
+/// Constant representing network announcement.
 pub const VIRTIO_NET_S_ANNOUNCE: u16 = 2;
 
+/// Represents the inner data structure for `NetDesc`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct NetDescInner {
@@ -160,6 +154,7 @@ pub struct NetDescInner {
 }
 
 impl NetDescInner {
+    /// Creates a new `NetDescInner` instance with default values.
     pub fn default() -> NetDescInner {
         NetDescInner {
             mac: [0; 6],
@@ -168,6 +163,7 @@ impl NetDescInner {
     }
 }
 
+/// Represents the control header structure for VirtioNet.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 struct VirtioNetCtrlHdr {
@@ -175,6 +171,7 @@ struct VirtioNetCtrlHdr {
     command: u8,
 }
 
+/// Retrieves network features.
 pub fn net_features() -> usize {
     VIRTIO_F_VERSION_1
         | VIRTIO_NET_F_GUEST_CSUM
@@ -192,12 +189,15 @@ pub fn net_features() -> usize {
         | VIRTIO_NET_F_STATUS
 }
 
+/// Constant representing VirtioNet control announcement.
 const VIRTIO_NET_CTRL_ANNOUNCE: u8 = 3;
+/// Constant representing VirtioNet control announcement acknowledgment.
 const VIRTIO_NET_CTRL_ANNOUNCE_ACK: u8 = 0;
 
+/// Handles VirtioNet control operations.
 pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     if vq.ready() == 0 {
-        println!("virtio net control queue is not ready!");
+        error!("virtio net control queue is not ready!");
         return false;
     }
 
@@ -213,7 +213,7 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         loop {
             let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
             if addr == 0 {
-                println!("virtio_net_handle_ctrl: failed to desc addr");
+                error!("virtio_net_handle_ctrl: failed to desc addr");
                 return false;
             }
             if vq.desc_flags(idx) & VIRTQ_DESC_F_WRITE != 0 {
@@ -247,15 +247,15 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
                 in_iov.from_buf(&status as *const _ as usize, size_of::<u8>());
             }
             _ => {
-                println!("Control queue header class can't match {}", ctrl.class);
+                warn!("Control queue header class can't match {}", ctrl.class);
             }
         }
 
         // update ctrl queue used ring
         if vm.id() != 0 {
             let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            if *VM_STATE_FLAG.lock() == 1 {
-                println!("vm1 virtio net ctrl write memory in 0x{:x}", used_addr);
+            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
+                debug!("vm1 virtio net ctrl write memory in 0x{:x}", used_addr);
             }
             vm_if_set_mem_map_bit(vm.clone(), used_addr);
 
@@ -272,9 +272,11 @@ pub fn virtio_net_handle_ctrl(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     true
 }
 
+/// Handles the notification from the VirtioNet device to the specified virtual queue (`vq`) in a virtual machine (`vm`).
+/// Returns `true` if the notification is successfully processed; otherwise, returns `false`.
 pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     if vq.ready() == 0 {
-        println!("net virt_queue is not ready!");
+        error!("net virt_queue is not ready!");
         return false;
     }
 
@@ -296,7 +298,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         loop {
             let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
             if addr == 0 {
-                println!("virtio_net_notify_handler: failed to desc addr");
+                error!("virtio_net_notify_handler: failed to desc addr");
                 return false;
             }
             tx_iov.push_data(addr, vq.desc_len(idx) as usize);
@@ -315,8 +317,8 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
 
         if vm.id() != 0 {
             let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            if *VM_STATE_FLAG.lock() == 1 {
-                println!("vm1 virtio net write memory in 0x{:x}", used_addr);
+            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
+                debug!("vm1 virtio net write memory in 0x{:x}", used_addr);
             }
             vm_if_set_mem_map_bit(vm.clone(), used_addr);
             vm_if_set_mem_map_bit(vm.clone(), used_addr + PAGE_SIZE);
@@ -332,7 +334,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
     }
 
     if !vq.avail_is_avail() {
-        println!("invalid descriptor table index");
+        error!("invalid descriptor table index");
         return false;
     }
 
@@ -343,7 +345,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         if vms_to_notify & 1 != 0 {
             let vm = match crate::kernel::vm(trgt_vmid) {
                 None => {
-                    println!(
+                    error!(
                         "virtio_net_notify_handler: target vm [{}] is not ready or not exist",
                         trgt_vmid
                     );
@@ -356,14 +358,14 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
                 let nic = match vm.emu_net_dev(0) {
                     EmuDevs::VirtioNet(x) => x,
                     _ => {
-                        println!("virtio_net_notify_handler: failed to get virtio net dev");
+                        error!("virtio_net_notify_handler: failed to get virtio net dev");
                         return false;
                     }
                 };
                 let rx_vq = match nic.vq(0) {
                     Ok(x) => x,
                     Err(_) => {
-                        println!(
+                        error!(
                             "virtio_net_notify_handler: vm[{}] failed to get virtio net rx virt queue",
                             vm.id()
                         );
@@ -381,7 +383,7 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
                 };
                 let cpu_trgt = vm_if_get_cpu_id(trgt_vmid);
                 if !ipi_send_msg(cpu_trgt, IpiType::IpiTEthernetMsg, IpiInnerMsg::EnternetMsg(msg)) {
-                    println!(
+                    error!(
                         "virtio_net_notify_handler: failed to send ipi message, target {}",
                         cpu_trgt
                     );
@@ -390,18 +392,19 @@ pub fn virtio_net_notify_handler(vq: Virtq, nic: VirtioMmio, vm: Vm) -> bool {
         }
 
         trgt_vmid += 1;
-        vms_to_notify = vms_to_notify >> 1;
+        vms_to_notify >>= 1;
     }
     true
 }
 
+/// Handles the IPI (Inter-Processor Interrupt) message related to Ethernet.
 pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
     match msg.ipi_message {
         IpiInnerMsg::EnternetMsg(ethernet_msg) => {
             let trgt_vmid = ethernet_msg.trgt_vmid;
             let vm = match vm(trgt_vmid) {
                 None => {
-                    println!(
+                    error!(
                         "ethernet_ipi_rev_handler: target vm [{}] is not ready or not exist",
                         trgt_vmid
                     );
@@ -422,7 +425,7 @@ pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
             let rx_vq = match nic.vq(0) {
                 Ok(x) => x,
                 Err(_) => {
-                    println!(
+                    error!(
                         "ethernet_ipi_rev_handler: vm[{}] failed to get virtio net rx virt queue",
                         vm.id()
                     );
@@ -441,10 +444,13 @@ pub fn ethernet_ipi_rev_handler(msg: &IpiMessage) {
     }
 }
 
+/// Transmits Ethernet frames using VirtioNet.
+/// Returns a tuple with the first element indicating success (`true` if successful) and the second element
+/// representing the target virtual machine's bitmask.
 fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     // [ destination MAC - 6 ][ source MAC - 6 ][ EtherType - 2 ][ Payload ]
     if len < size_of::<VirtioNetHdr>() || len - size_of::<VirtioNetHdr>() < 6 + 6 + 2 {
-        println!(
+        warn!(
             "Too short for an ethernet frame, len {}, size of head {}",
             len,
             size_of::<VirtioNetHdr>()
@@ -478,15 +484,12 @@ fn ethernet_transmit(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     }
 
     match ethernet_mac_to_vm_id(frame) {
-        Ok(vm_id) => {
-            return (ethernet_send_to(vm_id, tx_iov.clone(), len), 1 << vm_id);
-        }
-        Err(_) => {
-            return (false, 0);
-        }
+        Ok(vm_id) => (ethernet_send_to(vm_id, tx_iov.clone(), len), 1 << vm_id),
+        Err(_) => (false, 0),
     }
 }
 
+/// Broadcasts an Ethernet frame to all virtual machines, excluding the current one.
 fn ethernet_broadcast(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     let vm_num = vm_num();
     let cur_vm_id = active_vm_id();
@@ -506,6 +509,7 @@ fn ethernet_broadcast(tx_iov: VirtioIov, len: usize) -> (bool, usize) {
     (trgt_vmid_map != 0, trgt_vmid_map)
 }
 
+/// Sends an Ethernet frame to the specified virtual machine (`vmid`).
 fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     // println!("ethernet send to vm{}", vmid);
     let vm = match vm(vmid) {
@@ -531,7 +535,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     let rx_vq = match nic.vq(0) {
         Ok(x) => x,
         Err(_) => {
-            println!(
+            error!(
                 "ethernet_send_to: vm[{}] failed to get virtio net rx virt queue",
                 vm.id()
             );
@@ -541,7 +545,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
 
     let desc_header_idx_opt = rx_vq.pop_avail_desc_idx(rx_vq.avail_idx());
     if !rx_vq.avail_is_avail() {
-        println!("ethernet_send_to: receive invalid avail desc idx");
+        error!("ethernet_send_to: receive invalid avail desc idx");
         return false;
     } else if desc_header_idx_opt.is_none() {
         // println!("ethernet_send_to: desc_header_idx_opt is none");
@@ -556,22 +560,22 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     loop {
         let dst = vm_ipa2pa(vm.clone(), rx_vq.desc_addr(desc_idx));
         if dst == 0 {
-            println!(
+            debug!(
                 "rx_vq desc base table addr 0x{:x}, idx {}, avail table addr 0x{:x}, avail last idx {}",
                 rx_vq.desc_table_addr(),
                 desc_idx,
                 rx_vq.avail_addr(),
                 rx_vq.avail_idx()
             );
-            println!("ethernet_send_to: failed to get dst {}", vmid);
+            error!("ethernet_send_to: failed to get dst {}", vmid);
             return false;
         }
         let desc_len = rx_vq.desc_len(desc_idx) as usize;
 
         if vmid != 0 {
             let mut addr = round_down(dst, PAGE_SIZE);
-            if *VM_STATE_FLAG.lock() == 1 {
-                println!("A: vm0 virtio net write vm1 memory in 0x{:x}", addr);
+            if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
+                debug!("A: vm0 virtio net write vm1 memory in 0x{:x}", addr);
             }
             while addr <= round_down(dst + desc_len, PAGE_SIZE) {
                 vm_if_set_mem_map_bit(vm.clone(), addr);
@@ -591,7 +595,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
 
     if rx_len < len {
         rx_vq.put_back_avail_desc_idx();
-        println!("ethernet_send_to: rx_len smaller than tx_len");
+        warn!("ethernet_send_to: rx_len smaller than tx_len");
         return false;
     }
     if trace() && tx_iov.get_buf(0) < 0x1000 {
@@ -601,7 +605,7 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
     header.num_buffers = 1;
 
     if tx_iov.write_through_iov(rx_iov.clone(), len) > 0 {
-        println!(
+        error!(
             "ethernet_send_to: write through iov failed, rx_iov_num {} tx_iov_num {} rx_len {} tx_len {}",
             rx_iov.num(),
             tx_iov.num(),
@@ -613,8 +617,8 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
 
     if vmid != 0 {
         let used_addr = vm_ipa2pa(vm.clone(), rx_vq.used_addr());
-        if *VM_STATE_FLAG.lock() == 1 {
-            println!("B: vm0 virtio net write vm1 memory in 0x{:x}", used_addr);
+        if VM_STATE_FLAG.load(core::sync::atomic::Ordering::Relaxed) == 1 {
+            debug!("B: vm0 virtio net write vm1 memory in 0x{:x}", used_addr);
         }
         vm_if_set_mem_map_bit(vm.clone(), used_addr);
         vm_if_set_mem_map_bit(vm, used_addr + PAGE_SIZE);
@@ -623,13 +627,15 @@ fn ethernet_send_to(vmid: usize, tx_iov: VirtioIov, len: usize) -> bool {
         return false;
     }
 
-    return true;
+    true
 }
 
+/// Determines whether the given Ethernet frame is an ARP (Address Resolution Protocol) packet.
 fn ethernet_is_arp(frame: &[u8]) -> bool {
-    return frame[12] == 0x8 && frame[13] == 0x6;
+    frame[12] == 0x8 && frame[13] == 0x6
 }
 
+/// Maps the MAC address in the Ethernet frame to the corresponding virtual machine ID.
 fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
     for vm in VM_LIST.lock().iter() {
         let vm_id = vm.id();
@@ -637,19 +643,16 @@ fn ethernet_mac_to_vm_id(frame: &[u8]) -> Result<usize, ()> {
             return Ok(vm_id);
         }
     }
-    return Err(());
+    Err(())
 }
 
+/// Handles the VirtioNet announcement in a virtual machine (`vm`).
 pub fn virtio_net_announce(vm: Vm) {
-    match vm.emu_net_dev(0) {
-        EmuDevs::VirtioNet(nic) => match nic.dev().desc() {
-            DevDesc::NetDesc(desc) => {
-                let status = desc.status();
-                desc.set_status(status | VIRTIO_NET_S_ANNOUNCE);
-                nic.notify_config(vm);
-            }
-            _ => {}
-        },
-        _ => {}
+    if let EmuDevs::VirtioNet(nic) = vm.emu_net_dev(0) {
+        if let DevDesc::NetDesc(desc) = nic.dev().desc() {
+            let status = desc.status();
+            desc.set_status(status | VIRTIO_NET_S_ANNOUNCE);
+            nic.notify_config(vm);
+        }
     }
 }

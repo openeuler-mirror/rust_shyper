@@ -11,22 +11,33 @@
 use crate::arch::PAGE_SIZE;
 use crate::board::*;
 use crate::kernel::mem_shared_mem_init;
-use crate::lib::{memset_safe, round_up};
+use crate::utils::{memset, round_up};
 use crate::mm::PageFrame;
 
 use super::mem_region::*;
 
 use self::AllocError::*;
-
+use core::slice::from_raw_parts_mut;
 pub const VM_MEM_REGION_MAX: usize = 4;
 
 pub fn mem_init() {
     mem_heap_region_init();
     mem_vm_region_init();
     mem_shared_mem_init();
-    println!("Mem init ok");
+    info!("Mem init ok");
 }
 
+/// Clear BSS section
+pub unsafe fn clear_bss() {
+    extern "C" {
+        fn _bss_begin();
+        fn _bss_end();
+    }
+    println!("clear bss : from {:x} to {:x}", _bss_begin as usize, _bss_end as usize);
+    from_raw_parts_mut(_bss_begin as usize as *mut u8, _bss_end as usize - _bss_begin as usize).fill(0);
+}
+
+/// init heap memory region
 pub fn mem_heap_region_init() {
     extern "C" {
         // Note: link-time label, see aarch64.lds
@@ -34,17 +45,22 @@ pub fn mem_heap_region_init() {
     }
 
     if PLAT_DESC.mem_desc.regions.is_empty() {
-        println!("Platform has no memory region!");
+        warn!("Platform has no memory region!");
     }
 
     let base = round_up(_image_end as usize, PAGE_SIZE);
     let size = round_up(
-        PLAT_DESC.mem_desc.regions[0].size as usize - (base - PLAT_DESC.mem_desc.base as usize),
+        PLAT_DESC.mem_desc.regions[0].size - (base - PLAT_DESC.mem_desc.base),
         PAGE_SIZE,
     ) / PAGE_SIZE;
 
-    println!("init memory, please waiting...");
-    memset_safe(base as *mut u8, 0, size as usize * PAGE_SIZE);
+    info!("init memory, please waiting...");
+    // SAFETY:
+    // The region is writable for the Hypervisor in EL2.
+    // The 'c' is a valid value of type u8 without overflow.
+    unsafe {
+        memset(base as *mut u8, 0, size as usize * PAGE_SIZE);
+    }
     // core::intrinsics::volatile_set_memory(ptr, 0, size as usize * PAGE_SIZE);
 
     let mut heap_lock = HEAP_REGION.lock();
@@ -52,13 +68,13 @@ pub fn mem_heap_region_init() {
 
     drop(heap_lock);
 
-    println!(
+    info!(
         "Memory Heap: base 0x{:x}, size {} MB / {} pages",
         base,
         size * PAGE_SIZE / (1024 * 1024),
         size
     );
-    println!("Memory Heap init ok");
+    info!("Memory Heap init ok");
 }
 
 /// Reserve Heap Memory from base_addr to base_addr + size
@@ -68,8 +84,12 @@ pub fn mem_heap_region_init() {
 /// ```
 pub fn mem_heap_region_reserve(base_addr: usize, size: usize) {
     let mut heap = HEAP_REGION.lock();
+    // //TODO: a compromise way for live_update
+    if base_addr < heap.region.base {
+        return;
+    }
     heap.reserve_pages(base_addr, round_up(size, PAGE_SIZE) / PAGE_SIZE);
-    println!(
+    info!(
         "Reserve Heap Region 0x{:x} ~ 0x{:x}",
         base_addr,
         base_addr + round_up(size, PAGE_SIZE)
@@ -102,13 +122,13 @@ fn mem_vm_region_init() {
         (*vm_region_lock).push(mem_region);
     }
 
-    println!(
+    info!(
         "Memory VM regions: total {} region, size {} MB / {} pages",
         vm_region_num,
         pages * PAGE_SIZE / (1024 * 1024),
         pages
     );
-    println!("Memory VM regions init ok!");
+    info!("Memory VM regions init ok!");
 }
 
 #[derive(Debug)]
@@ -119,9 +139,15 @@ pub enum AllocError {
 
 fn mem_heap_reset() {
     let heap = HEAP_REGION.lock();
-    memset_safe(heap.region.base as *mut u8, 0, heap.region.size * PAGE_SIZE);
+    // SAFETY:
+    // The 'heap_region' is writable for the Hypervisor in EL2.
+    // The 'c' is a valid value of type u8 without overflow.
+    unsafe {
+        memset(heap.region.base as *mut u8, 0, heap.region.size * PAGE_SIZE);
+    }
 }
 
+/// alloc some page from heap region
 pub fn mem_heap_alloc(page_num: usize, _aligned: bool) -> Result<usize, AllocError> {
     if page_num == 0 {
         return Err(AllocZeroPage);
@@ -135,19 +161,23 @@ pub fn mem_heap_alloc(page_num: usize, _aligned: bool) -> Result<usize, AllocErr
     heap.alloc_pages(page_num)
 }
 
+/// free some page from heap region
 pub fn mem_heap_free(addr: usize, page_num: usize) -> bool {
     let mut heap = HEAP_REGION.lock();
     heap.free_pages(addr, page_num)
 }
 
+/// alloc one page
 pub fn mem_page_alloc() -> Result<PageFrame, AllocError> {
     PageFrame::alloc_pages(1)
 }
 
+/// alloc some continuous pages
 pub fn mem_pages_alloc(page_num: usize) -> Result<PageFrame, AllocError> {
     PageFrame::alloc_pages(page_num)
 }
 
+/// alloc some space and create a new vm region
 pub fn mem_vm_region_alloc(size: usize) -> usize {
     let mut vm_region = VM_REGION.lock();
     for i in 0..vm_region.region.len() {
@@ -172,6 +202,7 @@ pub fn mem_vm_region_alloc(size: usize) -> usize {
     0
 }
 
+/// free a vm region
 pub fn mem_vm_region_free(start: usize, size: usize) {
     let mut vm_region = VM_REGION.lock();
     let mut free_idx = None;
@@ -208,5 +239,5 @@ pub fn mem_vm_region_free(start: usize, size: usize) {
             }
         }
     }
-    println!("Free mem from pa 0x{:x} to 0x{:x}", start, start + size);
+    info!("Free mem from pa 0x{:x} to 0x{:x}", start, start + size);
 }
