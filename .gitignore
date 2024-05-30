@@ -21,3 +21,4 @@ build/
 /vm1*
 /image/Image*
 *.patch
+target
