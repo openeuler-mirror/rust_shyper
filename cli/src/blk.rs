@@ -1,9 +1,22 @@
-use std::{fs, os::linux::fs::MetadataExt, process::{id, Command}, slice::from_raw_parts, sync::Mutex};
-use libc::{c_uint, c_void, ioctl, memset, mmap, open, preadv2, size_t, MAP_ANONYMOUS, MAP_HUGETLB, MAP_PRIVATE, O_DIRECT, O_RDWR, PROT_READ, PROT_WRITE, S_IFBLK, S_IFMT};
+use std::{
+    fs,
+    os::linux::fs::MetadataExt,
+    process::{id, Command},
+    slice::from_raw_parts,
+    sync::Mutex,
+};
+use libc::{
+    c_uint, c_void, ioctl, memset, mmap, open, preadv2, size_t, MAP_ANONYMOUS, MAP_HUGETLB, MAP_PRIVATE, O_DIRECT,
+    O_RDWR, PROT_READ, PROT_WRITE, S_IFBLK, S_IFMT,
+};
 use log::{info, warn};
 use once_cell::sync::OnceCell;
 
-use crate::{daemon::generate_hvc_mode, ioctl_arg::{IOCTL_SYS, IOCTL_SYS_APPEND_MED_BLK}, util::{check_cache_address, cstr_arr_to_string, string_to_cstr_arr, virt_to_phys_user}};
+use crate::{
+    daemon::generate_hvc_mode,
+    ioctl_arg::{IOCTL_SYS, IOCTL_SYS_APPEND_MED_BLK},
+    util::{check_cache_address, cstr_arr_to_string, string_to_cstr_arr, virt_to_phys_user},
+};
 
 pub const HUGE_TLB_MAX: usize = 2 * 1024 * 1024;
 pub const BLOCK_SIZE: usize = 512;
@@ -39,7 +52,10 @@ fn blk_read(blk_id: u16, lba: u64, mut count: u64) {
     let img_file = binding2.get(blk_id as usize).unwrap();
 
     if count > blk_cfg.dma_block_max {
-        warn!("blk_read count {} > dma_block_max {}, shrink count to {}", count, blk_cfg.dma_block_max, blk_cfg.dma_block_max);
+        warn!(
+            "blk_read count {} > dma_block_max {}, shrink count to {}",
+            count, blk_cfg.dma_block_max, blk_cfg.dma_block_max
+        );
         count = blk_cfg.dma_block_max;
     }
 
@@ -53,7 +69,12 @@ fn blk_read(blk_id: u16, lba: u64, mut count: u64) {
         if read_len < 0 {
             warn!("read lba {:#x} size {:#x} failed!", lba, count * BLOCK_SIZE as u64);
         } else if read_len != (count as isize * BLOCK_SIZE as isize) {
-            warn!("read lba {:#x} size {:#x} failed! read_len = {:#x}", lba, count * BLOCK_SIZE as u64, read_len);
+            warn!(
+                "read lba {:#x} size {:#x} failed! read_len = {:#x}",
+                lba,
+                count * BLOCK_SIZE as u64,
+                read_len
+            );
         }
     }
 }
@@ -65,17 +86,30 @@ fn blk_write(blk_id: u16, lba: u64, mut count: u64) {
     let img_file = binding2.get(blk_id as usize).unwrap();
 
     if count > blk_cfg.dma_block_max {
-        warn!("blk_write count {} > dma_block_max {}, shrink count to {}", count, blk_cfg.dma_block_max, blk_cfg.dma_block_max);
+        warn!(
+            "blk_write count {} > dma_block_max {}, shrink count to {}",
+            count, blk_cfg.dma_block_max, blk_cfg.dma_block_max
+        );
         count = blk_cfg.dma_block_max;
     }
 
     unsafe {
-        let write_len = libc::pwrite(*img_file, blk_cfg.cache_va as *const c_void, count as usize * BLOCK_SIZE, lba as i64 * BLOCK_SIZE as i64);
+        let write_len = libc::pwrite(
+            *img_file,
+            blk_cfg.cache_va as *const c_void,
+            count as usize * BLOCK_SIZE,
+            lba as i64 * BLOCK_SIZE as i64,
+        );
 
         if write_len < 0 {
             warn!("write lba {:#x} size {:#x} failed!", lba, count * BLOCK_SIZE as u64);
         } else if write_len != (count as isize * BLOCK_SIZE as isize) {
-            warn!("write lba {:#x} size {:#x} failed! write_len = {:#x}", lba, count * BLOCK_SIZE as u64, write_len);
+            warn!(
+                "write lba {:#x} size {:#x} failed! write_len = {:#x}",
+                lba,
+                count * BLOCK_SIZE as u64,
+                write_len
+            );
         }
     }
 }
@@ -89,7 +123,11 @@ fn blk_try_rw(blk_id: u16) -> Result<(), String> {
     // Read origin data, and save it in origin_data
     blk_read(blk_id, 0, 1);
     unsafe {
-        origin_data.clone_from(from_raw_parts(blk.cache_va as *const u8, BLOCK_SIZE).try_into().unwrap());
+        origin_data.clone_from(
+            from_raw_parts(blk.cache_va as *const u8, BLOCK_SIZE)
+                .try_into()
+                .unwrap(),
+        );
     }
 
     let cache = blk.cache_va as *mut u8;
@@ -169,12 +207,14 @@ pub fn mediated_blk_init() {
     for i in 0..med_blk_list.len() {
         let cache_size = med_blk_list[i].cache_size;
         let block_dev_path = med_blk_list[i].block_dev_path.clone();
-        info!("Shyper daemon init blk {} with cache size {}", 
+        info!(
+            "Shyper daemon init blk {} with cache size {}",
             cstr_arr_to_string(med_blk_list[i].name.as_slice()),
             cache_size
         );
 
-        info!("Shyper daemon init blk {} va {:#x} with cache pa {:#x}", 
+        info!(
+            "Shyper daemon init blk {} va {:#x} with cache pa {:#x}",
             cstr_arr_to_string(med_blk_list[i].name.as_slice()),
             med_blk_list[i].cache_va as u64,
             med_blk_list[i].cache_ipa as u64
@@ -183,7 +223,11 @@ pub fn mediated_blk_init() {
         unsafe {
             let fd = open(block_dev_path.as_ptr() as *const u8, O_RDWR | O_DIRECT);
             if fd < 0 {
-                warn!("open block device {} failed: errcode = {}", cstr_arr_to_string(block_dev_path.as_slice()), fd);
+                warn!(
+                    "open block device {} failed: errcode = {}",
+                    cstr_arr_to_string(block_dev_path.as_slice()),
+                    fd
+                );
                 return;
             }
             img_file_fds[i] = fd;
@@ -198,14 +242,22 @@ pub fn mediated_blk_init() {
 
         let request = generate_hvc_mode(IOCTL_SYS, IOCTL_SYS_APPEND_MED_BLK);
         unsafe {
-            if ioctl(*SHYPER_FD.get().unwrap(), request as u64, &med_blk_list[i] as *const MediatedBlkCfg as *mut c_void) != 0 {
+            if ioctl(
+                *SHYPER_FD.get().unwrap(),
+                request as u64,
+                &med_blk_list[i] as *const MediatedBlkCfg as *mut c_void,
+            ) != 0
+            {
                 warn!("ioctl append mediated blk failed");
                 return;
             }
         }
 
         img_file_fds = IMG_FILE_FDS.lock().unwrap();
-        info!("Shyper daemon init blk {} success", cstr_arr_to_string(med_blk_list[i].name.clone().as_slice()));
+        info!(
+            "Shyper daemon init blk {} success",
+            cstr_arr_to_string(med_blk_list[i].name.clone().as_slice())
+        );
     }
 }
 
@@ -213,9 +265,7 @@ pub fn mediated_blk_init() {
 pub fn mediated_blk_read(blk_id: u16, lba: u64, count: u64) {
     blk_read(blk_id, lba, count);
 
-    let ret = unsafe {
-        libc::ioctl(*SHYPER_FD.get().unwrap(), 0x0331, blk_id as c_uint)
-    };
+    let ret = unsafe { libc::ioctl(*SHYPER_FD.get().unwrap(), 0x0331, blk_id as c_uint) };
     if ret != 0 {
         warn!("Mediated blk read ioctl failed");
     }
@@ -224,9 +274,7 @@ pub fn mediated_blk_read(blk_id: u16, lba: u64, count: u64) {
 pub fn mediated_blk_write(blk_id: u16, lba: u64, count: u64) {
     blk_write(blk_id, lba, count);
 
-    let ret = unsafe {
-        libc::ioctl(*SHYPER_FD.get().unwrap(), 0x0331, blk_id as c_uint)
-    };
+    let ret = unsafe { libc::ioctl(*SHYPER_FD.get().unwrap(), 0x0331, blk_id as c_uint) };
     if ret != 0 {
         warn!("Mediated blk read ioctl failed");
     }
@@ -238,11 +286,15 @@ pub fn mediated_blk_add(index: usize, dev: String) -> Result<MediatedBlkCfg, Str
 
     let file_type = metadata.st_mode() & (S_IFMT as u32);
     if file_type != S_IFBLK {
-        warn!("{} is not a block device, but we can also use {} as a img file", dev, dev);
+        warn!(
+            "{} is not a block device, but we can also use {} as a img file",
+            dev, dev
+        );
     }
 
     let ctx = fdisk::Context::new();
-    ctx.assign_device(dev.clone(), true).map_err(|dev| format!("assign device {} err", dev))?;
+    ctx.assign_device(dev.clone(), true)
+        .map_err(|dev| format!("assign device {} err", dev))?;
 
     let nsec = ctx.logical_sectors();
     info!("Shyper daemon add blk {} with {} sectors", dev.clone(), nsec);
@@ -250,7 +302,14 @@ pub fn mediated_blk_add(index: usize, dev: String) -> Result<MediatedBlkCfg, Str
     let cache_va;
     let cache_size = HUGE_TLB_MAX as u64;
     unsafe {
-        cache_va = mmap(0 as *mut c_void, cache_size as size_t, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
+        cache_va = mmap(
+            0 as *mut c_void,
+            cache_size as size_t,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+            0,
+            0,
+        );
         if cache_va == libc::MAP_FAILED {
             warn!("mmap cache failed");
             return Err("mmap cache failed".to_string());
@@ -280,8 +339,8 @@ pub fn mediated_blk_add(index: usize, dev: String) -> Result<MediatedBlkCfg, Str
         cache_ipa: phys_result.unwrap(),
         cache_pa: 0,
     };
-    ctx.deassign_device(false).map_err(|x| format!("deassign device {} err: {}", dev, x))?;
+    ctx.deassign_device(false)
+        .map_err(|x| format!("deassign device {} err: {}", dev, x))?;
 
     Ok(cfg)
 }
-

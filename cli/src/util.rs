@@ -1,4 +1,10 @@
-use std::{ffi::CString, fs::File, io::{Read, Seek}, mem, slice::from_raw_parts_mut};
+use std::{
+    ffi::CString,
+    fs::File,
+    io::{Read, Seek},
+    mem,
+    slice::from_raw_parts_mut,
+};
 
 use libc::{c_int, c_uchar, c_ulong, c_void, sysconf, _SC_PAGE_SIZE};
 
@@ -32,9 +38,7 @@ pub fn cstr_arr_to_string(buf: &[u8]) -> String {
             vec.push(*i);
         }
     }
-    unsafe {
-        CString::from_vec_unchecked(vec).to_string_lossy().into()
-    }
+    unsafe { CString::from_vec_unchecked(vec).to_string_lossy().into() }
 }
 
 pub fn string_to_cstr_arr(s: String) -> [u8; 32] {
@@ -50,29 +54,31 @@ pub fn string_to_cstr_arr(s: String) -> [u8; 32] {
 // returns paddr
 pub fn virt_to_phys_user(pid: u32, vaddr: u64) -> Result<u64, String> {
     let pagemap_path = format!("/proc/{}/pagemap", pid);
-    let mut file = File::open(&pagemap_path).map_err(
-        |err| format!("Open {} err: {}", &pagemap_path, err)
-    )?;
+    let mut file = File::open(&pagemap_path).map_err(|err| format!("Open {} err: {}", &pagemap_path, err))?;
 
     let page_size: usize = unsafe { sysconf(_SC_PAGE_SIZE) } as usize;
     let offset = ((vaddr as usize) / page_size) * (mem::size_of::<c_ulong>() as usize);
 
     if file.seek(std::io::SeekFrom::Start(offset as u64)).is_err() {
-        return Err(format!("File {} is not big enough to access offset {}", pagemap_path, offset));
+        return Err(format!(
+            "File {} is not big enough to access offset {}",
+            pagemap_path, offset
+        ));
     }
 
     let mut pagemap_entry: c_ulong = 0;
-    if file.read_exact(unsafe {
-        from_raw_parts_mut(
-            &mut pagemap_entry as *mut _ as  *mut u8, 
-            mem::size_of::<c_ulong>()
-        )
-    }).is_err() {
+    if file
+        .read_exact(unsafe { from_raw_parts_mut(&mut pagemap_entry as *mut _ as *mut u8, mem::size_of::<c_ulong>()) })
+        .is_err()
+    {
         return Err(format!("Read page table entry err"));
     }
 
     if (pagemap_entry & (1 << 63)) == 0 {
-        return Err(format!("Virtual Address 0x{:#x} converts to paddr err: page not in memory", vaddr));
+        return Err(format!(
+            "Virtual Address 0x{:#x} converts to paddr err: page not in memory",
+            vaddr
+        ));
     }
 
     // Note: 以下注释是pagemap_entry每一位的意义
@@ -110,18 +116,18 @@ pub fn string_to_u64(s: String) -> Result<u64, String> {
     if s.starts_with("0x") {
         match u64::from_str_radix(&s[2..], 16) {
             Ok(num) => Ok(num),
-            Err(_) => Err(format!("Not hex string: {}", s))
+            Err(_) => Err(format!("Not hex string: {}", s)),
         }
     } else if s.starts_with("0b") {
         match u64::from_str_radix(&s[2..], 2) {
             Ok(num) => Ok(num),
-            Err(_) => Err(format!("Not binary string: {}", s))
+            Err(_) => Err(format!("Not binary string: {}", s)),
         }
     } else {
         // must be decimal
         match u64::from_str_radix(&s, 10) {
             Ok(num) => Ok(num),
-            Err(_) => Err(format!("String {} is not in hex/bin/decimal format!", s))
+            Err(_) => Err(format!("String {} is not in hex/bin/decimal format!", s)),
         }
     }
 }

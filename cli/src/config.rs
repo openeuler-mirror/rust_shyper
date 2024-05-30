@@ -1,11 +1,37 @@
-use std::{fs::{File, OpenOptions}, io::BufReader, os::fd::AsRawFd, process};
+use std::{
+    fs::{File, OpenOptions},
+    io::BufReader,
+    os::fd::AsRawFd,
+    process,
+};
 
-use libc::{c_void, close, ioctl, lseek, mmap, munmap, open, MAP_ANONYMOUS, MAP_FAILED, MAP_HUGETLB, MAP_PRIVATE, O_RDONLY, O_RDWR, PROT_READ, PROT_WRITE, SEEK_SET};
+use libc::{
+    c_void, close, ioctl, lseek, mmap, munmap, open, MAP_ANONYMOUS, MAP_FAILED, MAP_HUGETLB, MAP_PRIVATE, O_RDONLY,
+    O_RDWR, PROT_READ, PROT_WRITE, SEEK_SET,
+};
 use log::{error, info, warn};
-use serde::{de::{self, Visitor}, Deserialize, Deserializer, Serialize};
+use serde::{
+    de::{self, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
 use serde_json::Value;
 
-use crate::{config_arg::{VmAddConfigArg, VmAddDtbDeviceConfigArg, VmAddEmulatedDeviceConfigArg, VmAddMemoryRegionConfigArg, VmAddPassthroughDeviceIrqsConfigArg, VmAddPassthroughDeviceRegionConfigArg, VmAddPassthroughDeviceStreamsIdsConfigArg, VmKernelImageInfo, VmLoadKernelImgFileArg, VmMemoryColorBudgetConfigArg, VmSetCpuConfigArg}, daemon::{generate_hvc_mode, HVC_CONFIG, HVC_CONFIG_ADD_VM, HVC_CONFIG_CPU, HVC_CONFIG_DELETE_VM, HVC_CONFIG_DTB_DEVICE, HVC_CONFIG_EMULATED_DEVICE, HVC_CONFIG_MEMORY_COLOR_BUDGET, HVC_CONFIG_MEMORY_REGION, HVC_CONFIG_PASSTHROUGH_DEVICE_IRQS, HVC_CONFIG_PASSTHROUGH_DEVICE_REGION, HVC_CONFIG_PASSTHROUGH_DEVICE_STREAMS_IDS, HVC_CONFIG_UPLOAD_DEVICE_TREE, HVC_CONFIG_UPLOAD_KERNEL_IMAGE}, ioctl_arg::{IOCTL_SYS, IOCTL_SYS_SET_KERNEL_IMG_NAME}, util::{check_cache_address, file_size, string_to_u64, virt_to_phys_user}};
+use crate::{
+    config_arg::{
+        VmAddConfigArg, VmAddDtbDeviceConfigArg, VmAddEmulatedDeviceConfigArg, VmAddMemoryRegionConfigArg,
+        VmAddPassthroughDeviceIrqsConfigArg, VmAddPassthroughDeviceRegionConfigArg,
+        VmAddPassthroughDeviceStreamsIdsConfigArg, VmKernelImageInfo, VmLoadKernelImgFileArg,
+        VmMemoryColorBudgetConfigArg, VmSetCpuConfigArg,
+    },
+    daemon::{
+        generate_hvc_mode, HVC_CONFIG, HVC_CONFIG_ADD_VM, HVC_CONFIG_CPU, HVC_CONFIG_DELETE_VM, HVC_CONFIG_DTB_DEVICE,
+        HVC_CONFIG_EMULATED_DEVICE, HVC_CONFIG_MEMORY_COLOR_BUDGET, HVC_CONFIG_MEMORY_REGION,
+        HVC_CONFIG_PASSTHROUGH_DEVICE_IRQS, HVC_CONFIG_PASSTHROUGH_DEVICE_REGION,
+        HVC_CONFIG_PASSTHROUGH_DEVICE_STREAMS_IDS, HVC_CONFIG_UPLOAD_DEVICE_TREE, HVC_CONFIG_UPLOAD_KERNEL_IMAGE,
+    },
+    ioctl_arg::{IOCTL_SYS, IOCTL_SYS_SET_KERNEL_IMG_NAME},
+    util::{check_cache_address, file_size, string_to_u64, virt_to_phys_user},
+};
 
 const CACHE_MAX: usize = 2 * 1024 * 1024;
 const CMDLINE_MAX_LEN: usize = 1024;
@@ -141,9 +167,9 @@ where
                 let pos = color_slice.find("-").unwrap();
                 let len = color_slice.len();
                 let start = u64::from_str_radix(&color_slice[0..pos], 10).map_err(de::Error::custom)?;
-                let end = u64::from_str_radix(&color_slice[pos+1..len], 10).map_err(de::Error::custom)?;
+                let end = u64::from_str_radix(&color_slice[pos + 1..len], 10).map_err(de::Error::custom)?;
 
-                for i in start..end+1 {
+                for i in start..end + 1 {
                     vec.push(i);
                 }
             }
@@ -214,9 +240,9 @@ pub struct EmulatedDevice {
     pub r#type: EmuDeviceType,
 }
 
-fn deserialize_cfg_list<'de, D>(deserializer: D) -> Result<Vec<u64>, D::Error> 
+fn deserialize_cfg_list<'de, D>(deserializer: D) -> Result<Vec<u64>, D::Error>
 where
-    D: Deserializer<'de>
+    D: Deserializer<'de>,
 {
     // 解析为serdes_json定义的可变Value，以应对Value是不同值的情况
     let value: Value = Deserialize::deserialize(deserializer)?;
@@ -244,15 +270,13 @@ where
             }
             Ok(vec)
         }
-        _ => {
-            Err(de::Error::custom("cfg_list is not array!"))
-        }
+        _ => Err(de::Error::custom("cfg_list is not array!")),
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VmPassthroughDeviceConfig {
-    pub passthrough_device_list: Vec<PassthroughDevice>
+    pub passthrough_device_list: Vec<PassthroughDevice>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -339,9 +363,10 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
             ipa_start: region.ipa_start,
             length: region.length,
         };
-        ioctl_send_config(fd, fd_event, &mem_cfg_arg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_add_memory_region_config_arg"))?;
+        ioctl_send_config(fd, fd_event, &mem_cfg_arg as *const _ as *const c_void)
+            .map_err(|_| String::from("failed to send vm_add_memory_region_config_arg"))?;
     }
-    
+
     // 3. Add VM memory color and budget information
     let has_color = vm_cfg.memory.colors.is_some();
     let has_budget = vm_cfg.memory.budget.is_some();
@@ -349,11 +374,20 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
         let fd_event = generate_hvc_mode(HVC_CONFIG, HVC_CONFIG_MEMORY_COLOR_BUDGET);
         let cfg = VmMemoryColorBudgetConfigArg {
             vmid: vm_id,
-            color_num: if has_color { vm_cfg.memory.colors.as_ref().unwrap().len() as u64 } else { 0 },
-            color_array_addr: if has_color { vm_cfg.memory.colors.unwrap().as_ptr() as *const u64 as u64 } else { 0 },
+            color_num: if has_color {
+                vm_cfg.memory.colors.as_ref().unwrap().len() as u64
+            } else {
+                0
+            },
+            color_array_addr: if has_color {
+                vm_cfg.memory.colors.unwrap().as_ptr() as *const u64 as u64
+            } else {
+                0
+            },
             budget: if has_budget { vm_cfg.memory.budget.unwrap() } else { 0 },
         };
-        ioctl_send_config(fd, fd_event, &cfg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_memory_color_budget_config_arg"))?;
+        ioctl_send_config(fd, fd_event, &cfg as *const _ as *const c_void)
+            .map_err(|_| String::from("failed to send vm_memory_color_budget_config_arg"))?;
     }
 
     // 4. Set VM CPU config
@@ -364,7 +398,8 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
         allocate_bitmap: vm_cfg.cpu.allocate_bitmap,
         master: vm_cfg.cpu.master,
     };
-    ioctl_send_config(fd, fd_event, &cpu_cfg_arg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_cpu_config_arg"))?;
+    ioctl_send_config(fd, fd_event, &cpu_cfg_arg as *const _ as *const c_void)
+        .map_err(|_| String::from("failed to send vm_cpu_config_arg"))?;
 
     // 5. Add VM emulated device config
     let fd_event = generate_hvc_mode(HVC_CONFIG, HVC_CONFIG_EMULATED_DEVICE);
@@ -380,7 +415,8 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
             cfg_list_length: device.cfg_list.len() as u64,
             emu_type: device.r#type as u64,
         };
-        ioctl_send_config(fd, fd_event, &emu_cfg_arg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_emulated_device_config_arg"))?;
+        ioctl_send_config(fd, fd_event, &emu_cfg_arg as *const _ as *const c_void)
+            .map_err(|_| String::from("failed to send vm_emulated_device_config_arg"))?;
     }
 
     // record passthrough device irqs and stream ids
@@ -396,7 +432,8 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
             base_pa: device.base_pa,
             length: device.length,
         };
-        ioctl_send_config(fd, fd_event, &passthrough_cfg_arg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_passthrough_device_region_config_arg"))?;
+        ioctl_send_config(fd, fd_event, &passthrough_cfg_arg as *const _ as *const c_void)
+            .map_err(|_| String::from("failed to send vm_passthrough_device_region_config_arg"))?;
 
         passthrough_irqs.append(&mut device.irq_list.clone().into_iter().map(|x| x as u64).collect());
         if device.smmu_id.is_some() {
@@ -412,7 +449,8 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
             irqs_addr: passthrough_irqs.as_ptr() as *const u64 as u64,
             irqs_length: passthrough_irqs.len() as u64,
         };
-        ioctl_send_config(fd, fd_event, &passthrough_irqs_cfg_arg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_passthrough_device_irqs_config_arg"))?;
+        ioctl_send_config(fd, fd_event, &passthrough_irqs_cfg_arg as *const _ as *const c_void)
+            .map_err(|_| String::from("failed to send vm_passthrough_device_irqs_config_arg"))?;
     }
 
     // 8. Add VM passthrough device streams ids
@@ -423,7 +461,12 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
             streams_ids_addr: passthrough_stream_ids.as_ptr() as *const u64 as u64,
             streams_ids_length: passthrough_stream_ids.len() as u64,
         };
-        ioctl_send_config(fd, fd_event, &passthrough_stream_ids_cfg_arg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_passthrough_device_streams_ids_config_arg"))?;
+        ioctl_send_config(
+            fd,
+            fd_event,
+            &passthrough_stream_ids_cfg_arg as *const _ as *const c_void,
+        )
+        .map_err(|_| String::from("failed to send vm_passthrough_device_streams_ids_config_arg"))?;
     }
 
     // 9. Add VM dtb device config
@@ -438,15 +481,24 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
             irq_list_length: dtb_device.irq_list.len() as u64,
             addr_region_ipa: dtb_device.addr_region_ipa,
         };
-        ioctl_send_config(fd, fd_event, &dtb_cfg_arg as *const _ as *const c_void).map_err(|_| String::from("failed to send vm_dtb_device_config_arg"))?;
+        ioctl_send_config(fd, fd_event, &dtb_cfg_arg as *const _ as *const c_void)
+            .map_err(|_| String::from("failed to send vm_dtb_device_config_arg"))?;
     }
 
     // 10. Copy dtb_file and img_file to memory
     if !vm_cfg.image.device_tree_filename.is_empty() {
-        copy_device_tree_to_memory(vm_id, vm_cfg.image.device_tree_filename.clone(), fd as u32).map_err(|_| format!("failed to copy device tree {} to memory", vm_cfg.image.device_tree_filename))?;
+        copy_device_tree_to_memory(vm_id, vm_cfg.image.device_tree_filename.clone(), fd as u32).map_err(|_| {
+            format!(
+                "failed to copy device tree {} to memory",
+                vm_cfg.image.device_tree_filename
+            )
+        })?;
     }
     if !copy_img_file_to_memory(vm_id, vm_cfg.image.kernel_filename.clone(), fd as u32).is_ok() {
-        return Err(format!("failed to copy kernel image {} to memory", vm_cfg.image.kernel_filename));
+        return Err(format!(
+            "failed to copy kernel image {} to memory",
+            vm_cfg.image.kernel_filename
+        ));
     }
 
     // 10. Store kernel image file name in kernel module.
@@ -471,9 +523,7 @@ pub fn config_add_vm(config_json: String) -> Result<u64, String> {
     let vm_cfg_2 = vm_cfg.clone();
     println!("Parse VM config successfully, VM name [{}]", vm_cfg.name);
 
-    let fd = unsafe {
-        open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR)
-    };
+    let fd = unsafe { open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR) };
 
     if fd < 0 {
         return Err(format!("Failed to open /dev/shyper: {}", fd));
@@ -493,7 +543,8 @@ pub fn config_add_vm(config_json: String) -> Result<u64, String> {
         vm_id_addr: &vm_id as *const u64 as u64,
     };
     let fd_event = generate_hvc_mode(HVC_CONFIG, HVC_CONFIG_ADD_VM);
-    ioctl_send_config(fd, fd_event, &vm_add_req as *const _ as *const c_void).map_err(|_| String::from("config_add_vm failed"))?;
+    ioctl_send_config(fd, fd_event, &vm_add_req as *const _ as *const c_void)
+        .map_err(|_| String::from("config_add_vm failed"))?;
     info!("Send VM [{}] config successfully", vm_id);
 
     // deal with failure condition
@@ -522,7 +573,14 @@ fn copy_file_to_hypervisor(vmid: u64, filename: String, shyper_fd: u32, upload_m
 
     unsafe {
         file_fd = open(filename.as_ptr() as *const u8, O_RDONLY);
-        cache_va = mmap(0 as *mut c_void, CACHE_MAX, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 0, 0);
+        cache_va = mmap(
+            0 as *mut c_void,
+            CACHE_MAX,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+            0,
+            0,
+        );
         if cache_va == MAP_FAILED {
             close(file_fd);
             return Err(String::from("Allocate cache memory error!"));
@@ -539,16 +597,14 @@ fn copy_file_to_hypervisor(vmid: u64, filename: String, shyper_fd: u32, upload_m
         return Err(err);
     }
 
-    let cache_ipa = virt_to_phys_user(process::id(), cache_va as u64).map_err(
-        |err| {
-            warn!("Failed to get cache pa\n");
-            unsafe {
-                close(file_fd);
-                munmap(cache_va, CACHE_MAX);
-            }
-            err
+    let cache_ipa = virt_to_phys_user(process::id(), cache_va as u64).map_err(|err| {
+        warn!("Failed to get cache pa\n");
+        unsafe {
+            close(file_fd);
+            munmap(cache_va, CACHE_MAX);
         }
-    )?;
+        err
+    })?;
 
     while copied_size < file_size {
         // set read start is previous read
@@ -567,8 +623,10 @@ fn copy_file_to_hypervisor(vmid: u64, filename: String, shyper_fd: u32, upload_m
             };
 
             if libc::read(file_fd, cache_va, coping_size as usize) == -1 {
-                warn!("read kernel image {} pos {} size {} failed\n", filename, copied_size,
-                        coping_size);
+                warn!(
+                    "read kernel image {} pos {} size {} failed\n",
+                    filename, copied_size, coping_size
+                );
                 close(file_fd);
                 munmap(cache_va, CACHE_MAX);
                 return Err(format!("read file {} err", filename));
@@ -609,7 +667,3 @@ pub fn copy_img_file_to_memory(vmid: u64, filename: String, shyper_fd: u32) -> R
 pub fn copy_device_tree_to_memory(vmid: u64, filename: String, shyper_fd: u32) -> Result<(), String> {
     copy_file_to_hypervisor(vmid, filename, shyper_fd, HVC_CONFIG_UPLOAD_DEVICE_TREE)
 }
-
-
-
-

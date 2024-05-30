@@ -1,11 +1,11 @@
-mod sys;
-mod util;
-mod daemon;
-mod ioctl_arg;
-mod vmm;
 mod blk;
 mod config;
 mod config_arg;
+mod daemon;
+mod ioctl_arg;
+mod sys;
+mod util;
+mod vmm;
 
 use std::path::Path;
 
@@ -19,7 +19,12 @@ use vmm::{vmm_boot, vmm_getvmid, vmm_list_vm_info, vmm_reboot, vmm_remove};
 use crate::config::config_add_vm;
 
 #[derive(Parser)]
-#[command(version, author, about, long_about = "CommandLine Interface for Shyper/Rust-Shyper Hypervisor")]
+#[command(
+    version,
+    author,
+    about,
+    long_about = "CommandLine Interface for Shyper/Rust-Shyper Hypervisor"
+)]
 struct CLI {
     #[command(subcommand)]
     subcmd: CLISubCmd,
@@ -35,7 +40,7 @@ enum CLISubCmd {
     Vm {
         #[command(subcommand)]
         subcmd: VmSubCmd,
-    }
+    },
 }
 
 #[derive(Subcommand)]
@@ -54,22 +59,18 @@ enum SystemSubCmd {
         /// new hypervisor image
         image: String,
     },
-    Test {
-
-    },
+    Test {},
     Daemon {
         /// daemon config, specifically mediated disk config
         #[arg(default_value = "cli-config.json")]
-        config: String
-    }
+        config: String,
+    },
 }
 
 #[derive(Subcommand)]
 enum VmSubCmd {
     /// list the info of the vm
-    List {
-
-    },
+    List {},
     Boot {
         vmid: u32,
         /// Choose display method, currently only supported SDL2.
@@ -99,16 +100,14 @@ enum VmSubCmd {
         #[arg(short, long)]
         force: bool,
     },
-    Getvmid {
-
-    }
+    Getvmid {},
 }
 
 fn parse_file(file: &str) -> Result<String, String> {
     if file.is_empty() {
         return Err(String::from("CONFIG can't be empty!"));
     }
-    
+
     let file_path = Path::new(file);
     if !file_path.exists() {
         // judge whether the file exists or not
@@ -120,7 +119,7 @@ fn parse_file(file: &str) -> Result<String, String> {
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum DisplayMode {
-    SDL
+    SDL,
 }
 
 fn exec_system_cmd(subcmd: SystemSubCmd) {
@@ -128,17 +127,17 @@ fn exec_system_cmd(subcmd: SystemSubCmd) {
         SystemSubCmd::Reboot { force } => sys_reboot(force),
         SystemSubCmd::Shutdown { force } => sys_shutdown(force),
         SystemSubCmd::Update { image } => sys_update(image),
-        SystemSubCmd::Test {  } => sys_test(),
+        SystemSubCmd::Test {} => sys_test(),
         SystemSubCmd::Daemon { config } => {
             config_daemon(config).unwrap();
             init_daemon();
-        },
+        }
     }
 }
 
 fn exec_vm_cmd(subcmd: VmSubCmd) {
     match subcmd {
-        VmSubCmd::List {  } => vmm_list_vm_info(),
+        VmSubCmd::List {} => vmm_list_vm_info(),
         VmSubCmd::Boot { vmid, display } => vmm_boot(vmid),
         VmSubCmd::Reboot { vmid, force } => vmm_reboot(force, vmid),
         VmSubCmd::Remove { vmid } => vmm_remove(vmid),
@@ -147,25 +146,23 @@ fn exec_vm_cmd(subcmd: VmSubCmd) {
             if let Err(err) = config_add_vm(config) {
                 error!("Add vm failed: {}", err);
             }
-        },
+        }
         VmSubCmd::Delconfig { vmid, force } => todo!(),
-        VmSubCmd::Getvmid {  } => vmm_getvmid(),
+        VmSubCmd::Getvmid {} => vmm_getvmid(),
     }
 }
 
 fn main() {
     // configure logger and set log level
-    env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Info)
-        .init();
+    env_logger::Builder::new().filter_level(log::LevelFilter::Info).init();
 
     let cli = CLI::parse();
     match cli.subcmd {
         CLISubCmd::System { subcmd } => {
             exec_system_cmd(subcmd);
-        },
+        }
         CLISubCmd::Vm { subcmd } => {
             exec_vm_cmd(subcmd);
-        },
+        }
     }
 }

@@ -1,4 +1,3 @@
-
 #[repr(C)]
 pub struct VmAddConfigArg {
     pub vm_name_addr: u64,
@@ -47,7 +46,6 @@ pub struct VmAddMemoryRegionConfigArg {
     pub ipa_start: u64,
     pub length: u64,
 }
-
 
 #[repr(C)]
 pub struct VmAddPassthroughDeviceRegionConfigArg {

@@ -1,8 +1,11 @@
-use libc::{c_void, close, ioctl, lseek, open, read, size_t, MAP_LOCKED, MAP_SHARED, O_RDONLY, O_RDWR, PROT_READ, PROT_WRITE, SEEK_SET};
+use libc::{
+    c_void, close, ioctl, lseek, open, read, size_t, MAP_LOCKED, MAP_SHARED, O_RDONLY, O_RDWR, PROT_READ, PROT_WRITE,
+    SEEK_SET,
+};
 
 use crate::util::{bool_to_cint, file_size};
 
-pub fn sys_reboot(force: bool) {    
+pub fn sys_reboot(force: bool) {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         println!("sys reboot fd {}", fd);
@@ -13,7 +16,7 @@ pub fn sys_reboot(force: bool) {
     }
 }
 
-pub fn sys_shutdown(force: bool) {    
+pub fn sys_shutdown(force: bool) {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         println!("sys shutdown fd {}", fd);
@@ -24,7 +27,7 @@ pub fn sys_shutdown(force: bool) {
     }
 }
 
-pub fn sys_test() {    
+pub fn sys_test() {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         println!("sys test fd {}", fd);
@@ -43,7 +46,14 @@ fn update_image(path: String) -> u64 {
 
     unsafe {
         let share_mem_fd = open("/dev/hyper_update".as_ptr() as *const u8, O_RDWR);
-        let addr = libc::mmap(0 as *mut c_void, 0x8000000, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_LOCKED, share_mem_fd, 0);
+        let addr = libc::mmap(
+            0 as *mut c_void,
+            0x8000000,
+            PROT_READ | PROT_WRITE,
+            MAP_SHARED | MAP_LOCKED,
+            share_mem_fd,
+            0,
+        );
         if addr.is_null() {
             println!("[sys_update] update image mmap failed");
             return size;

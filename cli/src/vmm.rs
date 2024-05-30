@@ -32,7 +32,7 @@ struct VMInfoList {
     pub info_list: [VMInfo; VM_NUM_MAX],
 }
 
-pub fn vmm_boot(vm_id: u32) {    
+pub fn vmm_boot(vm_id: u32) {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         if ioctl(fd, 0x0102, vm_id) != 0 {
@@ -42,7 +42,7 @@ pub fn vmm_boot(vm_id: u32) {
     }
 }
 
-pub fn vmm_shutdown(force: bool, vm_id: u32) {    
+pub fn vmm_shutdown(force: bool, vm_id: u32) {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         let arg: u64 = match force {
@@ -56,7 +56,7 @@ pub fn vmm_shutdown(force: bool, vm_id: u32) {
     }
 }
 
-pub fn vmm_reboot(force: bool, vm_id: u32) {    
+pub fn vmm_reboot(force: bool, vm_id: u32) {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         let arg: u64 = match force {
@@ -70,7 +70,7 @@ pub fn vmm_reboot(force: bool, vm_id: u32) {
     }
 }
 
-pub fn vmm_remove(vm_id: u32) {    
+pub fn vmm_remove(vm_id: u32) {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         if ioctl(fd, 0x0110, vm_id) != 0 {
@@ -80,7 +80,7 @@ pub fn vmm_remove(vm_id: u32) {
     }
 }
 
-pub fn vmm_getvmid() {    
+pub fn vmm_getvmid() {
     unsafe {
         let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
         let mut id: u32 = 0;
@@ -104,7 +104,8 @@ pub fn vmm_list_vm_info() {
             close(fd);
             return;
         } else {
-            vm_info_list = mem::transmute::<[u8; VM_INFO_LIST_SIZE], VMInfoList>(buf[0..VM_INFO_LIST_SIZE].try_into().unwrap());
+            vm_info_list =
+                mem::transmute::<[u8; VM_INFO_LIST_SIZE], VMInfoList>(buf[0..VM_INFO_LIST_SIZE].try_into().unwrap());
         }
     }
     display_vm_list_info(vm_info_list);
@@ -115,7 +116,12 @@ fn display_vm_list_info(vm_info_list: VMInfoList) {
     for i in 0..vm_num {
         let info = &vm_info_list.info_list[i];
         println!("----------vm[{}]----------", i);
-        println!("vm id [{}] name: {} type: {}\n", info.id, cstr_arr_to_string(info.vm_name.as_slice()), info.vm_type);
+        println!(
+            "vm id [{}] name: {} type: {}\n",
+            info.id,
+            cstr_arr_to_string(info.vm_name.as_slice()),
+            info.vm_type
+        );
         match info.vm_type {
             VM_T_LINUX => {
                 println!("vm type: Linux");

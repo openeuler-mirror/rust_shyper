@@ -1,14 +1,24 @@
-use std::{fs::{self, File}, io::Read, mem, process};
+use std::{
+    fs::{self, File},
+    io::Read,
+    mem, process,
+};
 use libc::{c_char, c_int, c_ulong, c_ulonglong, close, ioctl, open, uintptr_t, O_RDWR, SIGTERM, SIGUSR1};
 use serde::{Serialize, Deserialize};
 use log::{debug, error, info, warn};
 use signal_hook::iterator::Signals;
 
-use crate::{blk::{mediated_blk_add, mediated_blk_init, mediated_blk_read, mediated_blk_write, MediatedBlkCfg, MED_BLK_LIST}, config::copy_img_file_to_memory, ioctl_arg::{IOCTL_SYS, IOCTL_SYS_GET_KERNEL_IMG_NAME}, util::cstr_arr_to_string, vmm::vmm_boot};
+use crate::{
+    blk::{mediated_blk_add, mediated_blk_init, mediated_blk_read, mediated_blk_write, MediatedBlkCfg, MED_BLK_LIST},
+    config::copy_img_file_to_memory,
+    ioctl_arg::{IOCTL_SYS, IOCTL_SYS_GET_KERNEL_IMG_NAME},
+    util::cstr_arr_to_string,
+    vmm::vmm_boot,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DaemonConfig {
-    mediated: Vec<String>
+    mediated: Vec<String>,
 }
 
 #[repr(C)]
@@ -133,68 +143,65 @@ fn sig_handle_event(signal: i32) {
     }
 
     match hvc_type.hvc_fid as usize {
-        HVC_MEDIATED => {
-            match hvc_type.hvc_event as usize {
-                HVC_MEDIATED_USER_NOTIFY => {
-                    let blk_arg;
-                    unsafe {
-                        blk_arg = mem::transmute::<[u8; BLK_ARG_SIZE], BlkArg>(buf[0..BLK_ARG_SIZE].try_into().unwrap());
-                    }
-                    if blk_arg.r#type == 0 {
-                        mediated_blk_read(blk_arg.blk_id, blk_arg.sector, blk_arg.count);
-                    } else if blk_arg.r#type == 1 {
-                        mediated_blk_write(blk_arg.blk_id, blk_arg.sector, blk_arg.count);
-                    } else {
-                        warn!("[sig_handle_event] unknown blk req type {}", blk_arg.r#type);
-                    }
-                    return;
+        HVC_MEDIATED => match hvc_type.hvc_event as usize {
+            HVC_MEDIATED_USER_NOTIFY => {
+                let blk_arg;
+                unsafe {
+                    blk_arg = mem::transmute::<[u8; BLK_ARG_SIZE], BlkArg>(buf[0..BLK_ARG_SIZE].try_into().unwrap());
                 }
-                _ => return
+                if blk_arg.r#type == 0 {
+                    mediated_blk_read(blk_arg.blk_id, blk_arg.sector, blk_arg.count);
+                } else if blk_arg.r#type == 1 {
+                    mediated_blk_write(blk_arg.blk_id, blk_arg.sector, blk_arg.count);
+                } else {
+                    warn!("[sig_handle_event] unknown blk req type {}", blk_arg.r#type);
+                }
+                return;
             }
-        }
-        HVC_CONFIG => {
-            match hvc_type.hvc_event as usize {
-                HVC_CONFIG_UPLOAD_KERNEL_IMAGE => {
-                    let cfg_arg;
-                    unsafe {
-                        cfg_arg = mem::transmute::<[u8; CONFIG_ARG_SIZE], CfgArg>(buf[0..CONFIG_ARG_SIZE].try_into().unwrap());
-                    }
-                    let fd_event = generate_hvc_mode(IOCTL_SYS, IOCTL_SYS_GET_KERNEL_IMG_NAME);
-                    
-                    #[repr(C)]
-                    struct NameArg {
-                        vm_id: u64,
-                        name_addr: *mut c_char,
-                    }
+            _ => return,
+        },
+        HVC_CONFIG => match hvc_type.hvc_event as usize {
+            HVC_CONFIG_UPLOAD_KERNEL_IMAGE => {
+                let cfg_arg;
+                unsafe {
+                    cfg_arg =
+                        mem::transmute::<[u8; CONFIG_ARG_SIZE], CfgArg>(buf[0..CONFIG_ARG_SIZE].try_into().unwrap());
+                }
+                let fd_event = generate_hvc_mode(IOCTL_SYS, IOCTL_SYS_GET_KERNEL_IMG_NAME);
 
-                    let filename: [u8; 64] = [0; 64];
-                    let mut name_arg: NameArg = NameArg { 
-                        vm_id: cfg_arg.vm_id, 
-                        name_addr: filename.as_ptr() as *mut c_char
-                    };
+                #[repr(C)]
+                struct NameArg {
+                    vm_id: u64,
+                    name_addr: *mut c_char,
+                }
 
-                    unsafe {
-                        let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
-                        if ioctl(fd, fd_event as c_ulonglong, &mut name_arg as *mut NameArg as uintptr_t) != 0 {
-                            warn!("sig_handle_event: failed to get VM[{}] name\n", cfg_arg.vm_id);
-                            close(fd);
-                            return;
-                        }
-                        
-                        let img_name = cstr_arr_to_string(filename.as_slice());
-                        if let Err(err) = copy_img_file_to_memory(cfg_arg.vm_id, img_name, fd as u32) {
-                            warn!("sig_handle_event: failed to copy img file to memory: {}", err);
-                            return;
-                        }
-                        vmm_boot(cfg_arg.vm_id as u32);
+                let filename: [u8; 64] = [0; 64];
+                let mut name_arg: NameArg = NameArg {
+                    vm_id: cfg_arg.vm_id,
+                    name_addr: filename.as_ptr() as *mut c_char,
+                };
+
+                unsafe {
+                    let fd = open("/dev/shyper\0".as_ptr() as *const u8, O_RDWR);
+                    if ioctl(fd, fd_event as c_ulonglong, &mut name_arg as *mut NameArg as uintptr_t) != 0 {
+                        warn!("sig_handle_event: failed to get VM[{}] name\n", cfg_arg.vm_id);
                         close(fd);
                         return;
                     }
+
+                    let img_name = cstr_arr_to_string(filename.as_slice());
+                    if let Err(err) = copy_img_file_to_memory(cfg_arg.vm_id, img_name, fd as u32) {
+                        warn!("sig_handle_event: failed to copy img file to memory: {}", err);
+                        return;
+                    }
+                    vmm_boot(cfg_arg.vm_id as u32);
+                    close(fd);
+                    return;
                 }
-                _ => return
             }
-        }
-        _ => return
+            _ => return,
+        },
+        _ => return,
     }
 }
 
@@ -224,14 +231,14 @@ pub fn init_daemon() {
         }
         close(fd);
     }
-    
+
     // Init mediated block partition
     if vmid == 0 {
         info!("VM[{}] start to init blk service\n", vmid);
         mediated_blk_init();
     }
     info!("VM[{}] daemon process init success\n", vmid);
-    
+
     // TODO: The signal processing at this time is not real-time, but the signal is first written to the channel in the custom handler set in signal_hook,
     // and then captured in the user mode polling
     // Consider using signal_hook's real-time signal processing to enhance real-time performance
@@ -243,12 +250,9 @@ pub fn init_daemon() {
 
 pub fn config_daemon(path: String) -> Result<(), String> {
     info!("Start Shyper-cli daemon configure");
-    let json_str = fs::read_to_string(path.clone()).map_err(
-        |err| format!("Open json file {} err: {}", path.clone(), err)
-    )?;
-    let config: DaemonConfig = serde_json::from_str(&json_str).map_err(
-        |err| format!("Parse json err: {}", err)
-    )?;
+    let json_str =
+        fs::read_to_string(path.clone()).map_err(|err| format!("Open json file {} err: {}", path.clone(), err))?;
+    let config: DaemonConfig = serde_json::from_str(&json_str).map_err(|err| format!("Parse json err: {}", err))?;
     debug!("config is {:?}", config);
 
     let mut disk_cnt = 0;
