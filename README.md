@@ -54,6 +54,8 @@ The kernel module on NVIDIA L4T 32.6.1 (for Jestion TX2), Linux 4.9.140/5.10.160
 
 When starting Rust-Shyper, the MVM will boot automatically. Logging on to the MVM (a Linux priviledged VM), take the QEMU configuration as an example, then can we configure and start the Guest VMs.
 
+> The `cli` directory contains the Rust version of the cli tool source code, which you can use to compile on your platform, obtain the shyper-cli executable file, and then use it in place of the `tools/shyper-cli` for subsequent virtual machine management operations.
+
 **Step 1**: Install the kernel module
 
 ```bash

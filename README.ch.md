@@ -67,6 +67,8 @@ insmod tools/shyper.ko
 
 注：shyper-cli是Rust-Shyper配套的一个简单的命令行工具，以二进制的形式提供在tools目录下，其编译的目标平台为aarch64。
 
+> `cli`目录下是Rust版本的cli工具源码，您可以用cli目录下的源码在您所在的平台上编译，得到shyper-cli可执行文件，然后用其代替 `tools/shyper-cli` 进行后续的虚拟机管理操作。
+
 ```bash
 sudo tools/shyper system daemon [mediated-cfg.json] &
 ```
