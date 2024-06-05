@@ -269,6 +269,9 @@ impl Vcpu {
         1 << 31
             | if cfg!(feature = "rk3588") {
                 0x100_0000 | (self.id() << 8)
+            } else if cfg!(feature = "tx2") && self.vm_id() == 0 {
+                // A57 is cluster #1 for L4T
+                0x100 | self.id()
             } else {
                 self.id()
             }
