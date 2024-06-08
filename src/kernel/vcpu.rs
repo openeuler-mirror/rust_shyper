@@ -202,6 +202,7 @@ impl Vcpu {
     pub fn reset_context(&self) {
         let mut inner = self.inner.inner_mut.lock();
         inner.vm_ctx.vmpidr_el2 = self.get_vmpidr() as u64;
+        inner.gic_ctx_reset();
         let vm_id = self.vm().unwrap().id();
         use crate::kernel::vm_if_get_type;
         if vm_if_get_type(vm_id) == VmType::VmTBma {
