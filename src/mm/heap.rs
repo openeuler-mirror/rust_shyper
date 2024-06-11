@@ -52,7 +52,7 @@ fn heap_rescue(heap: &mut Heap<32>, layout: &core::alloc::Layout) {
         // The new heap range is valid and not overlap with the old one.
         unsafe {
             heap.add_to_heap(
-                round_up(_image_end as usize, HEAP_SIZE),
+                round_up(_image_end as usize, PAGE_SIZE),
                 PLAT_DESC.mem_desc.regions[0].size + PLAT_DESC.mem_desc.regions[0].base,
             );
         }
