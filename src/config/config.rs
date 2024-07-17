@@ -39,6 +39,7 @@ pub enum DtbDevType {
     DevGicd = 1,
     DevGicc = 2,
     DevGicr = 3,
+    DevPlic = 4,
 }
 
 /// Convert a `usize` value to a `DtbDevType`.
@@ -49,6 +50,7 @@ impl From<usize> for DtbDevType {
             1 => DtbDevType::DevGicd,
             2 => DtbDevType::DevGicc,
             3 => DtbDevType::DevGicr,
+            4 => DtbDevType::DevPlic,
             _ => panic!("Unknown DtbDevType value: {}", value),
         }
     }

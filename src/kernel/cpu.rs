@@ -13,10 +13,8 @@ use core::ptr;
 
 use spin::Mutex;
 
-use crate::arch::{PAGE_SIZE, set_current_cpu};
-
+use crate::arch::{is_boot_core, set_current_cpu, Arch, ArchTrait, PAGE_SIZE};
 use crate::arch::ContextFrame;
-use crate::arch::{wfi, isb};
 use crate::arch::ContextFrameTrait;
 // use core::ops::{Deref, DerefMut};
 use crate::arch::{cpu_interrupt_unmask, current_cpu_arch};
@@ -27,7 +25,11 @@ use crate::utils::trace;
 
 pub const CPU_MASTER: usize = 0;
 pub const CPU_STACK_SIZE: usize = PAGE_SIZE * 128;
+#[cfg(target_arch = "aarch64")]
 pub const CONTEXT_GPR_NUM: usize = 31;
+#[cfg(target_arch = "riscv64")]
+// Including x0-x31，totally 32 registers
+pub const CONTEXT_GPR_NUM: usize = 32;
 pub const CPU_STACK_OFFSET: usize = offset_of!(Cpu, stack);
 
 #[derive(Copy, Clone, Debug, Eq)]
@@ -55,6 +57,7 @@ pub enum StartReason {
 pub struct CpuIf {
     pub msg_queue: Vec<IpiMessage>,
     pub entry: u64,
+    // a1 stored value, also known as opache
     pub ctx: u64,
     pub vm_id: usize,
     pub state_for_start: CpuState,
@@ -180,10 +183,6 @@ impl Cpu {
         self.ctx().unwrap().exception_pc()
     }
 
-    pub fn get_spsr(&self) -> usize {
-        self.ctx().unwrap().spsr as usize
-    }
-
     pub fn set_elr(&self, val: usize) {
         self.ctx_mut().unwrap().set_exception_pc(val)
     }
@@ -202,24 +201,21 @@ impl Cpu {
     /// schedule a vcpu to run on this physical cpu
     pub fn schedule_to(&mut self, next_vcpu: Vcpu) {
         if let Some(prev_vcpu) = &self.active_vcpu {
-            if prev_vcpu.vm_id() != next_vcpu.vm_id() {
-                prev_vcpu.set_state(VcpuState::Ready);
-                prev_vcpu.context_vm_store();
-            }
+            // On RISC-V, only one VM goes into this func also, since risc-v
+            // depends on traping to hypervisor to inject timer interrupt
+            // TODO: Use Sstc Extension to allow VS to receive its own timer interrupt without traping into hypervisor
+
+            // This way, even when vm doesn't change, we should save prev_cpu's state
+            prev_vcpu.set_state(VcpuState::Ready);
+            prev_vcpu.context_vm_store();
         }
         // NOTE: Must set active first and then restore context!!!
         //      because context restore while inject pending interrupt for VM
         //      and will judge if current active vcpu
         self.set_active_vcpu(Some(next_vcpu.clone()));
         next_vcpu.context_vm_restore();
-        // restore vm's Stage2 MMU context
-        let vttbr = (next_vcpu.vm_id() << 48) | next_vcpu.vm_pt_dir();
-        // TODO: replace the arch related expr
-        // SAFETY: 'vttbr' is saved in the vcpu struct when last scheduled
-        unsafe {
-            core::arch::asm!("msr VTTBR_EL2, {0}", in(reg) vttbr);
-            isb();
-        }
+
+        Arch::install_vm_page_table(next_vcpu.vm_pt_dir(), next_vcpu.vm_id());
     }
 
     /// get this cpu's scheduler
@@ -274,7 +270,7 @@ pub fn active_vm_ncpu() -> usize {
 /// initialize the CPU
 pub fn cpu_init() {
     let cpu_id = current_cpu().id;
-    if cpu_id == 0 {
+    if is_boot_core(cpu_id) {
         cpu_if_init();
         if cfg!(not(feature = "secondary_start")) {
             Platform::power_on_secondary_cores();
@@ -287,15 +283,15 @@ pub fn cpu_init() {
     let size = core::mem::size_of::<ContextFrame>();
     // SAFETY: Sp is valid when boot_stage setting
     unsafe {
+        // The space of the ContextFrame size at the top of the CPU stack is used to store the current cpu context
         current_cpu().set_ctx((sp - size) as *mut _);
     }
-    info!("Core {} init ok", cpu_id);
 
     if cfg!(not(feature = "secondary_start")) {
         crate::utils::barrier();
         // println!("after barrier cpu init");
         use crate::board::PLAT_DESC;
-        if cpu_id == 0 {
+        if is_boot_core(cpu_id) {
             info!("Bring up {} cores", PLAT_DESC.cpu_desc.num);
             info!("Cpu init ok");
         }
@@ -308,7 +304,8 @@ pub fn cpu_idle() -> ! {
     current_cpu().cpu_state = state;
     cpu_interrupt_unmask();
     loop {
-        wfi();
+        info!("[idle] prepare to idle...");
+        crate::arch::Arch::wait_for_interrupt();
     }
 }
 
@@ -327,4 +324,9 @@ pub extern "C" fn cpu_map_self(mpidr: usize) {
     unsafe {
         set_current_cpu(cpu as *const _ as u64);
     }
+}
+
+pub fn get_cpu_info_addr(cpu_id: usize) -> u64 {
+    let cpu = unsafe { &CPU_LIST[cpu_id] };
+    cpu as *const _ as u64
 }

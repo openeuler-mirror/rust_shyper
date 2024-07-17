@@ -41,6 +41,7 @@ pub fn ivc_update_mq(receive_ipa: usize, cfg_ipa: usize) -> bool {
 
     let idx = 0;
     let val = vm_id;
+    // TODO: The return value is set to vm_id, but is actually useless
     current_cpu().set_gpr(idx, val);
     // println!("VM {} update message", vm_id);
     true

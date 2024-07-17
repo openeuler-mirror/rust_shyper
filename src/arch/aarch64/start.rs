@@ -228,3 +228,11 @@ unsafe extern "C" fn cache_invalidate(cache_level: usize) {
         options(nostack)
     );
 }
+
+pub fn is_boot_core(cpu_id: usize) -> bool {
+    cpu_id == 0
+}
+
+pub fn boot_core() -> usize {
+    0
+}

@@ -117,6 +117,7 @@ impl NetDesc {
     pub unsafe fn offset_data(&self, offset: usize, width: usize) -> usize {
         let inner = self.inner.lock();
         let start_addr = &inner.mac[0] as *const _ as usize;
+        // TODO: Some out-of-bounds accesses beyond offset 6 May return incorrect values
         match width {
             1 => unsafe { *((start_addr + offset) as *const u8) as usize },
             2 => unsafe { *((start_addr + offset) as *const u16) as usize },

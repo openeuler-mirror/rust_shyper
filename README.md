@@ -19,6 +19,7 @@ The list of supported (and work in progress) platforms is presented below:
 - [x] Raspberry Pi 4 Model B
 - [x] QEMU (note that VM migration and Hypervisor Live-update is not supported on QEMU)
 - [x] Firefly ROC-RK3588S-PC (note that VM migration and Hypervisor Live-update is not supported on ROC-RK3588S-PC)
+- [x] QEMU (for RISCV64)
 
 ## How to Build
 
@@ -39,6 +40,19 @@ For example, `make tx2` is to build Rust-Shyper for TX2.
 
 Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to your requirements.
 
+**RISCV64 Platform support**
+
+Currently Rust-Shyper already supports the RISCV64 platform on QEMU and provides the corresponding kernel image for running virtualization on the RISC-V platform.
+
+Run the following command to start the compilation:
+
+```bash
+ARCH=riscv64 make run
+```
+
+The kernel module binaries for the riscv64 platform are in `tools/shyper_riscv64.ko`, corresponding to `tools/shyper.ko` as described below.
+
+> We use `Image_5.15.100-riscv-starfive` as our riscv64 kernel image. `Image_5.15.100-riscv-starfive` is a kernel image extracted based on the Ubuntu22.04 Starfive image, which has relatively complete functions and compatibility.
 
 **RK3588 support**
 
@@ -65,6 +79,8 @@ insmod tools/shyper.ko
 ```bash
 sudo tools/shyper system daemon [mediated-cfg.json] &
 ```
+
+> The `cli` directory contains the Rust version of the cli tool source code, which you can use to compile on your platform, obtain the shyper-cli executable file, and then use it in place of the `tools/shyper-cli` for subsequent virtual machine management operations.
 
 mediated-cfg.json is used for guest VM as virtio block. If it is a physical platform, you can connect external disk devices, such as /dev/sda2, /dev/nvme0n1p2. For example:
 

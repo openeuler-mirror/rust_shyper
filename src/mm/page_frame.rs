@@ -26,12 +26,12 @@ impl PageFrame {
     }
 
     /// Allocate a page frame with given page number.
-    pub fn alloc_pages(page_num: usize) -> Result<Self, AllocError> {
+    pub fn alloc_pages(page_num: usize, align_page: usize) -> Result<Self, AllocError> {
         if page_num == 0 {
             return Err(AllocError::AllocZeroPage);
         }
 
-        match Layout::from_size_align(page_num * PAGE_SIZE, PAGE_SIZE) {
+        match Layout::from_size_align(page_num * PAGE_SIZE, align_page * PAGE_SIZE) {
             Ok(layout) => {
                 let pa = unsafe { alloc::alloc_zeroed(layout) as usize };
                 Ok(Self::new(pa, layout))

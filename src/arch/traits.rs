@@ -23,6 +23,11 @@ pub trait ContextFrameTrait {
     fn gpr(&self, index: usize) -> usize;
 }
 
+pub trait ArchTrait {
+    fn wait_for_interrupt();
+    fn install_vm_page_table(base: usize, vmid: usize);
+}
+
 /// Architecture-independent PageTableEntry trait.
 pub trait ArchPageTableEntryTrait {
     fn from_pte(value: usize) -> Self;
@@ -58,4 +63,16 @@ pub trait InterruptController {
     fn vm_inject(vm: &Vm, vcpu: &Vcpu, int_id: usize);
     fn vm_register(vm: &Vm, int_id: usize);
     fn clear_current_irq(for_hypervisor: bool);
+}
+
+pub trait VmContextTrait {
+    fn reset(&mut self);
+    fn ext_regs_store(&mut self);
+    fn ext_regs_restore(&self);
+    fn fpsimd_save_context(&mut self);
+    fn fpsimd_restore_context(&self);
+    fn gic_save_state(&mut self);
+    fn gic_restore_state(&self);
+    fn gic_ctx_reset(&mut self);
+    fn reset_vtimer_offset(&mut self);
 }

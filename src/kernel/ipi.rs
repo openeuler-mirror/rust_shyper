@@ -159,11 +159,13 @@ const IPI_HANDLER_MAX: usize = 16;
 
 /// ipi handler entry, scanning the received ipi list and call the coresponding handler
 pub fn ipi_irq_handler() {
-    // println!("ipi handler");
     let cpu_id = current_cpu().id;
     let mut cpu_if_list = CPU_IF_LIST.lock();
     let mut msg: Option<IpiMessage> = cpu_if_list[cpu_id].pop();
     drop(cpu_if_list);
+
+    #[cfg(target_arch = "riscv64")]
+    crate::arch::interrupt::deactivate_soft_intr();
 
     while msg.is_some() {
         let ipi_msg = msg.unwrap();
@@ -188,7 +190,12 @@ fn ipi_send(target_id: usize, msg: IpiMessage) -> bool {
     let mut cpu_if_list = CPU_IF_LIST.lock();
     cpu_if_list[target_id].msg_queue.push(msg);
     drop(cpu_if_list);
+
+    #[cfg(target_arch = "aarch64")]
     crate::arch::dsb::ishst();
+    #[cfg(target_arch = "riscv64")]
+    crate::arch::fence();
+
     interrupt_cpu_ipi_send(target_id, crate::arch::IntCtrl::IRQ_IPI);
 
     true

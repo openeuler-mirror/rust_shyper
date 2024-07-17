@@ -21,3 +21,6 @@ build/
 /vm1*
 /image/Image*
 *.patch
+*.bin
+*.elf
+*.bak

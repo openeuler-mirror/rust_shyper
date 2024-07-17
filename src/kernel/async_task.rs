@@ -261,6 +261,8 @@ pub async fn async_ipi_req() {
     drop(ipi_list);
     if let AsyncTaskData::AsyncIpiTask(msg) = task.task_data {
         if active_vm_id() == 0 {
+            // Here, if the active vm is the service VM, handle the task directly
+            // Possible cond: share time slice with MVM
             virtio_blk_notify_handler(msg.vq, msg.blk, msg.src_vm);
         } else {
             ipi_send_msg(0, IpiType::IpiTMediatedDev, IpiInnerMsg::MediatedMsg(msg));

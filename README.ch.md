@@ -19,6 +19,7 @@ Rust-Shyper是由北航计算机学院操作系统研究团队，在华为技术
 - [x] Raspberry Pi 4 Model B
 - [x] QEMU (note that VM migration and Hypervisor Live-update is not supported on QEMU)
 - [x] Firefly ROC-RK3588S-PC (note that VM migration and Hypervisor Live-update is not supported on ROC-RK3588S-PC)
+- [x] QEMU (for RISCV64)
 
 ## 如何编译
 
@@ -38,6 +39,18 @@ make <platform>
 例如, `make tx2` 是编译Rust-Shyper的TX2版本。具体可查看Makefile文件。
 
 主要注意的是，请在编译前，根据需求编辑管理虚拟机（MVM）的配置文件。该文件的路径是 src/config/\<plat\>_def.rs.
+
+**RISCV64平台的支持**
+
+目前Rust-Shyper已经支持QEMU上的RISCV64平台，并提供了相应的内核镜像用于运行RISC-V平台的虚拟化。运行下列命令即可编译启动：
+
+```bash
+ARCH=riscv64 make run
+```
+
+与riscv64平台配套的内核模块二进制文件在 `tools/shyper_riscv64.ko`，对应于下文所述的 `tools/shyper.ko` 。
+
+> 我们使用 `Image_5.15.100-riscv-starfive` 文件作为riscv64下的内核镜像。其中 `Image_5.15.100-riscv-starfive` 是基于 Ubuntu22.04 Starfive 镜像提取的内核镜像，具有较为完整的功能和兼容性。
 
 **RK3588的支持**
 
@@ -66,6 +79,8 @@ insmod tools/shyper.ko
 **Step 2**: 启动shyper-cli守护进程
 
 注：shyper-cli是Rust-Shyper配套的一个简单的命令行工具，以二进制的形式提供在tools目录下，其编译的目标平台为aarch64。
+
+> `cli`目录下是Rust版本的 cli 工具源码，您可以用`cli`目录下的源码在您所在的平台上编译，得到`shyper-cli`可执行文件，然后用其代替 `tools/shyper-cli` 进行后续的虚拟机管理操作。
 
 ```bash
 sudo tools/shyper system daemon [mediated-cfg.json] &
@@ -211,6 +226,11 @@ sudo tools/shyper vm boot <VMID>
 ```
 
 然后就可以和客户虚拟机进行交互了
+
+## Riscv仓库说明
+
+* `image/Image_vanilla` 所指向的镜像其实是 `riscv` 架构下的 `Linux 5.12.1` 版本内核。
+* `vm0.img` 其实是装载了 `busybox` 的 `rootfs` 文件系统。
 
 ## 发表文献
 

@@ -85,10 +85,11 @@ pub const HVC_IVC_ACK: usize = 5;
 pub const HVC_IVC_GET_TIME: usize = 6;
 pub const HVC_IVC_SHARE_MEM: usize = 7;
 pub const HVC_IVC_SEND_SHAREMEM: usize = 0x10;
-//共享内存通信
+// Share memory communication
+// Used for the VM to obtain the shared memory IPA
 pub const HVC_IVC_GET_SHARED_MEM_IPA: usize = 0x11;
-//用于VM获取共享内存IPA
-pub const HVC_IVC_SEND_SHAREMEM_TEST_SPEED: usize = 0x12; //共享内存通信速度测试
+// Shared memory communication speed test
+pub const HVC_IVC_SEND_SHAREMEM_TEST_SPEED: usize = 0x12;
 
 // hvc_mediated_event
 pub const HVC_MEDIATED_DEV_APPEND: usize = 0x30;
@@ -128,8 +129,10 @@ pub const HVC_CONFIG_UPLOAD_DEVICE_TREE: usize = 11;
 pub const HVC_IRQ: usize = 32 + 0x20;
 #[cfg(feature = "pi4")]
 pub const HVC_IRQ: usize = 32 + 0x10;
-#[cfg(feature = "qemu")]
+#[cfg(all(feature = "qemu", target_arch = "aarch64"))]
 pub const HVC_IRQ: usize = 32 + 0x20;
+#[cfg(all(feature = "qemu", target_arch = "riscv64"))]
+pub const HVC_IRQ: usize = 51;
 #[cfg(feature = "rk3588")]
 pub const HVC_IRQ: usize = 32 + 0x10;
 
@@ -207,6 +210,10 @@ pub fn hvc_guest_handler(
     x5: usize,
     x6: usize,
 ) -> Result<usize, ()> {
+    // info!("hvc_guest_handler: hvc_type {} event {} x0: \n{}",
+    //     hvc_type, event,
+    //     current_cpu().ctx().unwrap()
+    // );
     match hvc_type {
         HVC_SYS => hvc_sys_handler(event, x0),
         HVC_VMM => hvc_vmm_handler(event, x0, x1),

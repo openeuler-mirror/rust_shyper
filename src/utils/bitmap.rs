@@ -181,7 +181,7 @@ impl FlexBitmap {
         if bit + len > self.len {
             panic!("set_bits: too large idx {} for set bitmap", bit);
         }
-        // 默认2MB或1KB对齐
+        // The default is 2MB or 1KB alignment
         if len == 1 {
             self.set(bit, val);
         } else {

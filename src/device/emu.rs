@@ -96,6 +96,7 @@ pub enum EmuDeviceType {
     EmuDeviceTIOMMU = 8,
     EmuDeviceTGICR = 11,
     EmuDeviceTMeta = 12,
+    EmuDeviceTPlic = 13,
 }
 
 impl Display for EmuDeviceType {
@@ -113,6 +114,7 @@ impl Display for EmuDeviceType {
             EmuDeviceType::EmuDeviceTIOMMU => write!(f, "IOMMU"),
             EmuDeviceType::EmuDeviceTGICR => write!(f, "interrupt controller gicr"),
             EmuDeviceType::EmuDeviceTMeta => write!(f, "meta device"),
+            EmuDeviceType::EmuDeviceTPlic => write!(f, "platform level interrupt controller"),
         }
     }
 }
@@ -147,6 +149,7 @@ impl EmuDeviceType {
             8 => EmuDeviceType::EmuDeviceTIOMMU,
             11 => EmuDeviceType::EmuDeviceTGICR,
             12 => EmuDeviceType::EmuDeviceTMeta,
+            13 => EmuDeviceType::EmuDeviceTPlic,
             _ => panic!("Unknown  EmuDeviceType value: {}", value),
         }
     }
@@ -164,9 +167,10 @@ pub fn emu_handler(emu_ctx: &EmuContext) -> bool {
     }
 
     error!(
-        "emu_handler: no emul handler for Core {} data abort ipa 0x{:x}",
+        "emu_handler: no emul handler for Core {} data abort ipa 0x{:x}\nctx: {:?}",
         current_cpu().id,
-        ipa
+        ipa,
+        emu_ctx,
     );
     false
 }

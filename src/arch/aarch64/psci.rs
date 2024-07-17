@@ -309,9 +309,6 @@ pub fn psci_ipi_handler(msg: IpiMessage) {
                     psci_vcpu_on(trgt_vcpu, power_msg.entry, power_msg.context);
                 }
                 PowerEvent::PsciIpiCpuOff => {
-                    // TODO: 为什么ipi cpu off是当前vcpu shutdown，而vcpu shutdown 最后是把平台的物理核心shutdown
-                    // 没有用到。不用管
-                    // current_cpu().active_vcpu.clone().unwrap().shutdown();
                     unimplemented!("PowerEvent::PsciIpiCpuOff")
                 }
                 PowerEvent::PsciIpiCpuReset => {

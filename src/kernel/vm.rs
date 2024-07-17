@@ -10,10 +10,13 @@
 
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-
 use spin::{Mutex, Once};
 
-use crate::arch::{PAGE_SIZE, emu_intc_init, PageTable, Vgic};
+#[cfg(target_arch = "aarch64")]
+use crate::arch::Vgic;
+#[cfg(target_arch = "riscv64")]
+use crate::arch::VPlic;
+use crate::arch::{PAGE_SIZE, emu_intc_init, PageTable};
 use crate::config::VmConfigEntry;
 use crate::device::{EmuDev, emu_virtio_mmio_init};
 use crate::kernel::{shyper_init, emu_iommu_init};
@@ -96,7 +99,7 @@ pub enum VmState {
 pub enum VmType {
     #[default]
     VmTOs = 0,
-    VmTBma = 1,
+    VmTBma = 1, // Bare Metal Application
 }
 
 impl From<usize> for VmType {
@@ -178,7 +181,10 @@ struct VmInnerConst {
     // Interrupt config
     intc_type: IntCtrlType,
     int_bitmap: BitAlloc4K,
+    #[cfg(target_arch = "aarch64")]
     arch_intc_dev: Option<Arc<Vgic>>,
+    #[cfg(target_arch = "riscv64")]
+    arch_intc_dev: Option<Arc<VPlic>>,
     // Emul devs config
     emu_devs: Vec<Arc<dyn EmuDev>>,
 }
@@ -223,11 +229,20 @@ impl VmInnerConst {
         use crate::device::EmuDeviceType::*;
         for (idx, emu_cfg) in self.config.emulated_device_list().iter().enumerate() {
             let dev = match emu_cfg.emu_type {
+                #[cfg(target_arch = "aarch64")]
                 EmuDeviceTGicd => {
                     self.intc_type = IntCtrlType::Emulated;
                     emu_intc_init(emu_cfg, &self.vcpu_list).map(|vgic| {
                         self.arch_intc_dev = vgic.clone().into_any_arc().downcast::<Vgic>().ok();
                         vgic
+                    })
+                }
+                #[cfg(target_arch = "riscv64")]
+                EmuDeviceTPlic => {
+                    self.intc_type = IntCtrlType::Emulated;
+                    emu_intc_init(emu_cfg, &self.vcpu_list).map(|vplic| {
+                        self.arch_intc_dev = vplic.clone().into_any_arc().downcast::<VPlic>().ok();
+                        vplic
                     })
                 }
                 #[cfg(feature = "gicv3")]
@@ -238,6 +253,7 @@ impl VmInnerConst {
                         panic!("init_device: vgic not init");
                     }
                 }
+                #[cfg(target_arch = "aarch64")]
                 EmuDeviceTGPPT => {
                     self.intc_type = IntCtrlType::Passthrough;
                     crate::arch::partial_passthrough_intc_init(emu_cfg)
@@ -248,7 +264,7 @@ impl VmInnerConst {
                 EmuDeviceTIOMMU => emu_iommu_init(emu_cfg),
                 EmuDeviceTShyper => shyper_init(vm.clone(), emu_cfg.base_ipa, emu_cfg.length),
                 _ => {
-                    panic!("init_device: unknown emu dev type");
+                    panic!("init_device: unknown emu dev type {:?}", emu_cfg.emu_type);
                 }
             };
             // Then add the dev to the emu_devs list
@@ -486,6 +502,7 @@ impl Vm {
         vm_inner.mem_region_num
     }
 
+    #[cfg(target_arch = "aarch64")]
     pub fn vgic(&self) -> &Vgic {
         if let Some(vgic) = self.inner_const.arch_intc_dev.as_ref() {
             return vgic;
@@ -493,7 +510,21 @@ impl Vm {
         panic!("vm{} cannot find vgic", self.id());
     }
 
+    #[cfg(target_arch = "aarch64")]
     pub fn has_vgic(&self) -> bool {
+        self.inner_const.arch_intc_dev.is_some()
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    pub fn vplic(&self) -> &VPlic {
+        if let Some(vplic) = self.inner_const.arch_intc_dev.as_ref() {
+            return vplic;
+        }
+        panic!("vm{} cannot find vgic", self.id());
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    pub fn has_vplic(&self) -> bool {
         self.inner_const.arch_intc_dev.is_some()
     }
 
@@ -501,6 +532,7 @@ impl Vm {
         self.inner_const.config.cpu_allocated_bitmap() as usize
     }
 
+    // Whether there is a pass-through interrupt int_id
     pub fn has_interrupt(&self, int_id: usize) -> bool {
         self.inner_const.int_bitmap.get(int_id) != 0
     }

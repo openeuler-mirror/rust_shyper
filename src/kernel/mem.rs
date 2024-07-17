@@ -66,12 +66,16 @@ pub enum AllocError {
 
 /// alloc one page
 pub fn mem_page_alloc() -> Result<PageFrame, AllocError> {
-    PageFrame::alloc_pages(1)
+    PageFrame::alloc_pages(1, 1)
 }
 
 /// alloc some continuous pages
 pub fn mem_pages_alloc(page_num: usize) -> Result<PageFrame, AllocError> {
-    PageFrame::alloc_pages(page_num)
+    PageFrame::alloc_pages(page_num, 1)
+}
+
+pub fn mem_pages_alloc_align(page_num: usize, align_page: usize) -> Result<PageFrame, AllocError> {
+    PageFrame::alloc_pages(page_num, align_page)
 }
 
 /// alloc some space and create a new vm region

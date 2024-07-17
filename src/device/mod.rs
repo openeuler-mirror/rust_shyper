@@ -10,6 +10,7 @@
 
 //! Device module, including device tree, device model, and device emulation.
 
+#[allow(unused_imports)]
 pub use self::device::*;
 pub use self::device_tree::*;
 pub use self::emu::*;

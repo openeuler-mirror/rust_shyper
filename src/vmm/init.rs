@@ -8,9 +8,11 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
 
+use crate::arch::is_boot_core;
 use crate::arch::{PTE_S2_DEVICE, PTE_S2_NORMAL, PTE_S2_NORMALNOCACHE};
 #[cfg(not(feature = "gicv3"))]
 use crate::board::*;
@@ -22,7 +24,11 @@ use crate::kernel::iommmu_vm_init;
 use crate::kernel::ipi_send_msg;
 use crate::kernel::IpiVmmPercoreMsg;
 use crate::kernel::{add_async_used_info, cpu_idle, current_cpu, VmPa, VmType, iommu_add_device, IpiType, IpiInnerMsg};
-use crate::kernel::{mem_page_alloc, mem_vm_region_alloc};
+use crate::kernel::mem_vm_region_alloc;
+#[cfg(target_arch = "riscv64")]
+use crate::kernel::mem_pages_alloc_align;
+#[cfg(target_arch = "aarch64")]
+use crate::kernel::mem_page_alloc;
 use crate::kernel::Vm;
 use crate::kernel::{active_vcpu_id, vcpu_run};
 use crate::kernel::interrupt_vm_register;
@@ -30,6 +36,7 @@ use crate::kernel::VM_NUM_MAX;
 use crate::utils::trace;
 use crate::error::Result;
 use crate::vmm::VmmPercoreEvent;
+use fdt::*;
 
 use fdt::binding::*;
 
@@ -39,9 +46,16 @@ pub static CPIO_RAMDISK: &[u8] = include_bytes!("../../image/net_rootfs.cpio");
 pub static CPIO_RAMDISK: &[u8] = &[];
 
 fn vmm_init_memory(vm: Arc<Vm>) -> bool {
-    let result = mem_page_alloc();
     let vm_id = vm.id();
     let config = vm.config();
+
+    // The aarch64 root page table only needs to allocate one page
+    #[cfg(target_arch = "aarch64")]
+    let result = mem_page_alloc();
+
+    // The riscv64 root page table needs to be allocated 4 consecutive 16KB aligned pages
+    #[cfg(target_arch = "riscv64")]
+    let result = mem_pages_alloc_align(4, 4);
 
     if let Ok(pt_dir_frame) = result {
         vm.set_pt(pt_dir_frame);
@@ -64,12 +78,12 @@ fn vmm_init_memory(vm: Arc<Vm>) -> bool {
             vm_id, vm_region.ipa_start, pa, vm_region.length
         );
         vm.pt_map_range(vm_region.ipa_start, vm_region.length, pa, PTE_S2_NORMAL, false);
-
         vm.add_region(VmPa {
             pa_start: pa,
             pa_length: vm_region.length,
             offset: vm_region.ipa_start as isize - pa as isize,
         });
+        info!("successfully add a region!");
     }
 
     true
@@ -100,6 +114,15 @@ pub fn vmm_load_image(vm: &Vm, bin: &[u8]) {
         // The 'size' is the length of Image binary.
         let dst = unsafe { core::slice::from_raw_parts_mut((vm.pa_start(idx) + offset) as *mut u8, size) };
         dst.clone_from_slice(bin);
+
+        trace!(
+            "image dst bytes: {:#x} {:#x} {:#x} {:#x}",
+            dst[0],
+            dst[1],
+            dst[2],
+            dst[3]
+        );
+
         return;
     }
     panic!("vmm_load_image: Image config conflicts with memory config");
@@ -164,6 +187,7 @@ pub fn vmm_init_image(vm: &Vm) -> bool {
                         fn _binary_vm0img_start();
                         fn _binary_vm0img_size();
                     }
+                    info!("MVM {} loading Image", vm.id());
                     // SAFETY:
                     // The '_binary_vm0img_start' and '_binary_vm0img_size' are valid from linker script.
                     let vm0image = unsafe {
@@ -219,6 +243,7 @@ pub fn vmm_init_image(vm: &Vm) -> bool {
             unsafe {
                 let src = SYSTEM_FDT.get().unwrap();
                 let len = src.len();
+                trace!("fdt_len: {:08x}", len);
                 let dst = core::slice::from_raw_parts_mut((vm.pa_start(0) + offset) as *mut u8, len);
                 dst.clone_from_slice(src);
                 vmm_setup_fdt(vm.config(), dst.as_mut_ptr() as *mut _);
@@ -261,8 +286,8 @@ pub fn vmm_init_image(vm: &Vm) -> bool {
                         }
                     }
                 }
-                _ => {
-                    panic!("vmm_setup_config: create fdt for vm{} fail", vm.id());
+                Err(err) => {
+                    panic!("vmm_setup_config: create fdt for vm{} fail, err: {}", vm.id(), err);
                 }
             }
         }
@@ -339,6 +364,88 @@ fn vmm_init_iommu_device(vm: Arc<Vm>) -> bool {
     true
 }
 
+/// Add a virtio node to fdt for riscv64
+/// # Safety:
+/// 1. 'dtb' is a valid pointer to a device tree blob
+/// 2. 'name' is a string not too long
+/// 3. 'irq_id' is a valid interrupt id
+/// 4. 'base_ipa' is a valid ipa
+unsafe fn fdt_add_virtio_riscv64(
+    dtb: *mut fdt::myctypes::c_void,
+    name: String,
+    irq_id: u32,
+    base_ipa: u64,
+    length: u64,
+) {
+    let node = fdt_create_node(dtb, "/soc\0".as_ptr(), name.as_ptr());
+    if node < 0 {
+        panic!("fdt_create_node failed {}", node);
+    }
+
+    let ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+    if ret < 0 {
+        panic!("fdt_add_property_u32 failed {}", ret);
+    }
+
+    let ret = fdt_add_property_u32(
+        dtb,
+        node,
+        "interrupt-parent\0".as_ptr(),
+        9_u32, // plic phandle id
+    );
+    if ret < 0 {
+        panic!("fdt_add_property_u32 failed {}", ret);
+    }
+
+    let mut regs = [base_ipa, length];
+    let ret = fdt_add_property_u64_array(dtb, node, "reg\0".as_ptr(), regs.as_mut_ptr(), 2);
+    if ret < 0 {
+        panic!("fdt_add_property_u64_array failed {}", ret);
+    }
+
+    fdt_add_property_string(dtb, node, "compatible\0".as_ptr(), "virtio,mmio\0".as_ptr());
+    trace!("fdt_add_virtio: {} irq = {}", name, irq_id);
+}
+
+/// Add a vm_service node to fdt for riscv64
+/// # Safety:
+/// 1. 'dtb' is a valid pointer to a device tree blob
+/// 2. 'irq_id' is a valid interrupt id
+/// 3. 'base_ipa' is a valid ipa
+unsafe fn fdt_add_vm_service_riscv64(dtb: *mut fdt::myctypes::c_void, irq_id: u32, base_ipa: u64, length: u64) {
+    let node = fdt_create_node(dtb, "/soc\0".as_ptr(), "vm_service\0".as_ptr());
+    if node < 0 {
+        panic!("fdt_create_node failed {}", node);
+    }
+
+    let ret = fdt_add_property_string(dtb, node, "compatible\0".as_ptr(), "shyper\0".as_ptr());
+    if ret < 0 {
+        panic!("fdt_add_property_string failed {}", ret);
+    }
+
+    let ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+    if ret < 0 {
+        panic!("fdt_add_property_u32 failed {}", ret);
+    }
+
+    let mut regs = [base_ipa, length];
+    let ret = fdt_add_property_u64_array(dtb, node, "reg\0".as_ptr(), regs.as_mut_ptr(), 2);
+    if ret < 0 {
+        panic!("fdt_add_property_u64_array failed {}", ret);
+    }
+
+    let ret = fdt_add_property_u32(
+        dtb,
+        node,
+        "interrupt-parent\0".as_ptr(),
+        9_u32, // plic phandle id
+    );
+    if ret < 0 {
+        panic!("fdt_add_property_u32 failed {}", ret);
+    }
+}
+
+// Here is used to write vm0 edit fdt function, mainly used to add virtual fdt item
 /// # Safety:
 /// This function is unsafe because it trusts the caller to pass a valid pointer to a valid dtb.
 /// So the caller must ensure that the vm.dtb() have configured correctly before calling this function.
@@ -355,8 +462,10 @@ pub unsafe fn vmm_setup_fdt(config: &VmConfigEntry, dtb: *mut fdt::myctypes::c_v
     fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@90000000\0".as_ptr());
     #[cfg(feature = "pi4")]
     fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@200000\0".as_ptr());
-    #[cfg(feature = "qemu")]
+    #[cfg(all(feature = "qemu", target_arch = "aarch64"))]
     fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@50000000\0".as_ptr());
+    #[cfg(all(feature = "qemu", target_arch = "riscv64"))]
+    fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@90000000\0".as_ptr());
     #[cfg(feature = "rk3588")]
     fdt_set_memory(dtb, mr.len() as u64, mr.as_ptr(), "memory@10000000\0".as_ptr());
     // FDT+TIMER
@@ -389,22 +498,47 @@ pub unsafe fn vmm_setup_fdt(config: &VmConfigEntry, dtb: *mut fdt::myctypes::c_v
                     );
                 }
                 EmuDeviceTVirtioNet | EmuDeviceTVirtioConsole => {
-                    #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
-                    fdt_add_virtio(
-                        dtb,
-                        emu_cfg.name.as_ptr(),
-                        emu_cfg.irq_id as u32 - 0x20,
-                        emu_cfg.base_ipa as u64,
-                    );
+                    cfg_if::cfg_if! {
+                        if #[cfg(all(any(feature = "tx2", feature = "qemu", feature = "rk3588"), target_arch = "aarch64"))] {
+                            fdt_add_virtio(
+                                dtb,
+                                emu_cfg.name.as_ptr(),
+                                emu_cfg.irq_id as u32 - 0x20,
+                                emu_cfg.base_ipa as u64,
+                            );
+                            info!("apply aarch64");
+                        } else if #[cfg(target_arch = "riscv64")] {
+                            fdt_add_virtio_riscv64(
+                                dtb,
+                                emu_cfg.name.clone(),
+                                emu_cfg.irq_id as u32,
+                                emu_cfg.base_ipa as u64,
+                                emu_cfg.length as u64,
+                            );
+                        }
+                    }
                 }
                 EmuDeviceTShyper => {
-                    #[cfg(any(feature = "tx2", feature = "qemu", feature = "rk3588"))]
-                    fdt_add_vm_service(
-                        dtb,
-                        emu_cfg.irq_id as u32 - 0x20,
-                        emu_cfg.base_ipa as u64,
-                        emu_cfg.length as u64,
-                    );
+                    // Add vm_service node, in order to provide kernel module information about irq_id
+                    info!("fdt add vm_service irq = {}", emu_cfg.irq_id);
+
+                    cfg_if::cfg_if! {
+                        if #[cfg(all(any(feature = "tx2", feature = "qemu", feature = "rk3588"), target_arch = "aarch64"))] {
+                            fdt_add_vm_service(
+                                dtb,
+                                emu_cfg.irq_id as u32 - 0x20,
+                                emu_cfg.base_ipa as u64,
+                                emu_cfg.length as u64,
+                            );
+                        } else if #[cfg(target_arch = "riscv64")] {
+                            fdt_add_vm_service_riscv64(
+                                dtb,
+                                emu_cfg.irq_id as u32,
+                                emu_cfg.base_ipa as u64,
+                                emu_cfg.length as u64,
+                            );
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -506,7 +640,7 @@ pub fn vmm_assign_vcpu_percore(vm: &Vm) {
 }
 
 pub fn vm_init() {
-    if current_cpu().id == 0 {
+    if is_boot_core(current_cpu().id) {
         // Set up basic config.
         crate::config::mvm_config_init();
         // Add VM 0

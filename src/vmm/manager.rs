@@ -11,7 +11,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use crate::arch::{power_arch_vm_shutdown_secondary_cores, IntCtrl, InterruptController};
+use crate::arch::{is_boot_core, power_arch_vm_shutdown_secondary_cores, IntCtrl, InterruptController};
 use crate::config::{vm_id_list, vm_num};
 // use crate::config::{init_tmp_config_for_bma1, init_tmp_config_for_bma2, init_tmp_config_for_vm1, init_tmp_config_for_vm2};
 use crate::config::NAME_MAX_LEN;
@@ -72,7 +72,7 @@ pub fn vmm_push_vm(vm_id: usize) -> Result<Arc<Vm>, ()> {
  */
 pub fn vmm_init_gvm(vm_id: usize) {
     // Before boot, we need to set up the VM config.
-    if current_cpu().id == 0 || (active_vm_id() == 0 && active_vm_id() != vm_id) {
+    if is_boot_core(current_cpu().id) || (active_vm_id() == 0 && active_vm_id() != vm_id) {
         if let Ok(vm) = vmm_push_vm(vm_id) {
             vmm_setup_config(vm);
         } else {
@@ -253,7 +253,7 @@ pub fn get_vm_id(id_ipa: usize) -> bool {
     let vm = active_vm().unwrap();
     let id_pa = vm_ipa2pa(&vm, id_ipa);
     if id_pa == 0 {
-        error!("illegal id_pa {:x}", id_pa);
+        error!("illegal id_ipa {:x}", id_ipa);
         return false;
     }
     // SAFETY: The 'id_pa' is a valid address checked by shyper.ko

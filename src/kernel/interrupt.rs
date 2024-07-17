@@ -13,7 +13,7 @@ use alloc::collections::BTreeMap;
 use spin::Mutex;
 
 use crate::arch::traits::InterruptController;
-use crate::arch::IntCtrl;
+use crate::arch::{IntCtrl, is_boot_core};
 use crate::kernel::{current_cpu, ipi_irq_handler, IpiInnerMsg, IpiMessage, Vcpu, VcpuState};
 use crate::kernel::Vm;
 use crate::utils::{BitAlloc, BitAlloc256, BitAlloc4K, BitMap};
@@ -47,7 +47,7 @@ pub fn interrupt_init() {
     IntCtrl::init();
 
     let cpu_id = current_cpu().id;
-    if cpu_id == 0 {
+    if is_boot_core(cpu_id) {
         interrupt_reserve_int(IntCtrl::IRQ_IPI, ipi_irq_handler);
 
         info!("Interrupt init ok");
