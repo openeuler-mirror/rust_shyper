@@ -15,9 +15,7 @@ use spin::Mutex;
 use crate::arch::PAGE_SIZE;
 use crate::device::{VirtioMmio, Virtq};
 use crate::device::DevDesc;
-use crate::device::EmuDevs;
 use crate::device::VirtioIov;
-use crate::kernel::{active_vm, vm_if_set_mem_map_bit, vm_ipa2pa};
 use crate::kernel::vm;
 use crate::kernel::Vm;
 use crate::utils::round_down;
@@ -42,9 +40,8 @@ const VIRTIO_CONSOLE_PORT_OPEN: usize = 6;
 const VIRTIO_CONSOLE_PORT_NAME: usize = 7;
 
 /// A wrapper structure for `ConsoleDescInner` providing a convenient and thread-safe interface.
-#[derive(Clone)]
 pub struct ConsoleDesc {
-    inner: Arc<Mutex<ConsoleDescInner>>,
+    inner: Mutex<ConsoleDescInner>,
 }
 
 /// Holds data related to console configuration.
@@ -59,19 +56,16 @@ pub struct ConsoleDescData {
 }
 
 impl ConsoleDesc {
-    /// Creates a new `ConsoleDesc` with default inner values.
-    pub fn default() -> ConsoleDesc {
+    /// Creates a new `ConsoleDesc` with passed value.
+    pub fn new(oppo_end_vmid: u16, oppo_end_ipa: u64) -> ConsoleDesc {
+        let mut desc = ConsoleDescInner::default();
+        desc.oppo_end_vmid = oppo_end_vmid;
+        desc.oppo_end_ipa = oppo_end_ipa;
+        desc.cols = 80;
+        desc.rows = 25;
         ConsoleDesc {
-            inner: Arc::new(Mutex::new(ConsoleDescInner::default())),
+            inner: Mutex::new(desc),
         }
-    }
-
-    pub fn cfg_init(&self, oppo_end_vmid: u16, oppo_end_ipa: u64) {
-        let mut inner = self.inner.lock();
-        inner.oppo_end_vmid = oppo_end_vmid;
-        inner.oppo_end_ipa = oppo_end_ipa;
-        inner.cols = 80;
-        inner.rows = 25;
     }
 
     /// Returns the starting address of the console configuration.
@@ -121,9 +115,8 @@ pub fn console_features() -> usize {
 /// Handles notification for a Virtio console request on the specified Virtqueue (`vq`), Virtio console device (`console`), and virtual machine (`vm`).
 /// This function processes the available descriptors in the Virtqueue and performs necessary operations.
 /// Returns `true` upon successful handling.
-pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> bool {
+pub fn virtio_console_notify_handler(vq: Arc<Virtq>, console: Arc<VirtioMmio>, vm: Arc<Vm>) -> bool {
     if vq.vq_indx() % 4 != 1 {
-        // println!("console rx queue notified!");
         return true;
     }
 
@@ -132,7 +125,6 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         return false;
     }
 
-    let tx_iov = VirtioIov::default();
     let dev = console.dev();
 
     let (trgt_vmid, trgt_console_ipa) = match dev.desc() {
@@ -143,21 +135,19 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         }
     };
 
-    // let buf = dev.cache();
     let mut next_desc_idx_opt = vq.pop_avail_desc_idx(vq.avail_idx());
 
     while next_desc_idx_opt.is_some() {
         let mut idx = next_desc_idx_opt.unwrap() as usize;
         let mut len = 0;
-        tx_iov.clear();
+        let mut tx_iov = VirtioIov::default();
 
         loop {
-            let addr = vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx));
+            let addr = vm.ipa2pa(vq.desc_addr(idx));
             if addr == 0 {
                 error!("virtio_console_notify_handler: failed to desc addr");
                 return false;
             }
-            // println!("virtio_consle:addr:{:#x}", addr);
             tx_iov.push_data(addr, vq.desc_len(idx) as usize);
 
             len += vq.desc_len(idx) as usize;
@@ -166,29 +156,9 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
             }
             idx = vq.desc_next(idx) as usize;
         }
-        // unsafe {
-        //     let slice = core::slice::from_raw_parts(
-        //         vm_ipa2pa(active_vm().unwrap(), vq.desc_addr(idx)) as *const u8,
-        //         len as usize,
-        //     );
-        //     use alloc::string::String;
-        //     let s = String::from_utf8_lossy(slice);
-        //     println!("send data:{}", s);
-        // }
 
-        if !virtio_console_recv(trgt_vmid, trgt_console_ipa, tx_iov.clone(), len) {
+        if !virtio_console_recv(trgt_vmid, trgt_console_ipa, tx_iov, len) {
             error!("virtio_console_notify_handler: failed send");
-            // return false;
-        }
-        if vm.id() != 0 {
-            let used_addr = vm_ipa2pa(vm.clone(), vq.used_addr());
-            // println!(
-            //     "virtio_console_notify_handler: used addr {:x}, size {}",
-            //     used_addr,
-            //     size_of::<VringUsed>()
-            // );
-            vm_if_set_mem_map_bit(vm.clone(), used_addr);
-            vm_if_set_mem_map_bit(vm.clone(), used_addr + PAGE_SIZE);
         }
         if !vq.update_used_ring(len as u32, next_desc_idx_opt.unwrap() as u32) {
             return false;
@@ -202,8 +172,7 @@ pub fn virtio_console_notify_handler(vq: Virtq, console: VirtioMmio, vm: Vm) -> 
         return false;
     }
 
-    console.notify(vm);
-    // vq.notify(dev.int_id(), vm.clone());
+    console.notify();
 
     true
 }
@@ -219,15 +188,18 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         Some(vm) => vm,
     };
 
-    let console = match trgt_vm.emu_console_dev(trgt_console_ipa as usize) {
-        EmuDevs::VirtioConsole(x) => x,
-        _ => {
+    let console = match trgt_vm
+        .find_emu_dev(trgt_console_ipa as usize)
+        .and_then(|dev| dev.into_any_arc().downcast::<VirtioMmio>().ok())
+    {
+        None => {
             error!(
                 "virtio_console_recv: trgt_vm[{}] failed to get virtio console dev",
                 trgt_vmid
             );
             return true;
         }
+        Some(vm) => vm,
     };
 
     if !console.dev().activated() {
@@ -254,16 +226,15 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         error!("virtio_console_recv: receive invalid avail desc idx");
         return false;
     } else if desc_header_idx_opt.is_none() {
-        // println!("virtio_console_recv: desc_header_idx_opt.is_none()");
         return true;
     }
 
     let desc_idx_header = desc_header_idx_opt.unwrap();
     let mut desc_idx = desc_header_idx_opt.unwrap() as usize;
-    let rx_iov = VirtioIov::default();
+    let mut rx_iov = VirtioIov::default();
     let mut rx_len = 0;
     loop {
-        let dst = vm_ipa2pa(trgt_vm.clone(), rx_vq.desc_addr(desc_idx));
+        let dst = trgt_vm.ipa2pa(rx_vq.desc_addr(desc_idx));
         if dst == 0 {
             error!(
                 "virtio_console_recv: failed to get dst, desc_idx {}, avail idx {}",
@@ -272,13 +243,11 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
             );
             return false;
         }
-        // println!("virtio_consle recv:addr:{:#x}", dst);
         let desc_len = rx_vq.desc_len(desc_idx) as usize;
         // dirty pages
         if trgt_vmid != 0 {
             let mut addr = round_down(dst, PAGE_SIZE);
             while addr <= round_down(dst + desc_len, PAGE_SIZE) {
-                vm_if_set_mem_map_bit(trgt_vm.clone(), addr);
                 addr += PAGE_SIZE;
             }
         }
@@ -299,7 +268,7 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         return false;
     }
 
-    if tx_iov.write_through_iov(rx_iov.clone(), len) > 0 {
+    if tx_iov.write_through_iov(&rx_iov, len) > 0 {
         error!(
             "virtio_console_recv: write through iov failed, rx_iov_num {} tx_iov_num {} rx_len {} tx_len {}",
             rx_iov.num(),
@@ -310,11 +279,6 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         return false;
     }
 
-    if trgt_vmid != 0 {
-        let used_addr = vm_ipa2pa(trgt_vm.clone(), rx_vq.used_addr());
-        vm_if_set_mem_map_bit(trgt_vm.clone(), used_addr);
-        vm_if_set_mem_map_bit(trgt_vm.clone(), used_addr + PAGE_SIZE);
-    }
     if !rx_vq.update_used_ring(len as u32, desc_idx_header as u32) {
         error!(
             "virtio_console_recv: update used ring failed len {} rx_vq num {}",
@@ -324,7 +288,6 @@ fn virtio_console_recv(trgt_vmid: u16, trgt_console_ipa: u64, tx_iov: VirtioIov,
         return false;
     }
 
-    console.notify(trgt_vm);
-    // rx_vq.notify(console.dev().int_id(), trgt_vm.clone());
+    console.notify();
     true
 }

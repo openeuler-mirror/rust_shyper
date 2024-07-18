@@ -9,7 +9,7 @@
 // See the Mulan PSL v2 for more details.
 
 use crate::arch::traits::InterruptController;
-use crate::arch::IntCtrl;
+use crate::arch::{is_boot_core, IntCtrl};
 use crate::kernel::{current_cpu, Scheduler};
 
 // #[derive(Copy, Clone)]
@@ -36,7 +36,7 @@ pub fn timer_init() {
     #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();
 
-    if current_cpu().id == 0 {
+    if is_boot_core(current_cpu().id) {
         crate::kernel::interrupt_reserve_int(IntCtrl::IRQ_HYPERVISOR_TIMER, timer_irq_handler);
         info!("Timer frequency: {}Hz", crate::arch::timer_arch_get_frequency());
         info!("Timer init ok");
@@ -64,11 +64,27 @@ fn timer_notify_after(ms: usize) {
     timer_arch_enable_irq();
 }
 
+pub const TIMER_INTERVAL: usize = 10;
+
 pub fn timer_irq_handler() {
     use crate::arch::timer_arch_disable_irq;
 
     timer_arch_disable_irq();
     current_cpu().scheduler().do_schedule();
 
-    timer_notify_after(1);
+    #[cfg(target_arch = "riscv64")]
+    {
+        let vcpu_option = current_cpu().active_vcpu.as_ref();
+        if let Some(vcpu) = vcpu_option {
+            let next_timer = vcpu.inner.inner_mut.lock().vm_ctx.next_timer_intr;
+            // next_timer == 0 indicates the initialization condition.
+            // In this case, no clock interrupt is triggered
+            if next_timer <= crate::arch::timer_arch_get_counter() as u64 && next_timer != 0 {
+                // Timer is expired, inject interrupt!
+                crate::arch::IntCtrl::vm_inject(vcpu.vm().as_ref().unwrap(), vcpu, crate::arch::IRQ_GUEST_TIMER);
+            }
+        }
+    }
+
+    timer_notify_after(TIMER_INTERVAL);
 }

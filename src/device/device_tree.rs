@@ -21,6 +21,10 @@ use crate::vmm::CPIO_RAMDISK;
 
 const PI4_DTB_ADDR: usize = 0xf0000000;
 
+pub unsafe fn fdt_total_size(dtb: *mut fdt::myctypes::c_void) -> usize {
+    core::ptr::read_unaligned((dtb as usize + 4) as *const u32).to_be() as usize
+}
+
 /// Initializes the Device Tree Blob (DTB) for the primary VM (vm0).
 /// # Safety:
 /// Dtb is a valid pointer to a device tree blob
@@ -94,12 +98,13 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         let slice = core::slice::from_raw_parts(pi_fdt as *const u8, len as usize);
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
-    #[cfg(feature = "qemu")]
+    #[cfg(all(feature = "qemu", target_arch = "aarch64"))]
     {
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
         // assert_eq!(fdt_disable_node(dtb, "/platform@c000000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/flash@0\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/fw-cfg@9020000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/memory@40000000\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/virtio_mmio@a000000\0".as_ptr()), 0);
@@ -152,6 +157,40 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         let slice = core::slice::from_raw_parts(dtb as *const u8, len);
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
+    // #[cfg(all(feature = "qemu", target_arch = "riscv64"))]
+    #[cfg(target_arch = "riscv64")]
+    {
+        fdt_pack(dtb);
+        fdt_enlarge(dtb);
+        fdt_clear_initrd(dtb);
+        // assert_eq!(fdt_remove_node(dtb, "/soc/plic@c000000\0".as_ptr()), 0);
+        // Note: OpenSBI protects the CLINT owning area with PMP, allowing only M-mode read and write,
+        // but not S-mode or U-mode read and write
+        // 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()
+
+        // TODO: Emulate CLINT
+        assert_eq!(fdt_remove_node(dtb, "/soc/clint@2000000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/poweroff\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/reboot\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/platform-bus@4000000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/pmu\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/fw-cfg@10100000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/flash@20000000\0".as_ptr()), 0);
+        // Delete the previous memory and edit it again later
+        assert_eq!(fdt_remove_node(dtb, "/memory@80000000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/soc/pci@30000000\0".as_ptr()), 0);
+
+        // Delete unused hart of MVM (MVM only owns hart 0)
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@1\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@2\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@3\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map\0".as_ptr()), 0);
+
+        let len = fdt_size(dtb) as usize;
+        info!("fdt patched size {}", len);
+        let slice = core::slice::from_raw_parts(dtb as *const u8, len);
+        SYSTEM_FDT.call_once(|| slice.to_vec());
+    }
     #[cfg(feature = "rk3588")]
     {
         use fdt::binding::Fdt;
@@ -165,7 +204,126 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
 
 /// Creates the Device Tree Blob (DTB) for the secondary VM (vm1) based on the provided configuration.
 // create vm1 fdt demo
-pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
+pub fn create_fdt(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
+    #[cfg(target_arch = "riscv64")]
+    {
+        create_fdt_riscv64(config)
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        create_fdt_aarch64(config)
+    }
+}
+
+pub fn create_fdt_riscv64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
+    let mut fdt = FdtWriter::new()?;
+    let ncpu = config.cpu_allocated_bitmap().count_ones();
+
+    let root_node = fdt.begin_node("root")?;
+    fdt.property_u32("#address-cells", 0x2)?;
+    fdt.property_u32("#size-cells", 0x2)?;
+    fdt.property_string("compatible", "riscv-virtio")?;
+    fdt.property_string("model", "riscv-virtio,qemu")?;
+
+    create_memory_node(&mut fdt, config.clone())?;
+
+    // todo: fix create_chosen_node size
+    create_chosen_node(&mut fdt, &config.cmdline, config.ramdisk_load_ipa(), CPIO_RAMDISK.len())?;
+
+    create_cpu_node_riscv(&mut fdt, config)?;
+
+    let soc = fdt.begin_node("soc")?;
+    fdt.property_u32("#address-cells", 0x2)?;
+    fdt.property_u32("#size-cells", 0x2)?;
+    fdt.property_string("compatible", "simple-bus")?;
+    fdt.property_null("ranges")?;
+
+    for emu_cfg in config.emulated_device_list() {
+        match emu_cfg.emu_type {
+            EmuDeviceType::EmuDeviceTVirtioBlk
+            | EmuDeviceType::EmuDeviceTVirtioNet
+            | EmuDeviceType::EmuDeviceTVirtioConsole => {
+                info!("virtio fdt node init {} {:x}", emu_cfg.name, emu_cfg.base_ipa);
+                create_virtio_node_riscv64(
+                    &mut fdt,
+                    &emu_cfg.name,
+                    emu_cfg.irq_id,
+                    emu_cfg.base_ipa,
+                    riscv_plic_phandle(ncpu),
+                )?;
+            }
+            EmuDeviceType::EmuDeviceTShyper => {
+                info!("shyper fdt node init {:x}", emu_cfg.base_ipa);
+                create_shyper_node(
+                    &mut fdt,
+                    &emu_cfg.name,
+                    emu_cfg.irq_id,
+                    emu_cfg.base_ipa,
+                    emu_cfg.length,
+                )?;
+            }
+            EmuDeviceType::EmuDeviceTPlic => {
+                info!("plic fdt node init {:x} for {}", emu_cfg.base_ipa, &emu_cfg.name);
+                create_plic_node(&mut fdt, &emu_cfg.name, emu_cfg.base_ipa, emu_cfg.length, ncpu)?;
+            }
+            _ => {}
+        }
+    }
+    create_clint_node(&mut fdt, "clint@2000000", 0x2000000, 0x10000, ncpu)?;
+    fdt.end_node(soc)?;
+
+    fdt.end_node(root_node)?;
+    fdt.finish()
+}
+
+fn create_plic_node(fdt: &mut FdtWriter, name: &str, address: usize, len: usize, ncpu: u32) -> FdtWriterResult<()> {
+    let plic = fdt.begin_node(name)?;
+    let plic_phandle = riscv_plic_phandle(ncpu);
+
+    fdt.property_u32("phandle", plic_phandle)?;
+    fdt.property_u32("riscv,ndev", 63)?;
+    fdt.property_array_u64("reg", &[address as u64, len as u64])?;
+
+    let mut interrupts: Vec<u32> = Vec::new();
+    for i in 0..ncpu {
+        let cpu_phandle = riscv_cpu_intc_phandle(i, ncpu);
+        interrupts.push(cpu_phandle);
+        interrupts.push(0x0b);
+        interrupts.push(cpu_phandle);
+        interrupts.push(0x09);
+    }
+
+    fdt.property_array_u32("interrupts-extended", interrupts.as_slice())?;
+    fdt.property_null("interrupt-controller")?;
+    fdt.property_string("compatible", "sifive,plic-1.0.0")?;
+    fdt.property_u32("#address-cells", 0x00)?;
+    fdt.property_u32("#interrupt-cells", 0x01)?;
+    fdt.end_node(plic)?;
+
+    Ok(())
+}
+
+fn create_clint_node(fdt: &mut FdtWriter, name: &str, address: usize, len: usize, ncpu: u32) -> FdtWriterResult<()> {
+    let clint = fdt.begin_node(name)?;
+
+    let mut interrupts: Vec<u32> = Vec::new();
+    for i in 0..ncpu {
+        let cpu_phandle = riscv_cpu_intc_phandle(i, ncpu);
+        interrupts.push(cpu_phandle);
+        interrupts.push(0x03);
+        interrupts.push(cpu_phandle);
+        interrupts.push(0x07);
+    }
+
+    fdt.property_array_u32("interrupts-extended", interrupts.as_slice())?;
+    fdt.property_array_u64("reg", &[address as u64, len as u64])?;
+    fdt.property_string("compatible", "sifive,clint0")?;
+    fdt.end_node(clint)?;
+
+    Ok(())
+}
+
+pub fn create_fdt_aarch64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     let mut fdt = FdtWriter::new()?;
 
     let root_node = fdt.begin_node("root")?;
@@ -189,9 +347,9 @@ pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     }
     // todo: fix create_chosen_node size
     create_chosen_node(&mut fdt, &config.cmdline, config.ramdisk_load_ipa(), CPIO_RAMDISK.len())?;
-    create_cpu_node(&mut fdt, config.clone())?;
+    create_cpu_node(&mut fdt, config)?;
     if !config.dtb_device_list().is_empty() {
-        create_serial_node(&mut fdt, &config.dtb_device_list())?;
+        create_serial_node(&mut fdt, config.dtb_device_list())?;
     }
     // match &config.vm_dtb_devs {
     //     Some(vm_dtb_devs) => {
@@ -203,6 +361,7 @@ pub fn create_fdt(config: VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     create_gicv3_node(&mut fdt, config.gicr_addr(), config.gicd_addr())?;
     #[cfg(not(feature = "gicv3"))]
     create_gic_node(&mut fdt, config.gicc_addr(), config.gicd_addr())?;
+    // TODO: create_plic_node
 
     for emu_cfg in config.emulated_device_list() {
         match emu_cfg.emu_type {
@@ -296,7 +455,7 @@ fn create_timer_node(fdt: &mut FdtWriter, trigger_lvl: u32) -> FdtWriterResult<(
 }
 
 /// Creates the CPU node in the Device Tree for the VM based on the provided configuration.
-fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResult<()> {
+fn create_cpu_node(fdt: &mut FdtWriter, config: &VmConfigEntry) -> FdtWriterResult<()> {
     let cpus = fdt.begin_node("cpus")?;
     fdt.property_u32("#size-cells", 0)?;
     fdt.property_u32("#address-cells", 0x2)?;
@@ -327,11 +486,63 @@ fn create_cpu_node(fdt: &mut FdtWriter, config: VmConfigEntry) -> FdtWriterResul
     Ok(())
 }
 
+// acquire the cpu phandle id
+pub fn riscv_cpu_phandle(cpu_id: u32, ncpu: u32) -> u32 {
+    ncpu * 2 - 1 - cpu_id * 2
+}
+
+// acquire the cpu interrupt controller phandle id
+pub fn riscv_cpu_intc_phandle(cpu_id: u32, ncpu: u32) -> u32 {
+    ncpu * 2 - cpu_id * 2
+}
+
+// acquire the plic phandle id
+pub fn riscv_plic_phandle(ncpu: u32) -> u32 {
+    ncpu * 2 + 1
+}
+
+/// Creates the CPU node in the Device Tree for the VM based on the provided configuration.
+fn create_cpu_node_riscv(fdt: &mut FdtWriter, config: &VmConfigEntry) -> FdtWriterResult<()> {
+    let cpus = fdt.begin_node("cpus")?;
+    fdt.property_u32("#address-cells", 0x1)?;
+    fdt.property_u32("#size-cells", 0)?;
+    fdt.property_u32("timebase-frequency", 10000000)?;
+
+    let cpu_num = config.cpu_allocated_bitmap().count_ones();
+    for cpu_id in 0..cpu_num {
+        let cpu_name = format!("cpu@{:x}", cpu_id);
+        let cpu_node = fdt.begin_node(&cpu_name)?;
+
+        fdt.property_u32("phandle", riscv_cpu_phandle(cpu_id, cpu_num))?;
+        fdt.property_string("device_type", "cpu")?;
+        fdt.property_u32("reg", cpu_id)?;
+        fdt.property_string("status", "okay")?;
+        fdt.property_string("compatible", "riscv")?;
+        // keep qemu host's all extensions except H-extension
+        fdt.property_string("riscv,isa", "rv64imafdc_zicbom_zicboz_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_sstc_svadu")?;
+        fdt.property_string("mmu-type", "riscv,sv57")?;
+        fdt.property_string("compatible", "riscv")?;
+
+        let intc = fdt.begin_node("interrupt-controller")?;
+        fdt.property_u32("#interrupt-cells", 0x01)?;
+        fdt.property_null("interrupt-controller")?;
+        fdt.property_string("compatible", "riscv,cpu-intc")?;
+        fdt.property_u32("phandle", riscv_cpu_intc_phandle(cpu_id, cpu_num))?; // intc phandle
+        fdt.end_node(intc)?;
+
+        fdt.end_node(cpu_node)?;
+    }
+
+    fdt.end_node(cpus)?;
+
+    Ok(())
+}
+
 /// Creates the serial node in the Device Tree for the VM based on the provided configuration.
 fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> FdtWriterResult<()> {
     for dev in devs_config {
         if dev.dev_type == DtbDevType::DevSerial {
-            let serial_name = format!("serial@{:x}", dev.addr_region.ipa);
+            let serial_name = format!("serial@{:x}", dev.addr_region.ipa_start);
             let serial = fdt.begin_node(&serial_name)?;
             if cfg!(feature = "rk3588") {
                 fdt.property_string("compatible", "snps,dw-apb-uart")?;
@@ -339,7 +550,7 @@ fn create_serial_node(fdt: &mut FdtWriter, devs_config: &[VmDtbDevConfig]) -> Fd
                 fdt.property_string("compatible", "ns16550")?;
             }
             fdt.property_u32("clock-frequency", 408000000)?;
-            fdt.property_array_u64("reg", &[dev.addr_region.ipa as u64, 0x1000])?;
+            fdt.property_array_u64("reg", &[dev.addr_region.ipa_start as u64, 0x1000])?;
             fdt.property_u32("reg-shift", 0x2)?;
             fdt.property_array_u32("interrupts", &[0x0, (dev.irqs[0] - 32) as u32, 0x4])?;
             fdt.property_string("status", "okay")?;
@@ -403,6 +614,23 @@ fn create_virtio_node(fdt: &mut FdtWriter, name: &str, irq: usize, address: usiz
     fdt.property_string("compatible", "virtio,mmio")?;
     fdt.property_array_u32("interrupts", &[0, irq as u32 - 32, 0x1])?;
     fdt.property_array_u64("reg", &[address as u64, 0x400])?;
+    fdt.end_node(virtio)?;
+
+    Ok(())
+}
+
+fn create_virtio_node_riscv64(
+    fdt: &mut FdtWriter,
+    name: &str,
+    irq: usize,
+    address: usize,
+    plic_phandle: u32,
+) -> FdtWriterResult<()> {
+    let virtio = fdt.begin_node(name)?;
+    fdt.property_array_u32("interrupts", &[irq as u32])?;
+    fdt.property_u32("interrupt-parent", plic_phandle)?;
+    fdt.property_array_u64("reg", &[address as u64, 0x1000])?;
+    fdt.property_string("compatible", "virtio,mmio")?;
     fdt.end_node(virtio)?;
 
     Ok(())

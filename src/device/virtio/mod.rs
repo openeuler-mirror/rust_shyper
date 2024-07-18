@@ -13,6 +13,7 @@
 
 pub use self::blk::*;
 pub use self::dev::*;
+pub use self::mac::*;
 pub use self::iov::*;
 pub use self::mediated::*;
 pub use self::mmio::*;
@@ -24,6 +25,7 @@ mod blk;
 mod console;
 mod dev;
 mod iov;
+mod mac;
 mod mediated;
 mod mmio;
 mod net;

@@ -23,7 +23,7 @@ use crate::device::{
     BlkIov, mediated_blk_read, mediated_blk_write, virtio_blk_notify_handler, VIRTIO_BLK_T_IN, VIRTIO_BLK_T_OUT,
     VirtioMmio, Virtq,
 };
-use crate::kernel::{active_vm_id, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiType, vm};
+use crate::kernel::{active_vm_id, ipi_send_msg, IpiInnerMsg, IpiMediatedMsg, IpiType};
 use crate::utils::{memcpy, sleep, trace};
 
 #[derive(Clone, Copy, Debug)]
@@ -41,8 +41,8 @@ pub struct UsedInfo {
 #[derive(Clone)]
 pub struct IoAsyncMsg {
     pub src_vmid: usize,
-    pub vq: Virtq,
-    pub dev: VirtioMmio,
+    pub vq: Arc<Virtq>,
+    pub dev: Arc<VirtioMmio>,
     pub io_type: usize,
     pub blk_id: usize,
     pub sector: usize,
@@ -53,8 +53,8 @@ pub struct IoAsyncMsg {
 
 #[derive(Clone)]
 pub struct IoIdAsyncMsg {
-    pub vq: Virtq,
-    pub dev: VirtioMmio,
+    pub vq: Arc<Virtq>,
+    pub dev: Arc<VirtioMmio>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -261,10 +261,10 @@ pub async fn async_ipi_req() {
     drop(ipi_list);
     if let AsyncTaskData::AsyncIpiTask(msg) = task.task_data {
         if active_vm_id() == 0 {
-            virtio_blk_notify_handler(msg.vq.clone(), msg.blk.clone(), vm(msg.src_id).unwrap());
+            // Here, if the active vm is the service VM, handle the task directly
+            // Possible cond: share time slice with MVM
+            virtio_blk_notify_handler(msg.vq, msg.blk, msg.src_vm);
         } else {
-            // add_task_ipi_count();
-            // send IPI to target cpu, and the target will invoke `mediated_ipi_handler`
             ipi_send_msg(0, IpiType::IpiTMediatedDev, IpiInnerMsg::MediatedMsg(msg));
         }
     }
@@ -449,15 +449,13 @@ pub fn finish_async_task(ipi: bool) {
                 }
             }
 
-            update_used_info(args.vq.clone(), task.src_vmid);
-            let src_vm = vm(task.src_vmid).unwrap();
-            args.dev.notify(src_vm);
+            update_used_info(args.vq, task.src_vmid);
+            args.dev.notify();
         }
         AsyncTaskData::AsyncIpiTask(_) => {}
         AsyncTaskData::AsyncNoneTask(args) => {
-            update_used_info(args.vq.clone(), task.src_vmid);
-            let src_vm = vm(task.src_vmid).unwrap();
-            args.dev.notify(src_vm);
+            update_used_info(args.vq, task.src_vmid);
+            args.dev.notify();
         }
     }
 }
@@ -477,16 +475,12 @@ pub fn push_used_info(desc_chain_head_idx: u32, used_len: u32, src_vmid: usize) 
     }
 }
 
-fn update_used_info(vq: Virtq, src_vmid: usize) {
+fn update_used_info(vq: Arc<Virtq>, src_vmid: usize) {
     let mut used_info_list = ASYNC_USED_INFO_LIST.lock();
     match used_info_list.get_mut(&src_vmid) {
         Some(info_list) => {
-            // for info in info_list.iter() {
-            // vq.update_used_ring(info.used_len, info.desc_chain_head_idx, vq_size);
             let info = info_list.pop_front().unwrap();
             vq.update_used_ring(info.used_len, info.desc_chain_head_idx);
-            // }
-            // info_list.clear();
         }
         None => {
             error!("async_push_used_info: src_vmid {} not existed", src_vmid);

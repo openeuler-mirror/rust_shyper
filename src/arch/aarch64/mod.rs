@@ -23,17 +23,18 @@ pub use self::smc::*;
 pub use self::smmu::*;
 pub use self::sync::*;
 pub use self::timer::*;
-pub use self::vcpu::*;
 #[cfg(not(feature = "gicv3"))]
 pub use self::vgic::*;
 #[cfg(feature = "gicv3")]
 pub use self::vgicv3::*;
 pub use self::start::*;
 pub use self::regs::*;
+pub use self::cache::*;
+pub use self::tlb::*;
 
 #[macro_use]
 mod regs;
-mod cache;
+pub mod cache;
 mod context_frame;
 mod cpu;
 mod exception;
@@ -51,12 +52,13 @@ mod smmu;
 mod start;
 mod sync;
 mod timer;
-mod tlb;
+pub mod tlb;
 mod vcpu;
 #[cfg(not(feature = "gicv3"))]
 mod vgic;
 #[cfg(feature = "gicv3")]
 mod vgicv3;
+mod vm;
 
 #[repr(C)]
 pub struct ArchDesc {

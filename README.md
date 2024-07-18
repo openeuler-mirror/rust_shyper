@@ -19,6 +19,7 @@ The list of supported (and work in progress) platforms is presented below:
 - [x] Raspberry Pi 4 Model B
 - [x] QEMU (note that VM migration and Hypervisor Live-update is not supported on QEMU)
 - [x] Firefly ROC-RK3588S-PC (note that VM migration and Hypervisor Live-update is not supported on ROC-RK3588S-PC)
+- [x] QEMU (for RISCV64)
 
 ## How to Build
 
@@ -39,6 +40,9 @@ For example, `make tx2` is to build Rust-Shyper for TX2.
 
 Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to your requirements.
 
+**RISCV64 Platform support**
+
+At present, Rust-Shyper already supports the RISCV64 platform on QEMU, and provides a complete user manual and corresponding accessories, please refer to [Rust-Shyper for RISCV64 Documentation](./doc/RISC-V64_User_Guide.md)
 
 **RK3588 support**
 
@@ -54,8 +58,6 @@ The kernel module on NVIDIA L4T 32.6.1 (for Jestion TX2), Linux 4.9.140/5.10.160
 
 When starting Rust-Shyper, the MVM will boot automatically. Logging on to the MVM (a Linux priviledged VM), take the QEMU configuration as an example, then can we configure and start the Guest VMs.
 
-> The `cli` directory contains the Rust version of the cli tool source code, which you can use to compile on your platform, obtain the shyper-cli executable file, and then use it in place of the `tools/shyper-cli` for subsequent virtual machine management operations.
-
 **Step 1**: Install the kernel module
 
 ```bash
@@ -67,6 +69,8 @@ insmod tools/shyper.ko
 ```bash
 sudo tools/shyper system daemon [mediated-cfg.json] &
 ```
+
+> The `cli` directory contains the Rust version of the cli tool source code, which you can use to compile on your platform, obtain the shyper-cli executable file, and then use it in place of the `tools/shyper-cli` for subsequent virtual machine management operations.
 
 mediated-cfg.json is used for guest VM as virtio block. If it is a physical platform, you can connect external disk devices, such as /dev/sda2, /dev/nvme0n1p2. For example:
 

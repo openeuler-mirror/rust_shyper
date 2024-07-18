@@ -8,7 +8,7 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::{gic_cpu_init, gicc_clear_current_irq, vcpu_arch_init};
+use crate::arch::{gic_cpu_init, gicc_clear_current_irq};
 use crate::board::{Platform, PlatOperation};
 use crate::kernel::{cpu_idle, current_cpu, ipi_intra_broadcast_msg, Scheduler, timer_enable, Vcpu, VcpuState, Vm};
 use crate::kernel::{active_vm, ipi_send_msg, IpiInnerMsg, IpiPowerMessage, IpiType, PowerEvent};
@@ -20,6 +20,9 @@ use smccc::psci::{LowestAffinityLevel, SuspendMode};
 use smccc::{self, Smc};
 
 use super::smc::smc_call;
+
+// RKNPU requires this feature to be reported by the PSCI_FEATURES call.
+const SMCCC_VERSION: usize = 0x80000000;
 
 pub const PSCI_VERSION: usize = 0x84000000;
 pub const PSCI_CPU_SUSPEND_32: usize = 0x84000001;
@@ -63,7 +66,7 @@ const TEGRA_SIP_GET_ACTMON_CLK_COUNTERS: usize = 0xC2FFFE02;
 
 pub const PSCI_TOS_NOT_PRESENT_MP: usize = 2;
 
-pub fn power_arch_vm_shutdown_secondary_cores(vm: Vm) {
+pub fn power_arch_vm_shutdown_secondary_cores(vm: &Vm) {
     let m = IpiPowerMessage {
         src: vm.id(),
         vcpuid: 0,
@@ -189,17 +192,12 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
         #[cfg(feature = "tx2")]
         TEGRA_SIP_GET_ACTMON_CLK_COUNTERS => {
             let result = unsafe { smc_call(fid, x1, x2, x3) };
-            // println!("x1 0x{:x}, x2 0x{:x}, x3 0x{:x}", x1, x2, x3);
-            // println!(
-            //     "result.0 0x{:x}, result.1 0x{:x}, result.2 0x{:x}",
-            //     result.0, result.1, result.2
-            // );
             current_cpu().set_gpr(1, result.1);
             current_cpu().set_gpr(2, result.2);
             result.0
         }
         PSCI_FEATURES => match x1 {
-            PSCI_VERSION | PSCI_CPU_ON_64 | PSCI_FEATURES => PSCI_E_SUCCESS,
+            PSCI_VERSION | PSCI_CPU_ON_64 | PSCI_FEATURES | SMCCC_VERSION => PSCI_E_SUCCESS,
             _ => PSCI_E_NOT_SUPPORTED,
         },
         PSCI_CPU_FREEZE => match smccc::psci::cpu_freeze::<Smc>() {
@@ -243,7 +241,7 @@ pub fn smc_guest_handler(fid: usize, x1: usize, x2: usize, x3: usize) -> bool {
     true
 }
 
-fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
+fn psci_vcpu_on(vcpu: &Vcpu, entry: usize, ctx: usize) {
     if vcpu.phys_id() != current_cpu().id {
         panic!(
             "cannot psci on vcpu on cpu {} by cpu {}",
@@ -258,7 +256,7 @@ fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
     // Just wake up the vcpu and
     // invoke current_cpu().sched.schedule()
     // let the scheduler enable or disable timer
-    current_cpu().scheduler().wakeup(vcpu);
+    current_cpu().scheduler().wakeup(vcpu.clone());
     current_cpu().scheduler().do_schedule();
 
     if cfg!(feature = "secondary_start") {
@@ -272,7 +270,7 @@ fn psci_vcpu_on(vcpu: Vcpu, entry: usize, ctx: usize) {
 }
 
 // Todo: need to support more vcpu in one Core
-pub fn psci_ipi_handler(msg: &IpiMessage) {
+pub fn psci_ipi_handler(msg: IpiMessage) {
     match msg.ipi_message {
         IpiInnerMsg::Power(power_msg) => {
             if let PowerEvent::PsciIpiVcpuAssignAndCpuOn = power_msg.event {
@@ -311,13 +309,11 @@ pub fn psci_ipi_handler(msg: &IpiMessage) {
                     psci_vcpu_on(trgt_vcpu, power_msg.entry, power_msg.context);
                 }
                 PowerEvent::PsciIpiCpuOff => {
-                    // TODO: 为什么ipi cpu off是当前vcpu shutdown，而vcpu shutdown 最后是把平台的物理核心shutdown
-                    // 没有用到。不用管
-                    // current_cpu().active_vcpu.clone().unwrap().shutdown();
                     unimplemented!("PowerEvent::PsciIpiCpuOff")
                 }
                 PowerEvent::PsciIpiCpuReset => {
-                    vcpu_arch_init(active_vm().unwrap(), current_cpu().active_vcpu.clone().unwrap());
+                    let vcpu = current_cpu().active_vcpu.as_ref().unwrap();
+                    vcpu.init_boot_info(active_vm().unwrap().config());
                 }
                 _ => {}
             }

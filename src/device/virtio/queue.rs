@@ -8,13 +8,12 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 
 use core::slice;
 
 use spin::Mutex;
 
-use crate::device::VirtioDeviceType;
 use crate::device::VirtioMmio;
 use crate::kernel::{active_vm, Vm, vm_ipa2pa};
 
@@ -99,32 +98,35 @@ pub struct VringUsed {
     ring: [VringUsedElem; 512],
 }
 
-/// Represents a VirtIO queue trait with initialization and reset methods.
-pub trait VirtioQueue {
-    /// Initializes the VirtIO queue with the given device type.
-    fn virtio_queue_init(&self, dev_type: VirtioDeviceType);
-    /// Resets the VirtIO queue at the specified index.
-    fn virtio_queue_reset(&self, index: usize);
-}
-
 /// A wrapper struct representing a VirtIO queue.
-#[derive(Clone)]
 pub struct Virtq {
-    inner: Arc<Mutex<VirtqInner<'static>>>,
+    /// The index of the VirtIO queue.
+    vq_index: usize,
+    /// Optional function to handle VirtIO queue notifications.
+    notify_handler: fn(Arc<Self>, Arc<VirtioMmio>, Arc<Vm>) -> bool,
+    mmio: Weak<VirtioMmio>,
+    inner: Mutex<VirtqInner<'static>>,
 }
 
 impl Virtq {
-    /// Creates a new default Virtq instance.
-    pub fn default() -> Virtq {
-        Virtq {
-            inner: Arc::new(Mutex::new(VirtqInner::default())),
-        }
+    /// Creates a new Virtq instance.
+    pub fn new(
+        vq_index: usize,
+        mmio: Weak<VirtioMmio>,
+        notify_handler: fn(Arc<Self>, Arc<VirtioMmio>, Arc<Vm>) -> bool,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            vq_index,
+            notify_handler,
+            mmio,
+            inner: Mutex::new(VirtqInner::default()),
+        })
     }
 
     /// Resets the VirtIO queue at the specified index.
-    pub fn reset(&self, index: usize) {
+    pub fn reset(&self) {
         let mut inner = self.inner.lock();
-        inner.reset(index);
+        inner.reset();
     }
 
     /// Pops the next available descriptor index from the available ring.
@@ -224,34 +226,22 @@ impl Virtq {
         }
     }
 
-    /// Sets the notify handler function for the VirtIO queue.
-    pub fn set_notify_handler(&self, handler: fn(Virtq, VirtioMmio, Vm) -> bool) {
-        let mut inner = self.inner.lock();
-        inner.notify_handler = Some(handler);
-    }
-
     /// Calls the registered notify handler function.
-    pub fn call_notify_handler(&self, mmio: VirtioMmio) -> bool {
-        let inner = self.inner.lock();
-        match inner.notify_handler {
-            Some(handler) => {
-                drop(inner);
-                handler(self.clone(), mmio, active_vm().unwrap())
-            }
-            None => {
-                error!("call_notify_handler: virtq notify handler is None");
-                false
-            }
+    pub fn call_notify_handler(self: &Arc<Self>) -> bool {
+        if let Some(mmio) = self.mmio.upgrade() {
+            (self.notify_handler)(self.clone(), mmio, active_vm().unwrap())
+        } else {
+            false
         }
     }
 
     /// Displays information about the descriptors in the VirtIO queue.
-    pub fn show_desc_info(&self, size: usize, vm: Vm) {
+    pub fn show_desc_info(&self, size: usize, vm: Arc<Vm>) {
         let inner = self.inner.lock();
         let desc = inner.desc_table.as_ref().unwrap();
         info!("[*desc_ring*]");
         for i in 0..size {
-            let desc_addr = vm_ipa2pa(vm.clone(), desc[i].addr);
+            let desc_addr = vm_ipa2pa(&vm, desc[i].addr);
             info!(
                 "index {}   desc_addr_ipa 0x{:x}   desc_addr_pa 0x{:x}   len 0x{:x}   flags {}  next {}",
                 i, desc[i].addr, desc_addr, desc[i].len, desc[i].flags, desc[i].next
@@ -293,7 +283,7 @@ impl Virtq {
 
     /// Sets the last used index for the used ring.
     pub fn set_last_used_idx(&self, last_used_idx: u16) {
-        let mut inner = self.inner.lock();
+        let mut inner: spin::MutexGuard<'_, VirtqInner<'_>> = self.inner.lock();
         inner.last_used_idx = last_used_idx;
     }
 
@@ -413,8 +403,7 @@ impl Virtq {
 
     /// Returns the VirtIO queue index.
     pub fn vq_indx(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.vq_index
+        self.vq_index
     }
 
     /// Returns the number of descriptors in the VirtIO queue.
@@ -483,8 +472,6 @@ impl Virtq {
 pub struct VirtqInner<'a> {
     /// The ready state of the VirtIO queue.
     ready: usize,
-    /// The index of the VirtIO queue.
-    vq_index: usize,
     /// The number of descriptors in the VirtIO queue.
     num: usize,
     /// Optional reference to the descriptor table.
@@ -506,9 +493,6 @@ pub struct VirtqInner<'a> {
     avail_addr: usize,
     /// Guest-physical address of the used ring.
     used_addr: usize,
-
-    /// Optional function to handle VirtIO queue notifications.
-    notify_handler: Option<fn(Virtq, VirtioMmio, Vm) -> bool>,
 }
 
 impl VirtqInner<'_> {
@@ -516,7 +500,6 @@ impl VirtqInner<'_> {
     pub fn default() -> Self {
         VirtqInner {
             ready: 0,
-            vq_index: 0,
             num: 0,
             desc_table: None,
             avail: None,
@@ -528,15 +511,12 @@ impl VirtqInner<'_> {
             desc_table_addr: 0,
             avail_addr: 0,
             used_addr: 0,
-
-            notify_handler: None,
         }
     }
 
     /// Resets the VirtIO queue to its initial state.
-    pub fn reset(&mut self, index: usize) {
+    pub fn reset(&mut self) {
         self.ready = 0;
-        self.vq_index = index;
         self.num = 0;
         self.last_avail_idx = 0;
         self.last_used_idx = 0;

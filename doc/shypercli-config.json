@@ -1,0 +1,7 @@
+{
+    "mediated": [
+        "/root/vm0_ubuntu.img",
+        "/root/vm0_ubuntu_2.img",
+        "/root/vm0_busybox.img"
+    ]
+}

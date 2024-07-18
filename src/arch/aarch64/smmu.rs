@@ -10,6 +10,8 @@
 
 use alloc::vec::Vec;
 use core::mem::size_of;
+use core::ops::Range;
+use alloc::sync::Arc;
 use core::ptr;
 
 use spin::Mutex;
@@ -18,7 +20,8 @@ use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 
 use crate::board::PLAT_DESC;
-use crate::device::EmuContext;
+use crate::config::VmEmulatedDeviceConfig;
+use crate::device::{EmuContext, EmuDeviceType, EmuDev};
 use crate::kernel::VM_NUM_MAX;
 use crate::kernel::Vm;
 use crate::kernel::{active_vm, active_vm_id, current_cpu};
@@ -571,7 +574,7 @@ pub fn smmu_init() {
     SMMU_V2.call_once(|| Mutex::new(SmmuV2::new()));
 }
 
-pub fn smmu_vm_init(vm: Vm) -> bool {
+pub fn smmu_vm_init(vm: &Vm) -> bool {
     let mut smmu_v2 = SMMU_V2.get().unwrap().lock();
     match smmu_v2.alloc_ctxbnk() {
         Some(context_id) => {
@@ -580,6 +583,34 @@ pub fn smmu_vm_init(vm: Vm) -> bool {
             true
         }
         None => panic!("iommu: smmuv2 could not allocate ctx for vm[{}]", vm.id()),
+    }
+}
+
+pub struct EmuSmmu {
+    address_range: Range<usize>,
+}
+
+impl EmuDev for EmuSmmu {
+    fn emu_type(&self) -> crate::device::EmuDeviceType {
+        EmuDeviceType::EmuDeviceTIOMMU
+    }
+
+    fn address_range(&self) -> Range<usize> {
+        self.address_range.clone()
+    }
+
+    fn handler(&self, emu_ctx: &EmuContext) -> bool {
+        emu_smmu_handler(0, emu_ctx)
+    }
+}
+
+pub fn emu_smmu_init(emu_cfg: &VmEmulatedDeviceConfig) -> Result<Arc<dyn EmuDev>, ()> {
+    if emu_cfg.emu_type == EmuDeviceType::EmuDeviceTIOMMU {
+        Ok(Arc::new(EmuSmmu {
+            address_range: emu_cfg.base_ipa..emu_cfg.base_ipa + emu_cfg.length,
+        }))
+    } else {
+        Err(())
     }
 }
 

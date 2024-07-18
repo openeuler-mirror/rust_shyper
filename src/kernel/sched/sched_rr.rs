@@ -54,8 +54,6 @@ impl Scheduler for SchedulerRR {
 
     /// Schedule to the next vcpu object
     fn do_schedule(&mut self) {
-        // let next_vcpu = self.next().unwrap();
-        // current_cpu().schedule_to(next_vcpu);
         if let Some(next_vcpu) = self.next() {
             current_cpu().schedule_to(next_vcpu);
         } else {
@@ -72,12 +70,6 @@ impl Scheduler for SchedulerRR {
 
     /// put vcpu into sleep, and remove it from scheduler
     fn sleep(&mut self, vcpu: Vcpu) {
-        // println!(
-        //     "SchedulerRR: Core {} sleep VM[{}] vcpu {}",
-        //     current_cpu().id,
-        //     vcpu.vm_id(),
-        //     vcpu.id()
-        // );
         let mut need_schedule = false;
         {
             let queue = &mut self.queue;
@@ -120,7 +112,7 @@ impl Scheduler for SchedulerRR {
 
     /// yield to another cpu, only used when vcpu is new added and want to be excuted immediately
     fn yield_to(&mut self, vcpu: Vcpu) {
-        let queue = &mut self.queue;
+        let queue: &mut Vec<Vcpu> = &mut self.queue;
         queue.push(vcpu.clone());
         self.active_idx = queue.len() - 1;
         current_cpu().schedule_to(vcpu);
@@ -138,7 +130,7 @@ impl SchedulerUpdate for SchedulerRR {
             let vm_id = vcpu.vm_id();
             let vcpu_id = vcpu.id();
             let vm = vm(vm_id).unwrap();
-            new_rr.queue.push(vm.vcpu(vcpu_id).unwrap());
+            new_rr.queue.push(vm.vcpu(vcpu_id).unwrap().clone());
         }
         new_rr.active_idx = src_rr.active_idx;
         new_rr.base_slice = src_rr.base_slice;

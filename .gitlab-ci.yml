@@ -34,6 +34,8 @@ build:
         FEATURES:
           - ""
           - rk3588-noeth
+      - BOARD: qemu
+        ARCH: riscv64
   script:
     - make clippy
     - make doc

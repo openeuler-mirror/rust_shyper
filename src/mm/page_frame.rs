@@ -7,28 +7,39 @@
 // EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
+use alloc::alloc;
+use core::alloc::Layout;
 
 use crate::arch::PAGE_SIZE;
-use crate::kernel::{mem_heap_free, mem_heap_alloc, AllocError};
+use crate::kernel::AllocError;
 
 #[derive(Debug)]
 /// PageFrame struct represents a page frame, consisting of physical address and page number.
 pub struct PageFrame {
     pub pa: usize,
-    pub page_num: usize,
+    layout: Layout,
 }
 
 impl PageFrame {
-    pub fn new(pa: usize, page_num: usize) -> Self {
-        assert_eq!(pa % PAGE_SIZE, 0);
-        PageFrame { pa, page_num }
+    pub fn new(pa: usize, layout: Layout) -> Self {
+        Self { pa, layout }
     }
 
     /// Allocate a page frame with given page number.
-    pub fn alloc_pages(page_num: usize) -> Result<Self, AllocError> {
-        match mem_heap_alloc(page_num, false) {
-            Ok(pa) => Ok(Self::new(pa, page_num)),
-            Err(err) => Err(err),
+    pub fn alloc_pages(page_num: usize, align_page: usize) -> Result<Self, AllocError> {
+        if page_num == 0 {
+            return Err(AllocError::AllocZeroPage);
+        }
+
+        match Layout::from_size_align(page_num * PAGE_SIZE, align_page * PAGE_SIZE) {
+            Ok(layout) => {
+                let pa = unsafe { alloc::alloc_zeroed(layout) as usize };
+                Ok(Self::new(pa, layout))
+            }
+            Err(err) => {
+                error!("alloc_pages: Layout error {}", err);
+                Err(AllocError::OutOfFrame)
+            }
         }
     }
 
@@ -39,6 +50,10 @@ impl PageFrame {
 
 impl Drop for PageFrame {
     fn drop(&mut self) {
-        mem_heap_free(self.pa, 1);
+        debug!(
+            "drop page frame: {:#x}, with Layput {:x?} page(s)",
+            self.pa, self.layout
+        );
+        unsafe { alloc::dealloc(self.pa as *mut u8, self.layout) }
     }
 }

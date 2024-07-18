@@ -97,10 +97,10 @@ impl InterruptController for IntCtrl {
         }
     }
 
-    fn vm_inject(vm: Vm, vcpu: Vcpu, int_id: usize) {
+    fn vm_inject(vm: &Vm, vcpu: &Vcpu, int_id: usize) {
         let vgic = vm.vgic();
-        if let Some(cur_vcpu) = current_cpu().active_vcpu.clone() {
-            if cur_vcpu.vm_id() == vcpu.vm_id() {
+        if let Some(cur_vcpu) = current_cpu().active_vcpu.as_ref() {
+            if cur_vcpu == vcpu {
                 vgic.inject(vcpu, int_id);
                 return;
             }
@@ -109,7 +109,7 @@ impl InterruptController for IntCtrl {
         vcpu.push_int(int_id);
     }
 
-    fn vm_register(vm: Vm, int_id: usize) {
+    fn vm_register(vm: &Vm, int_id: usize) {
         super::vgic_set_hw_int(vm, int_id);
     }
 

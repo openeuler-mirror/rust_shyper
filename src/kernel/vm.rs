@@ -8,28 +8,21 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::mem::size_of;
+use spin::{Mutex, Once};
 
-use spin::Mutex;
-
-use crate::arch::{PAGE_SIZE, PTE_S2_FIELD_AP_RO};
-use crate::arch::GICC_CTLR_EN_BIT;
-use crate::arch::PageTable;
+#[cfg(target_arch = "aarch64")]
 use crate::arch::Vgic;
+#[cfg(target_arch = "riscv64")]
+use crate::arch::VPlic;
+use crate::arch::{PAGE_SIZE, emu_intc_init, PageTable};
 use crate::config::VmConfigEntry;
-use crate::device::{EmuDevs, VirtioMmioData};
+use crate::device::{EmuDev, emu_virtio_mmio_init};
+use crate::kernel::{shyper_init, emu_iommu_init};
 use crate::utils::*;
 use crate::mm::PageFrame;
 use super::vcpu::Vcpu;
-
-pub enum EmuDevData {
-    VirtioBlk(VirtioMmioData),
-    VirtioNet(VirtioMmioData),
-    VirtioConsole(VirtioMmioData),
-    None,
-}
 
 pub const VM_NUM_MAX: usize = 8;
 pub static VM_IF_LIST: [Mutex<VmInterface>; VM_NUM_MAX] = [const { Mutex::new(VmInterface::default()) }; VM_NUM_MAX];
@@ -60,29 +53,17 @@ pub fn vm_if_get_type(vm_id: usize) -> VmType {
 }
 
 fn vm_if_set_cpu_id(vm_id: usize, master_cpu_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.master_cpu_id = master_cpu_id;
+    let vm_if = VM_IF_LIST[vm_id].lock();
+    vm_if.master_cpu_id.call_once(|| master_cpu_id);
     debug!(
         "vm_if_list_set_cpu_id vm [{}] set master_cpu_id {}",
         vm_id, master_cpu_id
     );
 }
 
-// todo: rewrite return val to Option<usize>
-pub fn vm_if_get_cpu_id(vm_id: usize) -> usize {
+pub fn vm_if_get_cpu_id(vm_id: usize) -> Option<usize> {
     let vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.master_cpu_id
-}
-
-/// compare vm_if mac addr with frame mac addr
-pub fn vm_if_cmp_mac(vm_id: usize, frame: &[u8]) -> bool {
-    let vm_if = VM_IF_LIST[vm_id].lock();
-    for (i, &b) in vm_if.mac.iter().enumerate() {
-        if b != frame[i] {
-            return false;
-        }
-    }
-    true
+    vm_if.master_cpu_id.get().cloned()
 }
 
 pub fn vm_if_set_ivc_arg(vm_id: usize, ivc_arg: usize) {
@@ -104,142 +85,61 @@ pub fn vm_if_ivc_arg_ptr(vm_id: usize) -> usize {
     let vm_if = VM_IF_LIST[vm_id].lock();
     vm_if.ivc_arg_ptr
 }
-
-// new if for vm migration
-pub fn vm_if_init_mem_map(vm_id: usize, len: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map = Some(FlexBitmap::new(len));
-}
-
-pub fn vm_if_set_mem_map_cache(vm_id: usize, pf: PageFrame) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map_cache = Some(Arc::new(pf));
-}
-
-pub fn vm_if_mem_map_cache(vm_id: usize) -> Option<Arc<PageFrame>> {
-    let vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map_cache.clone()
-}
-
-pub fn vm_if_dirty_mem_map(vm_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_mut().unwrap().init_dirty();
-}
-
-pub fn vm_if_set_mem_map_bit(vm: Vm, pa: usize) {
-    let mut vm_if = VM_IF_LIST[vm.id()].lock();
-    let mut bit = 0;
-    for i in 0..vm.region_num() {
-        let start = vm.pa_start(i);
-        let len = vm.pa_length(i);
-        if pa >= start && pa < start + len {
-            bit += (pa - start) / PAGE_SIZE;
-            vm_if.mem_map.as_mut().unwrap().set(bit, true);
-            return;
-        } else {
-            bit += len / PAGE_SIZE;
-        }
-    }
-    panic!("vm_if_set_mem_map_bit: illegal pa 0x{:x}", pa);
-}
-
-pub fn vm_if_set_mem_map(vm_id: usize, bit: usize, len: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_mut().unwrap().set_bits(bit, len, true);
-}
-
-pub fn vm_if_clear_mem_map(vm_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_mut().unwrap().clear();
-}
-
-pub fn vm_if_copy_mem_map(vm_id: usize) {
-    let mut vm_if = VM_IF_LIST[vm_id].lock();
-    let mem_map_cache = vm_if.mem_map_cache.clone();
-    let map = vm_if.mem_map.as_mut().unwrap();
-    // SAFETY:
-    // We have both read and write access to the src and dst memory regions.
-    // The copied size will not exceed the memory region.
-    unsafe {
-        memcpy(
-            mem_map_cache.as_ref().unwrap().pa() as *const u8,
-            map.slice() as *const _ as *const u8,
-            size_of::<u64>() * map.vec_len(),
-        );
-    }
-    // clear bitmap after copy
-    map.clear();
-}
-
-pub fn vm_if_mem_map_page_num(vm_id: usize) -> usize {
-    let vm_if = VM_IF_LIST[vm_id].lock();
-    let map = vm_if.mem_map.as_ref().unwrap();
-    8 * map.vec_len() / PAGE_SIZE
-}
-
-pub fn vm_if_mem_map_dirty_sum(vm_id: usize) -> usize {
-    let vm_if = VM_IF_LIST[vm_id].lock();
-    vm_if.mem_map.as_ref().unwrap().sum()
-}
 // End vm interface func implementation
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub enum VmState {
+    #[default]
     VmInv = 0,
     VmPending = 1,
     VmActive = 2,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub enum VmType {
+    #[default]
     VmTOs = 0,
-    VmTBma = 1,
+    VmTBma = 1, // Bare Metal Application
 }
 
-impl VmType {
-    pub fn from_usize(value: usize) -> VmType {
+impl From<usize> for VmType {
+    fn from(value: usize) -> Self {
         match value {
-            0 => VmType::VmTOs,
-            1 => VmType::VmTBma,
+            0 => Self::VmTOs,
+            1 => Self::VmTBma,
             _ => panic!("Unknown VmType value: {}", value),
         }
     }
 }
 
 pub struct VmInterface {
-    pub master_cpu_id: usize,
+    pub master_cpu_id: Once<usize>,
     pub state: VmState,
     pub vm_type: VmType,
     pub mac: [u8; 6],
     pub ivc_arg: usize,
     pub ivc_arg_ptr: usize,
-    pub mem_map: Option<FlexBitmap>,
-    pub mem_map_cache: Option<Arc<PageFrame>>,
 }
 
 impl VmInterface {
     const fn default() -> VmInterface {
         VmInterface {
-            master_cpu_id: 0,
+            master_cpu_id: Once::new(),
             state: VmState::VmPending,
-            vm_type: VmType::VmTBma,
+            vm_type: VmType::VmTOs,
             mac: [0; 6],
             ivc_arg: 0,
             ivc_arg_ptr: 0,
-            mem_map: None,
-            mem_map_cache: None,
         }
     }
 
     fn reset(&mut self) {
-        self.master_cpu_id = 0;
+        self.master_cpu_id = Once::new();
         self.state = VmState::VmPending;
-        self.vm_type = VmType::VmTBma;
+        self.vm_type = VmType::VmTOs;
         self.mac = [0; 6];
         self.ivc_arg = 0;
         self.ivc_arg_ptr = 0;
-        self.mem_map = None;
-        self.mem_map_cache = None;
     }
 }
 
@@ -260,100 +160,235 @@ impl VmPa {
     }
 }
 
-// #[repr(align(4096))]
-#[derive(Clone)]
+/// Vm interrupt controller type
+#[derive(Clone, Copy, Default, Debug)]
+pub enum IntCtrlType {
+    #[default]
+    Emulated,
+    Passthrough,
+}
+
 pub struct Vm {
-    pub inner: Arc<Mutex<VmInner>>,
+    inner_const: VmInnerConst,
+    inner_mut: Mutex<VmInnerMut>,
+}
+
+struct VmInnerConst {
+    id: usize,
+    config: VmConfigEntry,
+    // Vcpu config
+    vcpu_list: Vec<Vcpu>,
+    // Interrupt config
+    intc_type: IntCtrlType,
+    int_bitmap: BitAlloc4K,
+    #[cfg(target_arch = "aarch64")]
+    arch_intc_dev: Option<Arc<Vgic>>,
+    #[cfg(target_arch = "riscv64")]
+    arch_intc_dev: Option<Arc<VPlic>>,
+    // Emul devs config
+    emu_devs: Vec<Arc<dyn EmuDev>>,
+}
+
+struct VmInnerMut {
+    pt: Option<PageTable>,
+    // Memory config
+    mem_region_num: usize,
+    pa_region: Vec<VmPa>,
+    iommu_ctx_id: Option<usize>,
+}
+
+impl VmInnerConst {
+    fn new(id: usize, config: VmConfigEntry, vm: Weak<Vm>) -> VmInnerConst {
+        let phys_id_list = cal_phys_id_list(&config);
+        info!("VM[{}] phys_id_list {:?}", id, phys_id_list);
+
+        // cpu total number count must equal to the number of cpu in config
+        assert_eq!(phys_id_list.len(), config.cpu_num());
+        // set master cpu id
+        vm_if_set_cpu_id(id, *phys_id_list.first().unwrap());
+
+        let mut vcpu_list = Vec::with_capacity(config.cpu_num());
+
+        for (vcpu_id, phys_id) in phys_id_list.into_iter().enumerate() {
+            vcpu_list.push(Vcpu::new(vm.clone(), vcpu_id, phys_id));
+        }
+        let mut this = Self {
+            id,
+            config,
+            vcpu_list,
+            intc_type: IntCtrlType::Emulated,
+            arch_intc_dev: None,
+            int_bitmap: BitAlloc4K::default(),
+            emu_devs: Vec::new(),
+        };
+        this.init_devices(vm);
+        this
+    }
+
+    fn init_devices(&mut self, vm: Weak<Vm>) -> bool {
+        use crate::device::EmuDeviceType::*;
+        for (idx, emu_cfg) in self.config.emulated_device_list().iter().enumerate() {
+            let dev = match emu_cfg.emu_type {
+                #[cfg(target_arch = "aarch64")]
+                EmuDeviceTGicd => {
+                    self.intc_type = IntCtrlType::Emulated;
+                    emu_intc_init(emu_cfg, &self.vcpu_list).map(|vgic| {
+                        self.arch_intc_dev = vgic.clone().into_any_arc().downcast::<Vgic>().ok();
+                        vgic
+                    })
+                }
+                #[cfg(target_arch = "riscv64")]
+                EmuDeviceTPlic => {
+                    self.intc_type = IntCtrlType::Emulated;
+                    emu_intc_init(emu_cfg, &self.vcpu_list).map(|vplic| {
+                        self.arch_intc_dev = vplic.clone().into_any_arc().downcast::<VPlic>().ok();
+                        vplic
+                    })
+                }
+                #[cfg(feature = "gicv3")]
+                EmuDeviceTGICR => {
+                    if let Some(vgic) = &self.arch_intc_dev {
+                        crate::arch::emu_vgicr_init(emu_cfg, vgic.clone())
+                    } else {
+                        panic!("init_device: vgic not init");
+                    }
+                }
+                #[cfg(target_arch = "aarch64")]
+                EmuDeviceTGPPT => {
+                    self.intc_type = IntCtrlType::Passthrough;
+                    crate::arch::partial_passthrough_intc_init(emu_cfg)
+                }
+                EmuDeviceTVirtioConsole | EmuDeviceTVirtioNet | EmuDeviceTVirtioBlk => {
+                    emu_virtio_mmio_init(vm.clone(), emu_cfg)
+                }
+                EmuDeviceTIOMMU => emu_iommu_init(emu_cfg),
+                EmuDeviceTShyper => shyper_init(vm.clone(), emu_cfg.base_ipa, emu_cfg.length),
+                _ => {
+                    panic!("init_device: unknown emu dev type {:?}", emu_cfg.emu_type);
+                }
+            };
+            // Then add the dev to the emu_devs list
+            if let Ok(emu_dev) = dev {
+                if self.emu_devs.iter().any(|dev| {
+                    emu_dev.address_range().contains(&dev.address_range().start)
+                        || dev.address_range().contains(&emu_dev.address_range().start)
+                }) {
+                    panic!(
+                        "duplicated emul address region: prev address {:x?}",
+                        emu_dev.address_range(),
+                    );
+                } else {
+                    self.emu_devs.push(emu_dev);
+                }
+            } else {
+                panic!("init_device: failed to init emu dev");
+            }
+            // Then init int_bitmap
+            if emu_cfg.irq_id != 0 {
+                self.int_bitmap.set(emu_cfg.irq_id);
+            }
+            info!(
+                "VM {} registers emulated device: id=<{}>, name=\"{:?}\", ipa=<{:#x}>",
+                self.id, idx, emu_cfg.emu_type, emu_cfg.base_ipa
+            );
+        }
+        // Passthrough irqs
+        for irq in self.config.passthrough_device_irqs() {
+            self.int_bitmap.set(*irq);
+        }
+        true
+    }
+}
+
+fn cal_phys_id_list(config: &VmConfigEntry) -> Vec<usize> {
+    // generate the vcpu physical id list
+    let mut phys_id_list = vec![];
+    let mut cfg_cpu_allocate_bitmap = config.cpu_allocated_bitmap();
+    if let Some(cpu_master) = config.cpu_master() {
+        if cfg_cpu_allocate_bitmap & (1 << cpu_master) != 0 {
+            phys_id_list.push(cpu_master);
+        }
+        let mut phys_id = 0;
+        while cfg_cpu_allocate_bitmap != 0 {
+            if cfg_cpu_allocate_bitmap & 1 != 0 && phys_id != cpu_master {
+                phys_id_list.push(phys_id);
+            }
+            phys_id += 1;
+            cfg_cpu_allocate_bitmap >>= 1;
+        }
+    } else {
+        let mut phys_id = 0;
+        while cfg_cpu_allocate_bitmap != 0 {
+            if cfg_cpu_allocate_bitmap & 1 != 0 {
+                phys_id_list.push(phys_id);
+            }
+            phys_id += 1;
+            cfg_cpu_allocate_bitmap >>= 1;
+        }
+    }
+    phys_id_list
+}
+
+impl VmInnerMut {
+    fn new() -> Self {
+        VmInnerMut {
+            pt: None,
+            mem_region_num: 0,
+            pa_region: Vec::new(),
+            iommu_ctx_id: None,
+        }
+    }
 }
 
 impl Vm {
-    pub fn inner(&self) -> Arc<Mutex<VmInner>> {
-        self.inner.clone()
-    }
-
-    pub fn default() -> Vm {
-        Vm {
-            inner: Arc::new(Mutex::new(VmInner::default())),
+    pub fn new(id: usize, config: VmConfigEntry) -> Arc<Self> {
+        let this = Arc::new_cyclic(|weak| Vm {
+            inner_const: VmInnerConst::new(id, config, weak.clone()),
+            inner_mut: Mutex::new(VmInnerMut::new()),
+        });
+        for vcpu in this.vcpu_list() {
+            vcpu.init(this.config());
         }
-    }
-
-    pub fn new(id: usize) -> Vm {
-        Vm {
-            inner: Arc::new(Mutex::new(VmInner::new(id))),
-        }
-    }
-
-    /// Init the VM's interrupt controller mode.
-    pub fn init_intc_mode(&self, emu: bool) {
-        let vm_inner = self.inner.lock();
-        for vcpu in &vm_inner.vcpu_list {
-            info!(
-                "vm {} vcpu {} set {} hcr",
-                vm_inner.id,
-                vcpu.id(),
-                if emu { "emu" } else { "partial passthrough" }
-            );
-            if !emu {
-                vcpu.set_gich_ctlr((GICC_CTLR_EN_BIT) as u32);
-                vcpu.set_hcr(0x80080001); // HCR_EL2_GIC_PASSTHROUGH_VAL
-            } else {
-                #[cfg(not(feature = "gicv3"))]
-                vcpu.set_gich_ctlr((GICC_CTLR_EN_BIT | crate::arch::GICC_CTLR_EOIMODENS_BIT) as u32);
-                vcpu.set_hcr(0x80080019);
-            }
-        }
+        this.init_intc_mode(this.inner_const.intc_type);
+        this
     }
 
     pub fn set_iommu_ctx_id(&self, id: usize) {
-        let mut vm_inner = self.inner.lock();
+        let mut vm_inner = self.inner_mut.lock();
         vm_inner.iommu_ctx_id = Some(id);
     }
 
     pub fn iommu_ctx_id(&self) -> usize {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         match vm_inner.iommu_ctx_id {
             None => {
-                panic!("vm {} do not have iommu context bank", vm_inner.id);
+                panic!("vm {} do not have iommu context bank", self.id());
             }
             Some(id) => id,
         }
     }
 
     pub fn med_blk_id(&self) -> usize {
-        let vm_inner = self.inner.lock();
-        // match self.config().mediated_block_index() {
-        //     None => {
-        //         panic!("vm {} do not have mediated blk", vm_inner.id);
-        //     }
-        //     Some(idx) => idx,
-        // }
-        match vm_inner.config.as_ref().unwrap().mediated_block_index() {
+        match self.config().mediated_block_index() {
             None => {
-                panic!("vm {} do not have mediated blk", vm_inner.id);
+                panic!("vm {} do not have mediated blk", self.id());
             }
             Some(idx) => idx,
         }
-        // match vm_inner.med_blk_id {
-        //     None => {
-        //         panic!("vm {} do not have mediated blk", vm_inner.id);
-        //     }
-        //     Some(idx) => idx,
-        // }
     }
 
-    pub fn dtb(&self) -> Option<*mut fdt::myctypes::c_void> {
-        let vm_inner = self.inner.lock();
-        vm_inner.dtb.map(|x| x as *mut fdt::myctypes::c_void)
+    #[inline]
+    pub fn vcpu_list(&self) -> &[Vcpu] {
+        &self.inner_const.vcpu_list
     }
 
-    pub fn set_dtb(&self, val: *mut fdt::myctypes::c_void) {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.dtb = Some(val as usize);
+    #[inline]
+    pub fn id(&self) -> usize {
+        self.inner_const.id
     }
 
-    pub fn vcpu(&self, index: usize) -> Option<Vcpu> {
-        let vm_inner = self.inner.lock();
-        match vm_inner.vcpu_list.get(index).cloned() {
+    pub fn vcpu(&self, index: usize) -> Option<&Vcpu> {
+        match self.vcpu_list().get(index) {
             Some(vcpu) => {
                 assert_eq!(index, vcpu.id());
                 Some(vcpu)
@@ -362,291 +397,144 @@ impl Vm {
                 error!(
                     "vcpu idx {} is to large than vcpu_list len {}",
                     index,
-                    vm_inner.vcpu_list.len()
+                    self.vcpu_list().len()
                 );
                 None
             }
         }
     }
 
-    pub fn push_vcpu(&self, vcpu: Vcpu) {
-        let mut vm_inner = self.inner.lock();
-        if vcpu.id() >= vm_inner.vcpu_list.len() {
-            vm_inner.vcpu_list.push(vcpu);
-        } else {
-            trace!("VM[{}] insert VCPU {}", vm_inner.id, vcpu.id());
-            vm_inner.vcpu_list.insert(vcpu.id(), vcpu);
-        }
-    }
-
-    // avoid circular references
-    pub fn clear_list(&self) {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.emu_devs.clear();
-        vm_inner.vcpu_list.clear();
-    }
-
-    pub fn select_vcpu2assign(&self, cpu_id: usize) -> Option<Vcpu> {
-        let cfg_master = self.config().cpu_master();
-        let cfg_cpu_num = self.config().cpu_num();
-        let cfg_cpu_allocate_bitmap = self.config().cpu_allocated_bitmap();
-        // make sure that vcpu assign is executed sequentially, otherwise
-        // the PCPUs may found that vm.cpu_num() == 0 at the same time and
-        // if cfg_master is not setted, they will not set master vcpu for VM
-        let mut vm_inner = self.inner.lock();
-        if (cfg_cpu_allocate_bitmap & (1 << cpu_id)) != 0 && vm_inner.cpu_num < cfg_cpu_num {
-            // vm.vcpu(0) must be the VM's master vcpu
-            let trgt_id = if cpu_id == cfg_master || (!vm_inner.has_master && vm_inner.cpu_num == cfg_cpu_num - 1) {
-                0
-            } else if vm_inner.has_master {
-                cfg_cpu_num - vm_inner.cpu_num
-            } else {
-                // if master vcpu is not assigned, retain id 0 for it
-                cfg_cpu_num - vm_inner.cpu_num - 1
-            };
-            match vm_inner.vcpu_list.get(trgt_id).cloned() {
-                None => None,
-                Some(vcpu) => {
-                    if vcpu.id() == 0 {
-                        vm_if_set_cpu_id(vm_inner.id, cpu_id);
-                        vm_inner.has_master = true;
-                    }
-                    vm_inner.cpu_num += 1;
-                    vm_inner.ncpu |= 1 << cpu_id;
-                    Some(vcpu)
-                }
-            }
-        } else {
-            None
-        }
-    }
-
-    pub fn set_entry_point(&self, entry_point: usize) {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.entry_point = entry_point;
-    }
-
-    pub fn set_emu_devs(&self, idx: usize, emu: EmuDevs) {
-        let mut vm_inner = self.inner.lock();
-        if idx < vm_inner.emu_devs.len() {
-            if let EmuDevs::None = vm_inner.emu_devs[idx] {
-                // println!("set_emu_devs: cover a None emu dev");
-                vm_inner.emu_devs[idx] = emu;
-                return;
-            } else {
-                panic!("set_emu_devs: set an exsit emu dev");
-            }
-        }
-        vm_inner.emu_devs.resize(idx, EmuDevs::None);
-        vm_inner.emu_devs.push(emu);
-    }
-
-    pub fn set_intc_dev_id(&self, intc_dev_id: usize) {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.intc_dev_id = intc_dev_id;
-    }
-
-    pub fn set_int_bit_map(&self, int_id: usize) {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.int_bitmap.as_mut().unwrap().set(int_id);
-    }
-
-    pub fn set_config_entry(&self, config: Option<VmConfigEntry>) {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.config = config;
-    }
-
-    pub fn intc_dev_id(&self) -> usize {
-        let vm_inner = self.inner.lock();
-        vm_inner.intc_dev_id
+    pub fn find_emu_dev(&self, ipa: usize) -> Option<Arc<dyn EmuDev>> {
+        self.inner_const
+            .emu_devs
+            .iter()
+            .find(|&dev| dev.address_range().contains(&ipa))
+            .cloned()
     }
 
     pub fn pt_map_range(&self, ipa: usize, len: usize, pa: usize, pte: usize, map_block: bool) {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         match &vm_inner.pt {
             Some(pt) => pt.pt_map_range(ipa, len, pa, pte, map_block),
             None => {
-                panic!("Vm::pt_map_range: vm{} pt is empty", vm_inner.id);
+                panic!("Vm::pt_map_range: vm{} pt is empty", self.id());
             }
         }
     }
 
     pub fn pt_unmap_range(&self, ipa: usize, len: usize, map_block: bool) {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         match &vm_inner.pt {
             Some(pt) => pt.pt_unmap_range(ipa, len, map_block),
             None => {
-                panic!("Vm::pt_umnmap_range: vm{} pt is empty", vm_inner.id);
+                panic!("Vm::pt_umnmap_range: vm{} pt is empty", self.id());
             }
         }
     }
 
     // ap: access permission
     pub fn pt_set_access_permission(&self, ipa: usize, ap: usize) -> (usize, usize) {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         match &vm_inner.pt {
             Some(pt) => pt.access_permission(ipa, PAGE_SIZE, ap),
             None => {
-                panic!("pt_set_access_permission: vm{} pt is empty", vm_inner.id);
-            }
-        }
-    }
-
-    pub fn pt_read_only(&self) {
-        let vm_inner = self.inner.lock();
-        match vm_inner.pt.clone() {
-            Some(pt) => {
-                let num = vm_inner.mem_region_num;
-                drop(vm_inner);
-                for i in 0..num {
-                    let vm_inner = self.inner.lock();
-                    let ipa_start = vm_inner.pa_region[i].pa_start + vm_inner.pa_region[i].offset as usize;
-                    let len = vm_inner.pa_region[i].pa_length;
-                    drop(vm_inner);
-                    pt.access_permission(ipa_start, len, PTE_S2_FIELD_AP_RO);
-                }
-            }
-            None => {
-                panic!("Vm::read_only: vm{} pt is empty", vm_inner.id);
+                panic!("pt_set_access_permission: vm{} pt is empty", self.id());
             }
         }
     }
 
     pub fn set_pt(&self, pt_dir_frame: PageFrame) {
-        let mut vm_inner = self.inner.lock();
+        let mut vm_inner = self.inner_mut.lock();
         vm_inner.pt = Some(PageTable::new(pt_dir_frame))
     }
 
     pub fn pt_dir(&self) -> usize {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         match &vm_inner.pt {
             Some(pt) => pt.base_pa(),
             None => {
-                panic!("Vm::pt_dir: vm{} pt is empty", vm_inner.id);
+                panic!("Vm::pt_dir: vm{} pt is empty", self.id());
             }
         }
     }
 
     pub fn cpu_num(&self) -> usize {
-        let vm_inner = self.inner.lock();
-        vm_inner.cpu_num
+        self.inner_const.config.cpu_num()
     }
 
-    pub fn id(&self) -> usize {
-        let vm_inner = self.inner.lock();
-        vm_inner.id
-    }
-
-    pub fn config(&self) -> VmConfigEntry {
-        let vm_inner = self.inner.lock();
-        match &vm_inner.config {
-            None => {
-                panic!("VM[{}] do not have vm config entry", vm_inner.id);
-            }
-            Some(config) => config.clone(),
-        }
+    #[inline]
+    pub fn config(&self) -> &VmConfigEntry {
+        &self.inner_const.config
     }
 
     pub fn add_region(&self, region: VmPa) {
-        let mut vm_inner = self.inner.lock();
+        let mut vm_inner = self.inner_mut.lock();
         vm_inner.pa_region.push(region);
     }
 
     pub fn region_num(&self) -> usize {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         vm_inner.pa_region.len()
     }
 
     pub fn pa_start(&self, idx: usize) -> usize {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         vm_inner.pa_region[idx].pa_start
     }
 
     pub fn pa_length(&self, idx: usize) -> usize {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         vm_inner.pa_region[idx].pa_length
     }
 
     pub fn pa_offset(&self, idx: usize) -> usize {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         vm_inner.pa_region[idx].offset as usize
     }
 
     pub fn set_mem_region_num(&self, mem_region_num: usize) {
-        let mut vm_inner = self.inner.lock();
+        let mut vm_inner = self.inner_mut.lock();
         vm_inner.mem_region_num = mem_region_num;
     }
 
     pub fn mem_region_num(&self) -> usize {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         vm_inner.mem_region_num
     }
 
-    pub fn vgic(&self) -> Arc<Vgic> {
-        let vm_inner = self.inner.lock();
-        match &vm_inner.emu_devs[vm_inner.intc_dev_id] {
-            EmuDevs::Vgic(vgic) => vgic.clone(),
-            _ => {
-                panic!("vm{} cannot find vgic", vm_inner.id);
-            }
+    #[cfg(target_arch = "aarch64")]
+    pub fn vgic(&self) -> &Vgic {
+        if let Some(vgic) = self.inner_const.arch_intc_dev.as_ref() {
+            return vgic;
         }
+        panic!("vm{} cannot find vgic", self.id());
     }
 
+    #[cfg(target_arch = "aarch64")]
     pub fn has_vgic(&self) -> bool {
-        let vm_inner = self.inner.lock();
-        if vm_inner.intc_dev_id >= vm_inner.emu_devs.len() {
-            return false;
-        }
-        matches!(&vm_inner.emu_devs[vm_inner.intc_dev_id], EmuDevs::Vgic(_))
+        self.inner_const.arch_intc_dev.is_some()
     }
 
-    pub fn emu_dev(&self, dev_id: usize) -> EmuDevs {
-        let vm_inner = self.inner.lock();
-        vm_inner.emu_devs[dev_id].clone()
+    #[cfg(target_arch = "riscv64")]
+    pub fn vplic(&self) -> &VPlic {
+        if let Some(vplic) = self.inner_const.arch_intc_dev.as_ref() {
+            return vplic;
+        }
+        panic!("vm{} cannot find vgic", self.id());
     }
 
-    pub fn emu_net_dev(&self, id: usize) -> EmuDevs {
-        let vm_inner = self.inner.lock();
-        let mut dev_num = 0;
-
-        for i in 0..vm_inner.emu_devs.len() {
-            if let EmuDevs::VirtioNet(_) = vm_inner.emu_devs[i] {
-                if dev_num == id {
-                    return vm_inner.emu_devs[i].clone();
-                }
-                dev_num += 1;
-            }
-        }
-        EmuDevs::None
-    }
-
-    pub fn emu_blk_dev(&self) -> EmuDevs {
-        for emu in &self.inner.lock().emu_devs {
-            if let EmuDevs::VirtioBlk(_) = emu {
-                return emu.clone();
-            }
-        }
-        EmuDevs::None
-    }
-
-    // Get console dev by ipa.
-    pub fn emu_console_dev(&self, ipa: usize) -> EmuDevs {
-        for (idx, emu_dev_cfg) in self.config().emulated_device_list().iter().enumerate() {
-            if emu_dev_cfg.base_ipa == ipa {
-                return self.inner.lock().emu_devs[idx].clone();
-            }
-        }
-        EmuDevs::None
+    #[cfg(target_arch = "riscv64")]
+    pub fn has_vplic(&self) -> bool {
+        self.inner_const.arch_intc_dev.is_some()
     }
 
     pub fn ncpu(&self) -> usize {
-        let vm_inner = self.inner.lock();
-        vm_inner.ncpu
+        self.inner_const.config.cpu_allocated_bitmap() as usize
     }
 
+    // Whether there is a pass-through interrupt int_id
     pub fn has_interrupt(&self, int_id: usize) -> bool {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.int_bitmap.as_mut().unwrap().get(int_id) != 0
+        self.inner_const.int_bitmap.get(int_id) != 0
     }
 
     pub fn emu_has_interrupt(&self, int_id: usize) -> bool {
@@ -659,26 +547,17 @@ impl Vm {
     }
 
     pub fn vcpuid_to_vcpu(&self, vcpuid: usize) -> Option<Vcpu> {
-        let inner = self.inner.lock();
-        inner.vcpu_list.iter().find(|vcpu| vcpu.id() == vcpuid).cloned()
+        self.vcpu_list().iter().find(|vcpu| vcpu.id() == vcpuid).cloned()
     }
 
     pub fn vcpuid_to_pcpuid(&self, vcpuid: usize) -> Result<usize, ()> {
-        let vm_inner = self.inner.lock();
-        if vcpuid < vm_inner.cpu_num {
-            let vcpu = vm_inner.vcpu_list[vcpuid].clone();
-            drop(vm_inner);
-            Ok(vcpu.phys_id())
-        } else {
-            Err(())
-        }
+        self.vcpu_list().get(vcpuid).map(|vcpu| vcpu.phys_id()).ok_or(())
     }
 
     pub fn pcpuid_to_vcpuid(&self, pcpuid: usize) -> Result<usize, ()> {
-        let vm_inner = self.inner.lock();
-        for vcpuid in 0..vm_inner.cpu_num {
-            if vm_inner.vcpu_list[vcpuid].phys_id() == pcpuid {
-                return Ok(vcpuid);
+        for vcpu in self.vcpu_list() {
+            if vcpu.phys_id() == pcpuid {
+                return Ok(vcpu.id());
             }
         }
         Err(())
@@ -707,22 +586,11 @@ impl Vm {
     }
 
     pub fn show_pagetable(&self, ipa: usize) {
-        let vm_inner = self.inner.lock();
+        let vm_inner = self.inner_mut.lock();
         vm_inner.pt.as_ref().unwrap().show_pt(ipa);
     }
 
-    pub fn ready(&self) -> bool {
-        let vm_inner = self.inner.lock();
-        vm_inner.ready
-    }
-
-    pub fn set_ready(&self, _ready: bool) {
-        let mut vm_inner = self.inner.lock();
-        vm_inner.ready = _ready;
-    }
-
     pub fn get_vcpu_by_mpidr(&self, mpdir: usize) -> Option<Vcpu> {
-        let inner = self.inner.lock();
         let cpuid = if (mpdir >> 8) & 0xff != 0 {
             if cfg!(feature = "rk3588") {
                 mpdir >> 8
@@ -732,107 +600,56 @@ impl Vm {
         } else {
             mpdir & 0xff
         };
-        inner.vcpu_list.iter().find(|vcpu| vcpu.id() == cpuid).cloned()
+        self.vcpu_list().iter().find(|vcpu| vcpu.id() == cpuid).cloned()
     }
-}
 
-#[repr(align(4096))]
-pub struct VmInner {
-    pub id: usize,
-    pub ready: bool,
-    pub config: Option<VmConfigEntry>,
-    pub dtb: Option<usize>,
-    // memory config
-    pub pt: Option<PageTable>,
-    pub mem_region_num: usize,
-    pub pa_region: Vec<VmPa>, // Option<[VmPa; VM_MEM_REGION_MAX]>,
-
-    // image config
-    pub entry_point: usize,
-
-    // vcpu config
-    pub has_master: bool,
-    pub vcpu_list: Vec<Vcpu>,
-    pub cpu_num: usize,
-    pub ncpu: usize,
-
-    // interrupt
-    pub intc_dev_id: usize,
-    pub int_bitmap: Option<BitMap<BitAlloc256>>,
-
-    // iommu
-    pub iommu_ctx_id: Option<usize>,
-
-    // emul devs
-    pub emu_devs: Vec<EmuDevs>,
-    pub med_blk_id: Option<usize>,
-}
-
-impl VmInner {
-    pub const fn default() -> VmInner {
-        VmInner {
-            id: 0,
-            ready: false,
-            config: None,
-            dtb: None,
-            pt: None,
-            mem_region_num: 0,
-            pa_region: Vec::new(),
-            entry_point: 0,
-
-            has_master: false,
-            vcpu_list: Vec::new(),
-            cpu_num: 0,
-            ncpu: 0,
-
-            intc_dev_id: 0,
-            int_bitmap: Some(BitAlloc4K::default()),
-
-            iommu_ctx_id: None,
-            emu_devs: Vec::new(),
-            med_blk_id: None,
+    pub fn ipa2pa(&self, ipa: usize) -> usize {
+        if ipa == 0 {
+            error!("vm_ipa2pa: VM {} access invalid ipa {:x}", self.id(), ipa);
+            return 0;
         }
-    }
 
-    pub fn new(id: usize) -> VmInner {
-        VmInner {
-            id,
-            ready: false,
-            config: None,
-            dtb: None,
-            pt: None,
-            mem_region_num: 0,
-            pa_region: Vec::new(),
-            entry_point: 0,
-
-            has_master: false,
-            vcpu_list: Vec::new(),
-            cpu_num: 0,
-            ncpu: 0,
-
-            intc_dev_id: 0,
-            int_bitmap: Some(BitAlloc4K::default()),
-            iommu_ctx_id: None,
-            emu_devs: Vec::new(),
-            med_blk_id: None,
+        for i in 0..self.mem_region_num() {
+            if in_range(
+                (ipa as isize - self.pa_offset(i) as isize) as usize,
+                self.pa_start(i),
+                self.pa_length(i),
+            ) {
+                return (ipa as isize - self.pa_offset(i) as isize) as usize;
+            }
         }
+
+        error!("vm_ipa2pa: VM {} access invalid ipa {:x}", self.id(), ipa);
+        0
     }
 }
 
-pub static VM_LIST: Mutex<Vec<Vm>> = Mutex::new(Vec::new());
+static VM_LIST: Mutex<Vec<Arc<Vm>>> = Mutex::new(Vec::new());
 
-pub fn push_vm(id: usize) -> Result<(), ()> {
+#[inline]
+pub fn vm_list_walker<F>(mut f: F)
+where
+    F: FnMut(&Arc<Vm>),
+{
+    let vm_list = VM_LIST.lock();
+    for vm in vm_list.iter() {
+        f(vm);
+    }
+}
+
+pub fn push_vm(id: usize, config: VmConfigEntry) -> Result<Arc<Vm>, ()> {
     let mut vm_list = VM_LIST.lock();
     if vm_list.iter().any(|x| x.id() == id) {
         error!("push_vm: vm {} already exists", id);
         Err(())
     } else {
-        vm_list.push(Vm::new(id));
-        Ok(())
+        let vm = Vm::new(id, config);
+        vm_list.push(vm.clone());
+        Ok(vm)
     }
 }
 
-pub fn remove_vm(id: usize) -> Vm {
+pub fn remove_vm(id: usize) -> Arc<Vm> {
     let mut vm_list = VM_LIST.lock();
     match vm_list.iter().position(|x| x.id() == id) {
         None => {
@@ -842,7 +659,7 @@ pub fn remove_vm(id: usize) -> Vm {
     }
 }
 
-pub fn vm(id: usize) -> Option<Vm> {
+pub fn vm(id: usize) -> Option<Arc<Vm>> {
     let vm_list = VM_LIST.lock();
     vm_list.iter().find(|&x| x.id() == id).cloned()
 }
@@ -852,7 +669,7 @@ pub fn vm_list_size() -> usize {
     vm_list.len()
 }
 
-pub fn vm_ipa2pa(vm: Vm, ipa: usize) -> usize {
+pub fn vm_ipa2pa(vm: &Vm, ipa: usize) -> usize {
     if ipa == 0 {
         error!("vm_ipa2pa: VM {} access invalid ipa {:x}", vm.id(), ipa);
         return 0;
@@ -869,58 +686,6 @@ pub fn vm_ipa2pa(vm: Vm, ipa: usize) -> usize {
     }
 
     error!("vm_ipa2pa: VM {} access invalid ipa {:x}", vm.id(), ipa);
-    0
-}
-
-pub fn vm_pa2ipa(vm: Vm, pa: usize) -> usize {
-    if pa == 0 {
-        error!("vm_pa2ipa: VM {} access invalid pa {:x}", vm.id(), pa);
-        return 0;
-    }
-
-    for i in 0..vm.mem_region_num() {
-        if in_range(pa, vm.pa_start(i), vm.pa_length(i)) {
-            return (pa as isize + vm.pa_offset(i) as isize) as usize;
-        }
-    }
-
-    error!("vm_pa2ipa: VM {} access invalid pa {:x}", vm.id(), pa);
-    0
-}
-
-pub fn pa2ipa(pa_region: &[VmPa], pa: usize) -> usize {
-    if pa == 0 {
-        error!("pa2ipa: access invalid pa {:x}", pa);
-        return 0;
-    }
-
-    for region in pa_region.iter() {
-        if in_range(pa, region.pa_start, region.pa_length) {
-            return (pa as isize + region.offset) as usize;
-        }
-    }
-
-    error!("pa2ipa: access invalid pa {:x}", pa);
-    0
-}
-
-pub fn ipa2pa(pa_region: &[VmPa], ipa: usize) -> usize {
-    if ipa == 0 {
-        // println!("ipa2pa: access invalid ipa {:x}", ipa);
-        return 0;
-    }
-
-    for region in pa_region.iter() {
-        if in_range(
-            (ipa as isize - region.offset) as usize,
-            region.pa_start,
-            region.pa_length,
-        ) {
-            return (ipa as isize - region.offset) as usize;
-        }
-    }
-
-    // println!("ipa2pa: access invalid ipa {:x}", ipa);
     0
 }
 
