@@ -9,11 +9,9 @@
 // See the Mulan PSL v2 for more details.
 
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use fdt::binding::FdtBuf;
-use spin::Mutex;
 
 use crate::arch::traits::InterruptController;
 use crate::board::{Platform, PlatOperation};
@@ -105,24 +103,6 @@ pub fn mvm_config_init() {
             emu_type: EmuDeviceType::EmuDeviceTGICR,
             mediated: false,
         },
-        VmEmulatedDeviceConfig {
-            name: String::from("ICC_SRE_ADDR"),
-            base_ipa: Platform::ICC_SRE_ADDR,
-            length: 0,
-            irq_id: 25,
-            cfg_list: Vec::new(),
-            emu_type: EmuDeviceType::EmuDeviceTICCSRE,
-            mediated: false,
-        },
-        VmEmulatedDeviceConfig {
-            name: String::from("ICC_SGIR_ADDR"),
-            base_ipa: Platform::ICC_SGIR_ADDR,
-            length: 0 ,
-            irq_id: 25,
-            cfg_list: Vec::new(),
-            emu_type: EmuDeviceType::EmuDeviceTSGIR,
-            mediated: false,
-        },
         // VmEmulatedDeviceConfig {
         //     name: String::from("virtio-blk@feb60000"),
         //     base_ipa: 0xfeb60000,
@@ -182,20 +162,25 @@ pub fn mvm_config_init() {
     let mut pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig::default();
     let mut pt = crate::utils::interval::IntervalExcluder::new();
 
-    // all, exclude gic
-    pt.add_range(0xfb000000, 0xfe600000);
+    // all peripherals
+    pt.add_range(0xfb000000, 0x1_0000_0000);
 
     // exclude ethernet@0xfe1c0000 for 'noeth'
     #[cfg(feature = "rk3588-noeth")]
     pt.exclude_len(0xfe1c0000, 0x10000);
+
+    // interrupt-controller (without msi-controller)
+    pt.exclude_len(0xfe600000, 0x10000);
+    pt.exclude_len(0xfe680000, 0x100000);
+
+    // serial1 to serial9
+    pt.exclude_range(0xfeb40000, 0xfebc0000);
 
     pt_dev_config.regions = pt.into_iter().map(|t| {
         PassthroughRegion { ipa: t.left, pa: t.left, length: t.len(), dev_property: true }
     }).collect();
 
     pt_dev_config.regions.extend(&[
-        PassthroughRegion { ipa: 0xfe680000 + 0x100000, pa: 0xfe680000 + 0x100000, length: 0xfeb40000 - (0xfe680000 + 0x100000), dev_property: true },
-        PassthroughRegion { ipa: 0xfebc0000, pa: 0xfebc0000, length: 0x0001_0000_0000 - 0xfebc0000, dev_property: true },
         // serial@feb5000——ttyFIQ
         PassthroughRegion { ipa: 0xfeb50000, pa: 0xfeb50000, length: 0x100, dev_property: true },
         // serial@feba000——ttyS7
@@ -209,9 +194,6 @@ pub fn mvm_config_init() {
         // device for PCI bus to be mapped in.
         PassthroughRegion { ipa: 0xf4000000, pa: 0xf4000000, length: 0x1000000, dev_property: true },
         PassthroughRegion { ipa: 0xf3000000, pa: 0xf3000000, length: 0x1000000, dev_property: true },
-        // device for its
-        PassthroughRegion { ipa: 0xfe640000, pa: 0xfe640000, length: 0x20000, dev_property: true },
-        PassthroughRegion { ipa: 0xfe660000, pa: 0xfe660000, length: 0x20000, dev_property: true },
     ]);
 
     pt_dev_config.irqs = vec![
@@ -339,25 +321,24 @@ pub fn mvm_config_init() {
         // String::from("emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 root=/dev/nfs nfsroot=192.168.106.153:/tftp/rootfs,proto=tcp rw ip=192.168.106.143:192.168.106.153:192.168.106.1:255.255.255.0::eth0:off default_hugepagesz=32M hugepagesz=32M hugepages=4"),
         // String::from("earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 rw rootwait overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0\0"),
         // String::from("storagemedia=emmc androidboot.storagemedia=emmc androidboot.mode=normal  dsi-0=2 storagenode=/mmc@fe2e0000 androidboot.verifiedbootstate=orange rw rootwait earlycon=uart8250,mmio32,0xfeb50000 console=ttyFIQ0 irqchip.gicv3_pseudo_nmi=0 root=PARTLABEL=rootfs rootfstype=ext4 overlayroot=device:dev=PARTLABEL=userdata,fstype=ext4,mkfs=1 coherent_pool=1m systemd.gpt_auto=0 cgroup_enable=memory swapaccount=1 net.ifnames=0\0"),
-        image: Arc::new(Mutex::new(VmImageConfig {
+        image: VmImageConfig {
             kernel_img_name: Some("Linux-5.10"),
             kernel_load_ipa: 0x10080000,
-            kernel_load_pa: 0,
             kernel_entry_point: 0x10080000,
             device_tree_load_ipa: 0x10000000,
             ramdisk_load_ipa: 0,
             mediated_block_index: None,
-        })),
-        memory: Arc::new(Mutex::new(VmMemoryConfig {
+        },
+        memory: VmMemoryConfig {
             region: vm_region,
-        })),
-        cpu: Arc::new(Mutex::new(VmCpuConfig {
+        },
+        cpu: VmCpuConfig {
             num: 1,
             allocate_bitmap: 0b1,
-            master: 0,
-        })),
-        vm_emu_dev_confg: Arc::new(Mutex::new(VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config })),
-        vm_pt_dev_confg: Arc::new(Mutex::new(pt_dev_config)),
+            master: None,
+        },
+        vm_emu_dev_confg: VmEmulatedDeviceConfigList { emu_dev_list: emu_dev_config },
+        vm_pt_dev_confg: pt_dev_config,
         ..Default::default()
     };
     let _ = vm_cfg_add_vm_entry(mvm_config_entry);

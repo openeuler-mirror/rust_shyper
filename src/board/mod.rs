@@ -14,8 +14,10 @@ pub use self::platform_common::*;
 
 #[cfg(feature = "pi4")]
 pub use self::pi4::{Pi4Platform as Platform, PLAT_DESC};
-#[cfg(feature = "qemu")]
+#[cfg(all(feature = "qemu", target_arch = "aarch64"))]
 pub use self::qemu::{QemuPlatform as Platform, PLAT_DESC};
+#[cfg(all(feature = "qemu", target_arch = "riscv64"))]
+pub use self::qemu_riscv64::{QemuPlatform as Platform, PLAT_DESC};
 #[cfg(feature = "tx2")]
 pub use self::tx2::{Tx2Platform as Platform, PLAT_DESC};
 #[cfg(feature = "rk3588")]
@@ -24,8 +26,10 @@ pub use self::rk3588::{Rk3588Platform as Platform, PLAT_DESC};
 #[cfg(feature = "pi4")]
 mod pi4;
 mod platform_common;
-#[cfg(feature = "qemu")]
+#[cfg(all(feature = "qemu", target_arch = "aarch64"))]
 mod qemu;
+#[cfg(all(feature = "qemu", target_arch = "riscv64"))]
+mod qemu_riscv64;
 #[cfg(feature = "rk3588")]
 mod rk3588;
 #[cfg(feature = "tx2")]

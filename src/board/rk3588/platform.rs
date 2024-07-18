@@ -10,7 +10,6 @@
 
 /// Crate imports for architecture and board configurations
 use crate::arch::ArchDesc;
-use crate::arch::sysreg_enc_addr;
 use crate::board::{
     PlatOperation, Platform, PlatCpuCoreConfig, ClusterDesc, PlatCpuConfig, PlatformConfig, PlatMemoryConfig,
     PlatMemRegion,
@@ -54,10 +53,6 @@ impl PlatOperation for Rk3588Platform {
     const DISK_PARTITION_0_SIZE: usize = 16384;
     const DISK_PARTITION_1_SIZE: usize = 8192;
     const DISK_PARTITION_2_SIZE: usize = 524288;
-
-    //sysreg
-    const ICC_SRE_ADDR: usize = sysreg_enc_addr(3, 0, 12, 12, 5);
-    const ICC_SGIR_ADDR: usize = sysreg_enc_addr(3, 0, 12, 11, 5);
 
     /// Converts MPIDR to CPU ID for RK3588
     fn mpidr2cpuid(mpidr: usize) -> usize {

@@ -30,6 +30,9 @@
 #![feature(extract_if)]
 #![feature(inline_const)]
 #![feature(naked_functions)]
+#![feature(stdsimd)]
+// use hlv.w instr
+#![cfg_attr(target_arch = "riscv64", feature(riscv_ext_intrinsics))]
 #![feature(asm_const)]
 #![feature(error_in_core)]
 #![feature(slice_group_by)]
@@ -183,9 +186,14 @@ pub fn init(dtb: &mut fdt::myctypes::c_void) {
     }
     iommu_init();
     cpu_init();
+    info!("cpu init ok");
+
     interrupt_init();
+    info!("interrupt init ok");
+
     timer_init();
     cpu_sched_init();
+    info!("sched init ok");
 
     #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();
@@ -204,10 +212,14 @@ pub fn init(dtb: &mut fdt::myctypes::c_void) {
 
 // Other cores will execute this function
 pub fn secondary_init(mpidr: usize) {
+    info!("secondary core {:#x} init", mpidr);
     cpu_init();
     interrupt_init();
+    info!("secondary core {:#x} interrupt init", mpidr);
     timer_init();
     cpu_sched_init();
+
+    info!("[boot] sched init ok at core {:#x}", mpidr);
 
     #[cfg(not(feature = "secondary_start"))]
     crate::utils::barrier();

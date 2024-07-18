@@ -10,16 +10,18 @@
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use spin::Mutex;
 
 use crate::arch::PAGE_SIZE;
 use crate::device::{mediated_blk_list_get, VirtioMmio, Virtq};
 use crate::kernel::{
     active_vm_id, add_async_task, async_blk_id_req, async_blk_io_req, async_ipi_req, AsyncTask, AsyncTaskData,
-    AsyncTaskState, IoAsyncMsg, IoIdAsyncMsg, IpiMediatedMsg, push_used_info, Vm, vm_ipa2pa,
+    AsyncTaskState, IoAsyncMsg, IoIdAsyncMsg, IpiMediatedMsg, push_used_info, Vm,
 };
 use crate::utils::{memcpy, trace};
 
+use super::mmio::VIRTIO_F_VERSION_1;
+
+/* VIRTIO_QUEUE_MAX_SIZE */
 pub const VIRTQUEUE_BLK_MAX_SIZE: usize = 256;
 pub const VIRTQUEUE_NET_MAX_SIZE: usize = 256;
 
@@ -43,29 +45,22 @@ pub const VIRTIO_BLK_S_OK: usize = 0;
 // pub const VIRTIO_BLK_S_IOERR: usize = 1;
 pub const VIRTIO_BLK_S_UNSUPP: usize = 2;
 
+pub fn blk_features() -> usize {
+    VIRTIO_F_VERSION_1 | VIRTIO_BLK_F_SIZE_MAX | VIRTIO_BLK_F_SEG_MAX
+}
+
 /// Represents the geometry information of a block device.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 struct BlkGeometry {
     cylinders: u16,
     heads: u8,
     sectors: u8,
 }
 
-impl BlkGeometry {
-    /// Creates a default `BlkGeometry` instance.
-    fn default() -> BlkGeometry {
-        BlkGeometry {
-            cylinders: 0,
-            heads: 0,
-            sectors: 0,
-        }
-    }
-}
-
 /// Represents the topology information of a block device.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 struct BlkTopology {
     // # of logical blocks per physical block (log2)
     physical_block_exp: u8,
@@ -77,42 +72,26 @@ struct BlkTopology {
     opt_io_size: u32,
 }
 
-impl BlkTopology {
-    /// Creates a default `BlkTopology` instance.
-    fn default() -> BlkTopology {
-        BlkTopology {
-            physical_block_exp: 0,
-            alignment_offset: 0,
-            min_io_size: 0,
-            opt_io_size: 0,
-        }
-    }
-}
-
 /// Represents a block descriptor.
-#[derive(Clone)]
 pub struct BlkDesc {
-    inner: Arc<Mutex<BlkDescInner>>,
+    inner: BlkDescInner,
 }
 
 impl BlkDesc {
     /// Creates a default `BlkDesc` instance.
-    pub fn default() -> BlkDesc {
-        BlkDesc {
-            inner: Arc::new(Mutex::new(BlkDescInner::default())),
-        }
-    }
-
-    /// Initializes the block descriptor configuration.
-    pub fn cfg_init(&self, bsize: usize) {
-        let mut inner = self.inner.lock();
-        inner.cfg_init(bsize);
+    pub fn new(bsize: usize) -> BlkDesc {
+        let desc = BlkDescInner {
+            capacity: bsize,
+            size_max: BLOCKIF_SIZE_MAX as u32,
+            seg_max: BLOCKIF_IOV_MAX as u32,
+            ..Default::default()
+        };
+        BlkDesc { inner: desc }
     }
 
     /// Gets the start address of the block descriptor.
     pub fn start_addr(&self) -> usize {
-        let inner = self.inner.lock();
-        &inner.capacity as *const _ as usize
+        &self.inner.capacity as *const _ as usize
     }
 
     /// # Safety:
@@ -132,7 +111,7 @@ impl BlkDesc {
 
 /// Represents the inner data structure of a block descriptor.
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct BlkDescInner {
     capacity: usize,
     size_max: u32,
@@ -151,36 +130,6 @@ pub struct BlkDescInner {
     unused1: [u8; 3],
 }
 
-impl BlkDescInner {
-    /// Creates a default `BlkDescInner` instance.
-    pub fn default() -> BlkDescInner {
-        BlkDescInner {
-            capacity: 0,
-            size_max: 0,
-            seg_max: 0,
-            geometry: BlkGeometry::default(),
-            blk_size: 0,
-            topology: BlkTopology::default(),
-            writeback: 0,
-            unused0: [0; 3],
-            max_discard_sectors: 0,
-            max_discard_seg: 0,
-            discard_sector_alignment: 0,
-            max_write_zeroes_sectors: 0,
-            max_write_zeroes_seg: 0,
-            write_zeroes_may_unmap: 0,
-            unused1: [0; 3],
-        }
-    }
-
-    /// Initializes the block descriptor configuration.
-    pub fn cfg_init(&mut self, bsize: usize) {
-        self.capacity = bsize;
-        self.size_max = BLOCKIF_SIZE_MAX as u32;
-        self.seg_max = BLOCKIF_IOV_MAX as u32;
-    }
-}
-
 /// Represents a block I/O vector.
 #[repr(C)]
 #[derive(Clone)]
@@ -197,97 +146,49 @@ pub struct BlkReqRegion {
 }
 
 /// Represents a VirtioBlk request.
-#[derive(Clone)]
+#[repr(C)]
 pub struct VirtioBlkReq {
-    inner: Arc<Mutex<VirtioBlkReqInner>>,
-    req_list: Arc<Mutex<Vec<VirtioBlkReqNode>>>,
+    region: BlkReqRegion,
+    mediated: bool,
 }
 
 impl VirtioBlkReq {
     /// Creates a default `VirtioBlkReq` instance.
     pub fn default() -> VirtioBlkReq {
         VirtioBlkReq {
-            inner: Arc::new(Mutex::new(VirtioBlkReqInner::default())),
-            req_list: Arc::new(Mutex::new(Vec::new())),
+            region: BlkReqRegion { start: 0, size: 0 },
+            mediated: false,
         }
     }
 
-    pub fn add_req_node(&self, node: VirtioBlkReqNode, _vm: Vm) {
-        let mut list = self.req_list.lock();
-        // let mediated_blk = mediated_blk_list_get(vm.med_blk_id());
-        // push_used_info(node.desc_chain_head_idx, node.iov_total as u32, vm.id());
-        list.push(node);
-
-        // match list.last_mut() {
-        //     None => {
-        //         list.push(node);
-        //     }
-        //     Some(prev) => {
-        //         if prev.req_type == node.req_type
-        //             && (prev.sector + prev.iov_sum_up / SECTOR_BSIZE) == node.sector
-        //             && (prev.iov_sum_up + node.iov_sum_up) / SECTOR_BSIZE < mediated_blk.dma_block_max()
-        //         {
-        //             prev.iov_sum_up += node.iov_sum_up;
-        //             prev.iov.append(&mut node.iov);
-        //         } else {
-        //             list.push(node);
-        //         }
-        //     }
-        // }
-    }
-
-    /// Gets the number of requests in the request list.
-    pub fn req_num(&self) -> usize {
-        let list = self.req_list.lock();
-        list.len()
-    }
-
-    /// Gets a request node at a specified index from the request list.
-    pub fn req_node(&self, idx: usize) -> VirtioBlkReqNode {
-        let list = self.req_list.lock();
-        list[idx].clone()
-    }
-
-    /// Clears the request list.
-    pub fn clear_node(&self) {
-        let mut list = self.req_list.lock();
-        list.clear();
-    }
-
     /// Sets the start address of the block request region.
-    pub fn set_start(&self, start: usize) {
-        let mut inner = self.inner.lock();
-        inner.set_start(start);
+    pub fn set_start(&mut self, start: usize) {
+        self.region.start = start;
     }
 
     /// Sets the size of the block request region.
-    pub fn set_size(&self, size: usize) {
-        let mut inner = self.inner.lock();
-        inner.set_size(size);
+    pub fn set_size(&mut self, size: usize) {
+        self.region.size = size;
     }
 
     /// Sets whether the request is mediated.
-    pub fn set_mediated(&self, mediated: bool) {
-        let mut inner = self.inner.lock();
-        inner.mediated = mediated;
+    pub fn set_mediated(&mut self, mediated: bool) {
+        self.mediated = mediated;
     }
 
     /// Checks if the request is mediated.
     pub fn mediated(&self) -> bool {
-        let inner = self.inner.lock();
-        inner.mediated
+        self.mediated
     }
 
     /// Gets the start address of the block request region.
     pub fn region_start(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.region.start
+        self.region.start
     }
 
     /// Gets the size of the block request region.
     pub fn region_size(&self) -> usize {
-        let inner = self.inner.lock();
-        inner.region.size
+        self.region.size
     }
 }
 
@@ -321,42 +222,19 @@ impl VirtioBlkReqNode {
     }
 }
 
-/// Represents the inner data structure of a VirtioBlkReq.
-#[repr(C)]
-struct VirtioBlkReqInner {
-    region: BlkReqRegion,
-    mediated: bool,
-    process_list: Vec<usize>,
-}
-
-impl VirtioBlkReqInner {
-    /// Creates a default `VirtioBlkReqInner` instance.
-    pub fn default() -> VirtioBlkReqInner {
-        VirtioBlkReqInner {
-            region: BlkReqRegion { start: 0, size: 0 },
-            mediated: false,
-            process_list: Vec::new(),
-        }
-    }
-
-    /// Sets the start address of the block request region.
-    pub fn set_start(&mut self, start: usize) {
-        self.region.start = start;
-    }
-
-    /// Sets the size of the block request region.
-    pub fn set_size(&mut self, size: usize) {
-        self.region.size = size;
-    }
-}
-
 /// Generates a block request using the provided parameters.
-pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: usize, vm: Vm) {
+pub fn generate_blk_req(
+    req: &VirtioBlkReq,
+    vq: Arc<Virtq>,
+    dev: Arc<VirtioMmio>,
+    cache: usize,
+    vm: Arc<Vm>,
+    req_node_list: Vec<VirtioBlkReqNode>,
+) {
     let region_start = req.region_start();
     let region_size = req.region_size();
     let mut cache_ptr = cache;
-    for idx in 0..req.req_num() {
-        let req_node = req.req_node(idx);
+    for req_node in req_node_list {
         let sector = req_node.sector;
         if sector + req_node.iov_sum_up / SECTOR_BSIZE > region_start + region_size {
             warn!(
@@ -492,29 +370,20 @@ pub fn generate_blk_req(req: VirtioBlkReq, vq: Virtq, dev: VirtioMmio, cache: us
         // update used ring
         if !req.mediated() {
             todo!("reset num to vq size");
-            // if !vq.update_used_ring(req_node.iov_total as u32, req_node.desc_chain_head_idx as u32) {
-            //     println!("blk_req_handler: fail to update used ring");
-            // }
         } else {
             push_used_info(req_node.desc_chain_head_idx, req_node.iov_total as u32, vm.id());
         }
     }
-
-    req.clear_node();
 }
 
 /// Handles the notification for a mediated block request on the specified Virtqueue (`vq`) and Virtio block device (`blk`)
 /// associated with the virtual machine (`vm`). This function creates an asynchronous IPI task to process the mediated
 /// block request.
-pub fn virtio_mediated_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
-    //     add_task_count();
+pub fn virtio_mediated_blk_notify_handler(vq: Arc<Virtq>, blk: Arc<VirtioMmio>, vm: Arc<Vm>) -> bool {
+    let src_vmid = vm.id();
     let task = AsyncTask::new(
-        AsyncTaskData::AsyncIpiTask(IpiMediatedMsg {
-            src_id: vm.id(),
-            vq,
-            blk,
-        }),
-        vm.id(),
+        AsyncTaskData::AsyncIpiTask(IpiMediatedMsg { src_vm: vm, vq, blk }),
+        src_vmid,
         async_ipi_req(),
     );
     add_async_task(task, true);
@@ -524,32 +393,29 @@ pub fn virtio_mediated_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) ->
 /// Handles the notification for a Virtio block request on the specified Virtqueue (`vq`) and Virtio block device (`blk`)
 /// associated with the virtual machine (`vm`). This function processes the available descriptors in the Virtqueue and
 /// generates block requests accordingly. The function returns `true` upon successful handling.
-pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
+pub fn virtio_blk_notify_handler(vq: Arc<Virtq>, blk: Arc<VirtioMmio>, vm: Arc<Vm>) -> bool {
     if vm.id() == 0 && active_vm_id() == 0 {
         panic!("src vm should not be 0");
     }
 
     let avail_idx = vq.avail_idx();
 
-    // let begin = time_current_us();
     if vq.ready() == 0 {
         error!("blk virt_queue is not ready!");
         return false;
     }
 
-    // let mediated = blk.mediated();
     let dev = blk.dev();
     let req = match dev.req() {
-        super::DevReq::BlkReq(blk_req) => blk_req,
+        Some(blk_req) => blk_req,
         _ => {
-            panic!("virtio_blk_notify_handler: illegal req");
+            panic!("virtio_blk_notify_handler: illegal req")
         }
     };
 
-    // let vq_size = vq.num();
     let mut next_desc_idx_opt = vq.pop_avail_desc_idx(avail_idx);
     let mut process_count: i32 = 0;
-    // let mut desc_chain_head_idx;
+    let mut req_node_list: Vec<VirtioBlkReqNode> = vec![];
 
     // let time0 = time_current_us();
 
@@ -561,18 +427,9 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
         }
 
         let mut head = true;
-        // desc_chain_head_idx = next_desc_idx;
-
-        // vq.show_desc_info(4, vm.clone());
 
         let mut req_node = VirtioBlkReqNode::default();
         req_node.desc_chain_head_idx = next_desc_idx as u32;
-        // println!(
-        //     "avail idx {} desc_chain_head {} avail flag {}",
-        //     vq.last_avail_idx() - 1,
-        //     req_node.desc_chain_head_idx,
-        //     vq.avail_flags()
-        // );
 
         loop {
             if vq.desc_has_next(next_desc_idx) {
@@ -583,12 +440,11 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                             next_desc_idx,
                             vq.desc_flags(next_desc_idx)
                         );
-                        blk.notify(vm);
-                        // vq.notify(dev.int_id(), vm.clone());
+                        blk.notify();
                         return false;
                     }
                     head = false;
-                    let vreq_addr = vm_ipa2pa(vm.clone(), vq.desc_addr(next_desc_idx));
+                    let vreq_addr = vm.ipa2pa(vq.desc_addr(next_desc_idx));
                     if vreq_addr == 0 {
                         error!("virtio_blk_notify_handler: failed to get vreq");
                         return false;
@@ -606,11 +462,10 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                             req_node.req_type,
                             vq.desc_flags(next_desc_idx)
                         );
-                        blk.notify(vm);
-                        // vq.notify(dev.int_id(), vm.clone());
+                        blk.notify();
                         return false;
                     }
-                    let data_bg = vm_ipa2pa(vm.clone(), vq.desc_addr(next_desc_idx));
+                    let data_bg = vm.ipa2pa(vq.desc_addr(next_desc_idx));
                     if data_bg == 0 {
                         error!("virtio_blk_notify_handler: failed to get iov data begin");
                         return false;
@@ -627,11 +482,10 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
                 /*state handler*/
                 if !vq.desc_is_writable(next_desc_idx) {
                     error!("Failed to get virt blk queue desc status, idx = {}", next_desc_idx);
-                    blk.notify(vm);
-                    // vq.notify(dev.int_id(), vm.clone());
+                    blk.notify();
                     return false;
                 }
-                let vstatus_addr = vm_ipa2pa(vm.clone(), vq.desc_addr(next_desc_idx));
+                let vstatus_addr = vm.ipa2pa(vq.desc_addr(next_desc_idx));
                 if vstatus_addr == 0 {
                     error!("virtio_blk_notify_handler: vm[{}] failed to vstatus", vm.id());
                     return false;
@@ -648,35 +502,26 @@ pub fn virtio_blk_notify_handler(vq: Virtq, blk: VirtioMmio, vm: Vm) -> bool {
             next_desc_idx = vq.desc_next(next_desc_idx) as usize;
         }
         req_node.iov_total = req_node.iov_sum_up;
-        req.add_req_node(req_node, vm.clone());
+        req_node_list.push(req_node);
 
         process_count += 1;
         next_desc_idx_opt = vq.pop_avail_desc_idx(avail_idx);
     }
 
     if !req.mediated() {
-        generate_blk_req(req.clone(), vq.clone(), blk.clone(), dev.cache(), vm.clone());
+        unimplemented!("!!req.mediated()");
     } else {
         let mediated_blk = mediated_blk_list_get(vm.med_blk_id());
         let cache = mediated_blk.cache_pa();
-        generate_blk_req(req.clone(), vq.clone(), blk.clone(), cache, vm.clone());
+        generate_blk_req(req, vq.clone(), blk.clone(), cache, vm.clone(), req_node_list);
     };
 
     // let time1 = time_current_us();
 
     if vq.avail_flags() == 0 && process_count > 0 && !req.mediated() {
         trace!("virtio blk notify");
-        blk.notify(vm);
-        // vq.notify(dev.int_id(), vm.clone());
+        blk.notify();
     }
 
-    // if req.mediated() {
-    // finish_task(true);
-    //     finish_async_task(true);
-    //     async_task_exe();
-    // }
-
-    // let end = time_current_us();
-    // println!("init time {}us, while handle desc ring time {}us, finish task {}us", time0 - begin, time1 - time0, end - time1);
     true
 }

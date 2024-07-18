@@ -8,13 +8,21 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+#[cfg(target_arch = "riscv64")]
+use riscv::register::{hgatp, hstatus, sie};
+#[cfg(target_arch = "riscv64")]
+use core::arch::riscv64::hlv_wu;
 use core::mem::size_of;
 use spin::Mutex;
+use crate::arch::traits::VmContextTrait;
 
-use crate::arch::{ContextFrame, ContextFrameTrait, GicContext, VmContext, timer_arch_get_counter};
-use crate::board::PlatOperation;
+use crate::arch::{ArchTrait, ContextFrame, ContextFrameTrait, GicContext, VmContext};
+#[cfg(target_arch = "riscv64")]
+use crate::arch::{get_trapframe_for_hart, SSTATUS_FS, SSTATUS_SPIE, SSTATUS_SPP, SSTATUS_VS, TP_NUM};
+use crate::board::{PlatOperation, PLATFORM_CPU_NUM_MAX};
+use crate::config::VmConfigEntry;
 use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
 use crate::utils::memcpy;
@@ -31,8 +39,9 @@ pub enum VcpuState {
 }
 
 struct VcpuInnerConst {
-    id: usize,
-    vm: Option<Vm>,
+    id: usize,      // vcpu id
+    vm: Weak<Vm>,   // weak ref to related vm
+    phys_id: usize, // binding physical CPU's id
 }
 
 pub struct VcpuInner {
@@ -46,20 +55,31 @@ pub struct Vcpu {
     pub inner: Arc<VcpuInner>,
 }
 
+impl PartialEq for Vcpu {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
 impl Vcpu {
-    pub fn new(vm: Vm, vcpu_id: usize) -> Self {
-        let this = Self {
+    pub fn new(vm: Weak<Vm>, vcpu_id: usize, phys_id: usize) -> Self {
+        Self {
             inner: Arc::new(VcpuInner {
                 inner_const: VcpuInnerConst {
                     id: vcpu_id,
-                    vm: Some(vm.clone()),
+                    vm,
+                    phys_id,
                 },
                 inner_mut: Mutex::new(VcpuInnerMut::new()),
             }),
-        };
-        crate::arch::vcpu_arch_init(vm, this.clone());
-        this.reset_context();
-        this
+        }
+    }
+
+    pub fn init(&self, config: &VmConfigEntry) {
+        self.init_boot_info(config);
+        #[cfg(target_arch = "aarch64")]
+        self.init_spsr();
+        self.reset_context();
     }
 
     /// shutdown this vcpu
@@ -70,27 +90,36 @@ impl Vcpu {
             active_vm_id(),
             active_vcpu_id()
         );
+        // TODO: Wrong behavior. You should shut down the current vcpu, not the current cpu
         crate::board::Platform::cpu_shutdown();
     }
 
     pub fn context_vm_store(&self) {
+        // Save general registers's value to inner
         self.save_cpu_ctx();
 
         let mut inner = self.inner.inner_mut.lock();
+
+        // Save VM's state
         inner.vm_ctx.ext_regs_store();
         inner.vm_ctx.fpsimd_save_context();
         inner.vm_ctx.gic_save_state();
     }
 
     pub fn context_vm_restore(&self) {
+        // Restore inner's state to cpu.ctx (actually on the stack)
         self.restore_cpu_ctx();
 
         let inner = self.inner.inner_mut.lock();
+
         // restore vm's VFP and SIMD
+        // restore vm's state
         inner.vm_ctx.fpsimd_restore_context();
         inner.vm_ctx.gic_restore_state();
         inner.vm_ctx.ext_regs_restore();
         drop(inner);
+
+        // Note: You do not need to set hstatus to skip to GuestOS the next time
 
         self.inject_int_inlist();
     }
@@ -143,22 +172,6 @@ impl Vcpu {
         }
     }
 
-    pub fn set_phys_id(&self, phys_id: usize) {
-        let mut inner = self.inner.inner_mut.lock();
-        debug!("set vcpu {} phys id {}", self.id(), phys_id);
-        inner.phys_id = phys_id;
-    }
-
-    pub fn set_gich_ctlr(&self, ctlr: u32) {
-        let mut inner = self.inner.inner_mut.lock();
-        inner.vm_ctx.gic_state.ctlr = ctlr;
-    }
-
-    pub fn set_hcr(&self, hcr: u64) {
-        let mut inner = self.inner.inner_mut.lock();
-        inner.vm_ctx.hcr_el2 = hcr;
-    }
-
     pub fn state(&self) -> VcpuState {
         let inner = self.inner.inner_mut.lock();
         inner.state
@@ -173,13 +186,13 @@ impl Vcpu {
         self.inner.inner_const.id
     }
 
-    pub fn vm(&self) -> Option<Vm> {
-        self.inner.inner_const.vm.clone()
+    pub fn vm(&self) -> Option<Arc<Vm>> {
+        self.inner.inner_const.vm.upgrade()
     }
 
+    #[inline]
     pub fn phys_id(&self) -> usize {
-        let inner = self.inner.inner_mut.lock();
-        inner.phys_id
+        self.inner.inner_const.phys_id
     }
 
     pub fn vm_id(&self) -> usize {
@@ -192,25 +205,11 @@ impl Vcpu {
 
     pub fn reset_context(&self) {
         let mut inner = self.inner.inner_mut.lock();
-        let mut vmpidr = 0;
-        vmpidr |= 1 << 31; //bit[31]:res1
-
-        if self.vm().as_ref().unwrap().config().cpu_num() == 1 {
-            vmpidr |= 1 << 30; //bit[30]: Indicates a Uniprocessor system
+        #[cfg(target_arch = "aarch64")]
+        {
+            inner.vm_ctx.vmpidr_el2 = self.get_vmpidr() as u64;
         }
-
-        #[cfg(feature = "tx2")]
-        if self.vm_id() == 0 {
-            // A57 is cluster #1 for L4T
-            vmpidr |= 0x100;
-        }
-
-        vmpidr |= if cfg!(feature = "rk3588") {
-            0x100_0000 | (self.id() << 8)
-        } else {
-            self.id()
-        };
-        inner.vm_ctx.vmpidr_el2 = vmpidr as u64;
+        inner.gic_ctx_reset();
         let vm_id = self.vm().unwrap().id();
         use crate::kernel::vm_if_get_type;
         if vm_if_get_type(vm_id) == VmType::VmTBma {
@@ -223,8 +222,7 @@ impl Vcpu {
 
     pub fn reset_vtimer_offset(&self) {
         let mut inner = self.inner.inner_mut.lock();
-        let curpct = timer_arch_get_counter() as u64;
-        inner.vm_ctx.cntvoff_el2 = curpct - inner.vm_ctx.cntvct_el0;
+        inner.vm_ctx.reset_vtimer_offset();
     }
 
     pub fn context_ext_regs_store(&self) {
@@ -268,35 +266,59 @@ impl Vcpu {
                 inner.int_list.clear();
                 drop(inner);
                 for int in int_list {
-                    // println!("schedule: inject int {} for vm {}", int, vm.id());
-                    interrupt_vm_inject(vm.clone(), self.clone(), int);
+                    interrupt_vm_inject(&vm, self, int);
                 }
             }
         }
     }
 
     pub fn get_vmpidr(&self) -> usize {
-        let inner = self.inner.inner_mut.lock();
-        inner.vm_ctx.vmpidr_el2 as usize
+        1 << 31
+            | if cfg!(feature = "rk3588") {
+                0x100_0000 | (self.id() << 8)
+            } else if cfg!(feature = "tx2") && self.vm_id() == 0 {
+                // A57 is cluster #1 for L4T
+                0x100 | self.id()
+            } else {
+                self.id()
+            }
     }
 }
 
+#[derive(Clone, Copy)]
 struct IdleThread {
     pub ctx: ContextFrame,
 }
 
 fn idle_thread() {
     loop {
-        cortex_a::asm::wfi();
+        crate::arch::Arch::wait_for_interrupt();
     }
 }
 
-static IDLE_THREAD: spin::Lazy<IdleThread> = spin::Lazy::new(|| {
-    let mut ctx = ContextFrame::new(idle_thread as usize, current_cpu().stack_top(), 0);
-    use cortex_a::registers::SPSR_EL2;
-    ctx.set_exception_pc(idle_thread as usize);
-    ctx.spsr = (SPSR_EL2::M::EL2h + SPSR_EL2::F::Masked + SPSR_EL2::A::Masked + SPSR_EL2::D::Masked).value;
-    IdleThread { ctx }
+static IDLE_THREAD: spin::Lazy<[Option<IdleThread>; PLATFORM_CPU_NUM_MAX]> = spin::Lazy::new(|| {
+    const ARRAY_REPEAT_VALUE: Option<IdleThread> = None;
+    let mut idle_threads: [Option<IdleThread>; PLATFORM_CPU_NUM_MAX] = [ARRAY_REPEAT_VALUE; PLATFORM_CPU_NUM_MAX];
+    for i in 0..PLATFORM_CPU_NUM_MAX {
+        let mut ctx = ContextFrame::new(idle_thread as usize, current_cpu().stack_top(), 0);
+        ctx.set_exception_pc(idle_thread as usize);
+        // Set the next state to jump to the S-mode
+
+        #[cfg(target_arch = "riscv64")]
+        {
+            ctx.sstatus = SSTATUS_SPIE | SSTATUS_SPP | SSTATUS_FS | SSTATUS_VS;
+            ctx.gpr[TP_NUM] = crate::kernel::get_cpu_info_addr(i);
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            use cortex_a::registers::SPSR_EL2;
+            ctx.spsr = (SPSR_EL2::M::EL2h + SPSR_EL2::F::Masked + SPSR_EL2::A::Masked + SPSR_EL2::D::Masked).value;
+        }
+        idle_threads[i] = Some(IdleThread { ctx });
+    }
+
+    idle_threads
 });
 
 pub fn run_idle_thread() {
@@ -308,14 +330,13 @@ pub fn run_idle_thread() {
     unsafe {
         crate::utils::memcpy(
             current_cpu().ctx as *const u8,
-            &(IDLE_THREAD.ctx) as *const _ as *const u8,
+            &(IDLE_THREAD[current_cpu().id].unwrap().ctx) as *const _ as *const u8,
             core::mem::size_of::<ContextFrame>(),
         );
     }
 }
 
 pub struct VcpuInnerMut {
-    pub phys_id: usize,
     pub state: VcpuState,
     pub int_list: Vec<usize>,
     pub vcpu_ctx: ContextFrame,
@@ -326,25 +347,22 @@ pub struct VcpuInnerMut {
 impl VcpuInnerMut {
     fn new() -> VcpuInnerMut {
         VcpuInnerMut {
-            phys_id: 0,
             state: VcpuState::Invalid,
             int_list: vec![],
             vcpu_ctx: ContextFrame::default(),
             vm_ctx: VmContext::default(),
+            #[allow(clippy::default_constructed_unit_structs)]
             gic_ctx: GicContext::default(),
         }
     }
 
     fn gic_ctx_reset(&mut self) {
-        use crate::arch::gich_lrs_num;
-        for i in 0..gich_lrs_num() {
-            self.vm_ctx.gic_state.lr[i] = 0;
-        }
-        self.vm_ctx.gic_state.hcr |= 1 << 2; // init hcr
+        self.vm_ctx.gic_ctx_reset();
     }
 }
 
 // WARNING: No Auto `drop` in this function
+// The first time a vcpu runs a VM, it needs to initialize some hardware registers
 pub fn vcpu_run(announce: bool) -> ! {
     {
         let vcpu = current_cpu().active_vcpu.clone().unwrap();
@@ -352,18 +370,46 @@ pub fn vcpu_run(announce: bool) -> ! {
 
         current_cpu().cpu_state = CpuState::CpuRun;
         vm_if_set_state(active_vm_id(), super::VmState::VmActive);
+        crate::arch::Arch::install_vm_page_table(vm.pt_dir(), vm.id());
 
         vcpu.context_vm_restore();
         if announce {
-            crate::device::virtio_net_announce(vm);
+            crate::device::virtio_net_announce(vm.clone());
         }
-        // tlb_invalidate_guest_all();
-        // for i in 0..vm.mem_region_num() {
-        //     unsafe {
-        //         cache_invalidate_d(vm.pa_start(i), vm.pa_length(i));
-        //     }
-        // }
+        crate::arch::tlb_invalidate_guest_all();
+        for i in 0..vm.mem_region_num() {
+            unsafe {
+                crate::arch::cache_invalidate_d(vm.pa_start(i), vm.pa_length(i));
+            }
+        }
     }
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        // set ssratch, used to save VM's TrapFrame
+        current_cpu().ctx_mut().unwrap().sscratch = get_trapframe_for_hart(current_cpu().id);
+
+        trace!("Prepare to enter context vm entry...");
+        let sepc = current_cpu().ctx_mut().unwrap().sepc;
+        let sscratch = current_cpu().ctx_mut().unwrap().sscratch;
+        trace!(
+            "sepc: {:#x}, sscratch: {:#x}, hgatp: {:#x}, hstatus: {:#x}, sstatus: {:#x}, sie: {:#x}",
+            sepc,
+            sscratch,
+            hgatp::read(),
+            hstatus::read(),
+            current_cpu().ctx_mut().unwrap().sstatus,
+            sie::read().bits()
+        );
+        trace!("ctx: \n{}", current_cpu().ctx_mut().unwrap());
+
+        let val;
+        unsafe {
+            val = hlv_wu(sepc as *const u32);
+        }
+        trace!("test entry_point(sepc) memory: hlv_wu(*0x{:#08x}): {:#010x}", sepc, val);
+    }
+
     extern "C" {
         fn context_vm_entry(ctx: usize) -> !;
     }

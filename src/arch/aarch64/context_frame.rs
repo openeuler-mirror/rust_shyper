@@ -11,6 +11,8 @@
 use core::arch::global_asm;
 use crate::arch::traits::InterruptContextTrait;
 use core::fmt;
+use crate::arch::timer_arch_get_counter;
+use crate::arch::VmContextTrait;
 
 use cortex_a::registers::*;
 
@@ -66,11 +68,11 @@ impl crate::arch::ContextFrameTrait for Aarch64ContextFrame {
     fn new(pc: usize, sp: usize, arg: usize) -> Self {
         let mut r = Aarch64ContextFrame {
             gpr: [0; 31],
-            spsr: (SPSR_EL1::M::EL1h
-                + SPSR_EL1::I::Masked
-                + SPSR_EL1::F::Masked
-                + SPSR_EL1::A::Masked
-                + SPSR_EL1::D::Masked)
+            spsr: (SPSR_EL2::M::EL1h
+                + SPSR_EL2::I::Masked
+                + SPSR_EL2::F::Masked
+                + SPSR_EL2::A::Masked
+                + SPSR_EL2::D::Masked)
                 .value,
             elr: pc as u64,
             sp: sp as u64,
@@ -112,11 +114,11 @@ impl Aarch64ContextFrame {
     pub fn default() -> Aarch64ContextFrame {
         Aarch64ContextFrame {
             gpr: [0; 31],
-            spsr: (SPSR_EL1::M::EL1h
-                + SPSR_EL1::I::Masked
-                + SPSR_EL1::F::Masked
-                + SPSR_EL1::A::Masked
-                + SPSR_EL1::D::Masked)
+            spsr: (SPSR_EL2::M::EL1h
+                + SPSR_EL2::I::Masked
+                + SPSR_EL2::F::Masked
+                + SPSR_EL2::A::Masked
+                + SPSR_EL2::D::Masked)
                 .value,
             elr: 0,
             sp: 0,
@@ -325,8 +327,8 @@ impl Default for VmContext {
     }
 }
 
-impl VmContext {
-    pub fn reset(&mut self) {
+impl VmContextTrait for VmContext {
+    fn reset(&mut self) {
         self.cntvoff_el2 = 0;
         self.cntp_cval_el0 = 0;
         self.cntv_cval_el0 = 0;
@@ -365,7 +367,7 @@ impl VmContext {
         self.fpsimd.reset();
     }
 
-    pub fn ext_regs_store(&mut self) {
+    fn ext_regs_store(&mut self) {
         self.cntvoff_el2 = CNTVOFF_EL2::read();
         self.cntv_cval_el0 = CNTV_CVAL_EL0::read();
         self.cntkctl_el1 = CNTKCTL_EL1::read() as u32;
@@ -400,7 +402,7 @@ impl VmContext {
         self.actlr_el1 = ACTLR_EL1::read();
     }
 
-    pub fn ext_regs_restore(&self) {
+    fn ext_regs_restore(&self) {
         // SAFETY:
         // 1. The registers has defined as valid register
         // 2. The value is read from the register or
@@ -436,7 +438,7 @@ impl VmContext {
         }
     }
 
-    pub fn fpsimd_save_context(&mut self) {
+    fn fpsimd_save_context(&mut self) {
         // SAFETY:
         // We use the address of fpsimd to save the all floating point register
         // eg. Q0-Q31, FPSR, FPCR
@@ -447,7 +449,7 @@ impl VmContext {
         }
     }
 
-    pub fn fpsimd_restore_context(&self) {
+    fn fpsimd_restore_context(&self) {
         // SAFETY:
         // We use the address of fpsimd to restore the all floating point register
         // eg. Q0-Q31, FPSR, FPCR
@@ -457,11 +459,27 @@ impl VmContext {
         }
     }
 
-    pub fn gic_save_state(&mut self) {
+    fn gic_save_state(&mut self) {
         self.gic_state.save_state();
     }
 
-    pub fn gic_restore_state(&self) {
+    fn gic_restore_state(&self) {
         self.gic_state.restore_state();
+    }
+
+    fn gic_ctx_reset(&mut self) {
+        use crate::arch::gich_lrs_num;
+        for i in 0..gich_lrs_num() {
+            self.gic_state.lr[i] = 0;
+        }
+        self.gic_state.hcr |= 1 << 2; // init hcr
+    }
+
+    // Reset the el2 offset register
+    // so that the virtual time of the virtual machine is consistent with the physical time
+    fn reset_vtimer_offset(&mut self) {
+        self.cntvoff_el2 = 0;
+        let curpct = timer_arch_get_counter() as u64;
+        self.cntvoff_el2 = curpct - self.cntvct_el0;
     }
 }

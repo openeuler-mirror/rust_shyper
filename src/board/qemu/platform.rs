@@ -14,8 +14,6 @@ extern crate fdt_rs;
 // TODO: move these core name to device
 /// Crate imports for architecture and board configurations
 use crate::arch::ArchDesc;
-#[cfg(feature = "gicv3")]
-use crate::arch::sysreg_enc_addr;
 use crate::board::{
     PlatOperation, Platform, PlatCpuCoreConfig, PlatCpuConfig, PlatformConfig, PlatMemoryConfig, PlatMemRegion,
     ClusterDesc,
@@ -47,10 +45,6 @@ impl PlatOperation for QemuPlatform {
     const GICV_BASE: usize = 0x08040000;
     #[cfg(feature = "gicv3")]
     const GICR_BASE: usize = 0x080a0000;
-    #[cfg(feature = "gicv3")]
-    const ICC_SRE_ADDR: usize = sysreg_enc_addr(3, 0, 12, 12, 5);
-    #[cfg(feature = "gicv3")]
-    const ICC_SGIR_ADDR: usize = sysreg_enc_addr(3, 0, 12, 11, 5);
 
     const DISK_PARTITION_0_START: usize = 0;
     const DISK_PARTITION_1_START: usize = 2097152;

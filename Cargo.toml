@@ -35,13 +35,12 @@ gethostname = "0.4.3"
 
 [dependencies]
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
-fdt = { git = "https://github.com/karin0/libfdt-rs" }
+fdt = { git = "https://github.com/Zera-Algorithm/libfdt-rs", rev = "61ec00" }
 log = { version = "0.4", features = [
     "max_level_trace",
     "release_max_level_info",
 ] }
 spin = { version = "0.9.4", features = ["use_ticket_mutex"] }
-buddy_system_allocator = "0.8.0"
 memoffset = { version = "0.8", default-features = false, features = [
     "unstable_const",
 ] }
@@ -50,6 +49,15 @@ cfg-if = "1.0.0"
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 cortex-a = { package = "aarch64-cpu", version = "9.3.1" }
 smccc = "0.1.1"
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+rustsbi = { version = "0.3.2", default-features = false, features = [ "legacy", "singleton" ] }
+sbi = "0.2.0"
+riscv = { git = "https://github.com/Zera-Algorithm/riscv" }
+
+[dependencies.buddy_system_allocator]
+version = "0.8.0"
+features = ["const_fn"]
 
 [dependencies.tock-registers]
 version = "0.8.0"
@@ -74,4 +82,6 @@ rk3588-noeth = ["rk3588"]
 ns16550 = []
 pl011 = []
 unilib = []
+memrsv = []
 doc = []
+sbi_legacy = []

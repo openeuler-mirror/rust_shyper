@@ -8,16 +8,18 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-use crate::arch::{GIC_SGIS_NUM, gicc_clear_current_irq};
+use alloc::sync::Arc;
+
+use crate::arch::{gicc_clear_current_irq, IntCtrl, InterruptController, GIC_SGIS_NUM};
 use crate::config::vm_cfg_remove_vm_entry;
-use crate::device::{emu_remove_dev, EmuDeviceType, meta};
 use crate::kernel::{
-    current_cpu, interrupt_vm_remove, ipi_send_msg, IpiInnerMsg, IpiType, IpiVmmMsg, mem_vm_region_free,
-    remove_async_used_info, remove_vm, remove_vm_async_task, vm, Vm, Scheduler, cpu_idle,
+    current_cpu, interrupt_vm_remove, ipi_send_msg, IpiInnerMsg, IpiType, mem_vm_region_free, remove_async_used_info,
+    remove_vm, remove_vm_async_task, vm, Vm, Scheduler, cpu_idle, IpiVmmPercoreMsg,
 };
 use crate::kernel::vm_if_reset;
-use crate::vmm::VmmEvent;
 use crate::utils::memset;
+
+use super::VmmPercoreEvent;
 
 pub fn vmm_remove_vm(vm_id: usize) {
     if vm_id == 0 {
@@ -34,7 +36,7 @@ pub fn vmm_remove_vm(vm_id: usize) {
     };
 
     // vcpu
-    vmm_remove_vcpu(vm.clone());
+    vmm_remove_vcpu(&vm);
     // reset vm interface
     vm_if_reset(vm_id);
     // free mem
@@ -46,12 +48,12 @@ pub fn vmm_remove_vm(vm_id: usize) {
         }
         mem_vm_region_free(vm.pa_start(idx), vm.pa_length(idx));
     }
-    // emu dev
-    vmm_remove_emulated_device(vm.clone());
     // passthrough dev
-    vmm_remove_passthrough_device(vm.clone());
+    vmm_remove_passthrough_device(&vm);
     // clear async task list
     remove_vm_async_task(vm_id);
+    // virtio nic
+    crate::device::remove_virtio_nic(vm_id);
     // async used info
     remove_async_used_info(vm_id);
     // remove vm: page table / mmio / vgic will be removed with struct vm
@@ -65,8 +67,7 @@ pub fn vmm_remove_vm(vm_id: usize) {
 }
 
 fn vmm_remove_vm_list(vm_id: usize) {
-    let vm = remove_vm(vm_id);
-    vm.clear_list();
+    remove_vm(vm_id);
 }
 
 pub fn vmm_cpu_remove_vcpu(vmid: usize) {
@@ -81,50 +82,34 @@ pub fn vmm_cpu_remove_vcpu(vmid: usize) {
     }
 }
 
-fn vmm_remove_vcpu(vm: Vm) {
-    for idx in 0..vm.cpu_num() {
-        let vcpu = vm.vcpu(idx).unwrap();
+fn vmm_remove_vcpu(vm: &Arc<Vm>) {
+    for vcpu in vm.vcpu_list() {
         if vcpu.phys_id() == current_cpu().id {
-            vmm_cpu_remove_vcpu(vm.id());
+            vmm_remove_vcpu_percore(vm);
         } else {
-            let m = IpiVmmMsg {
-                vmid: vm.id(),
-                event: VmmEvent::VmmRemoveCpu,
+            let m = IpiVmmPercoreMsg {
+                vm: vm.clone(),
+                event: VmmPercoreEvent::VmmRemoveCpu,
             };
-            if !ipi_send_msg(vcpu.phys_id(), IpiType::IpiTVMM, IpiInnerMsg::VmmMsg(m)) {
+            if !ipi_send_msg(vcpu.phys_id(), IpiType::IpiTVMM, IpiInnerMsg::VmmPercoreMsg(m)) {
                 warn!("vmm_remove_vcpu: failed to send ipi to Core {}", vcpu.phys_id());
             }
         }
     }
 }
 
-fn vmm_remove_emulated_device(vm: Vm) {
-    let config = vm.config().emulated_device_list();
-    for (idx, emu_dev) in config.iter().enumerate() {
-        // mmio / vgic will be removed with struct vm
-        if !emu_dev.emu_type.removable() {
-            warn!("vmm_remove_emulated_device: cannot remove device {}", emu_dev.emu_type);
-            return;
-        }
-        if emu_dev.emu_type == EmuDeviceType::EmuDeviceTMeta {
-            meta::unregister(idx);
-        }
-        emu_remove_dev(vm.id(), idx, emu_dev.base_ipa, emu_dev.length);
-        // println!(
-        //     "VM[{}] removes emulated device: id=<{}>, name=\"{}\", ipa=<0x{:x}>",
-        //     vm.id(),
-        //     idx,
-        //     emu_dev.emu_type,
-        //     emu_dev.base_ipa
-        // );
+pub fn vmm_remove_vcpu_percore(vm: &Vm) {
+    current_cpu().vcpu_array.remove_vcpu(vm.id());
+    if !current_cpu().assigned() {
+        IntCtrl::enable(IntCtrl::IRQ_GUEST_TIMER, false);
+        IntCtrl::clear();
     }
 }
 
-fn vmm_remove_passthrough_device(vm: Vm) {
+fn vmm_remove_passthrough_device(vm: &Vm) {
     for irq in vm.config().passthrough_device_irqs() {
-        if irq > GIC_SGIS_NUM {
-            interrupt_vm_remove(vm.clone(), irq);
-            // println!("VM[{}] remove irq {}", vm.id(), irq);
+        if *irq > GIC_SGIS_NUM {
+            interrupt_vm_remove(vm, *irq);
         }
     }
 }

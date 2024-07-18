@@ -218,12 +218,13 @@ extern "C" fn lower_aarch64_synchronous(ctx: &mut ContextFrame) {
                 (*ctx).gpr(29)
             );
             panic!(
-                "core {} vm {}: handler not presents for EC_{:b} @ipa 0x{:x}, @pc 0x{:x}",
+                "core {} vm {}: handler not presents for EC_{:b} @ipa 0x{:x}, @pc 0x{:x}, @esr:0x{:x}",
                 current_cpu().id,
                 active_vm_id(),
                 exception_class(),
                 exception_fault_addr(),
-                (*ctx).exception_pc()
+                (*ctx).exception_pc(),
+                exception_esr()
             );
         }
     }
@@ -232,6 +233,7 @@ extern "C" fn lower_aarch64_synchronous(ctx: &mut ContextFrame) {
 
 #[no_mangle]
 extern "C" fn lower_aarch64_irq(ctx: &mut ContextFrame) {
+    // SAFETY: ctx is a valid pointer
     unsafe {
         current_cpu().set_ctx(ctx);
     }

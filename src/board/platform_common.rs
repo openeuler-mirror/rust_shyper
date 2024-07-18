@@ -10,6 +10,9 @@
 
 use crate::arch::ArchDesc;
 
+#[cfg(target_arch = "riscv64")]
+use crate::arch::arch_boot_other_cores;
+
 /// Maximum number of CPUs supported by the platform
 pub const PLATFORM_CPU_NUM_MAX: usize = 8;
 
@@ -81,10 +84,6 @@ pub trait PlatOperation {
     const GICV_BASE: usize;
     #[cfg(feature = "gicv3")]
     const GICR_BASE: usize;
-    #[cfg(feature = "gicv3")]
-    const ICC_SRE_ADDR: usize;
-    #[cfg(feature = "gicv3")]
-    const ICC_SGIR_ADDR: usize;
 
     const DISK_PARTITION_0_START: usize = usize::MAX;
     const DISK_PARTITION_1_START: usize = usize::MAX;
@@ -114,18 +113,25 @@ pub trait PlatOperation {
 
     /// Powers on secondary cores of the CPU
     fn power_on_secondary_cores() {
-        use super::PLAT_DESC;
         extern "C" {
             fn _secondary_start();
         }
-        for i in 1..PLAT_DESC.cpu_desc.num {
-            // SAFETY:
-            // We iterate all the cores except the primary core so the arch_core_id must be valid.
-            // Entry is a valid address with executable permission.
-            // The 'i' is a valid cpu_idx for ctx.
-            unsafe {
-                Self::cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _secondary_start as usize, i);
+        #[cfg(target_arch = "aarch64")]
+        {
+            use super::PLAT_DESC;
+            for i in 1..PLAT_DESC.cpu_desc.num {
+                // SAFETY:
+                // We iterate all the cores except the primary core so the arch_core_id must be valid.
+                // Entry is a valid address with executable permission.
+                // The 'i' is a valid cpu_idx for ctx.
+                unsafe {
+                    Self::cpu_on(PLAT_DESC.cpu_desc.core_list[i].mpidr, _secondary_start as usize, i);
+                }
             }
+        }
+        #[cfg(target_arch = "riscv64")]
+        {
+            arch_boot_other_cores();
         }
     }
 

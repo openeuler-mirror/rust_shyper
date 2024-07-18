@@ -30,8 +30,8 @@ macro_rules! print {
 /// ```
 #[macro_export]
 macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
+    () => (print!("\n"));
+    ($($arg:tt)*) => (print!("{}\n", format_args!($($arg)*)));
 }
 
 /// A macro for declaring an enum with associated handlers.
