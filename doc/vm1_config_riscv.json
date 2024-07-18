@@ -1,0 +1,94 @@
+{
+    "name": "guest-os-1",
+    "type": "VM_T_LINUX",
+    "cmdline": "earlycon=sbi console=hvc1 root=/dev/vda rw audit=0",
+    "image": {
+        "kernel_filename": "Image",
+        "kernel_load_ipa": "0x80200000",
+        "kernel_entry_point": "0x80200000",
+        "device_tree_filename": "",
+        "device_tree_load_ipa": "0xa0000000",
+        "ramdisk_filename": "initrd.gz",
+        "ramdisk_load_ipa": "0"
+    },
+    "memory": {
+        "num": 1,
+        "region": [
+            {
+                "ipa_start": "0x80000000",
+                "length": "0x40000000"
+            }
+        ]
+    },
+    "cpu": {
+        "num": 3,
+        "allocate_bitmap": "0b1110",
+        "master" : 1
+    },
+    "emulated_device" : {
+        "num": 4,
+        "emulated_device_list": [
+            {
+                "name": "plic@c000000",
+                "base_ipa": "0xc000000",
+                "length": "0x600000",
+                "irq_id": 1,
+                "cfg_num": 2,
+                "cfg_list": [
+                    0,
+                    0
+                ],
+                "type": "EMU_DEVICE_T_PLIC"
+            },
+            {
+                "name": "virtio_blk@10001000",
+                "base_ipa": "0x10001000",
+                "length": "0x1000",
+                "irq_id": 19,
+                "cfg_num": 2,
+                "cfg_list": [
+                    0,
+                    8192000
+                ],
+                "type": "EMU_DEVICE_T_VIRTIO_BLK_MEDIATED"
+            },
+            {
+                "name": "virtio_net@50000000",
+                "base_ipa": "0x50000000",
+                "length": "0x1000",
+                "irq_id": 20,
+                "cfg_num": 6,
+                "cfg_list": [
+                    "0x74",
+                    "0x56",
+                    "0xaa",
+                    "0x0f",
+                    "0x47",
+                    "0xd1"
+                ],
+                "type": "EMU_DEVICE_T_VIRTIO_NET"
+            },
+            {
+                "name": "virtio_console@40001000",
+                "base_ipa": "0x40001000",
+                "length": "0x1000",
+                "irq_id": 21,
+                "cfg_num": 2,
+                "cfg_list": [
+                    "0",
+                    "0x40001000"
+                ],
+                "type": "EMU_DEVICE_T_VIRTIO_CONSOLE"
+            }
+        ]
+    },
+    "passthrough_device": {
+        "passthrough_device_list": [
+        ]
+    },
+    "dtb_device" : {
+        "num": 0,
+        "dtb_device_list": [
+	    ]
+    }
+}

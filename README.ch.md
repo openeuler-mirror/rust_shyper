@@ -42,15 +42,7 @@ make <platform>
 
 **RISCV64平台的支持**
 
-目前Rust-Shyper已经支持QEMU上的RISCV64平台，并提供了相应的内核镜像用于运行RISC-V平台的虚拟化。运行下列命令即可编译启动：
-
-```bash
-ARCH=riscv64 make run
-```
-
-与riscv64平台配套的内核模块二进制文件在 `tools/shyper_riscv64.ko`，对应于下文所述的 `tools/shyper.ko` 。
-
-> 我们使用 `Image_5.15.100-riscv-starfive` 文件作为riscv64下的内核镜像。其中 `Image_5.15.100-riscv-starfive` 是基于 Ubuntu22.04 Starfive 镜像提取的内核镜像，具有较为完整的功能和兼容性。
+目前Rust-Shyper已经支持QEMU上的RISCV64平台，并提供了完整的用户使用手册和相应的附件，具体可以参考[面向 RISCV64 的 Rust-Shyper 使用文档](./doc/RISC-V64_User_Guide.md)
 
 **RK3588的支持**
 

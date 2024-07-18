@@ -42,17 +42,7 @@ Note that please edit the MVM profile in src/config/\<plat\>_def.rs according to
 
 **RISCV64 Platform support**
 
-Currently Rust-Shyper already supports the RISCV64 platform on QEMU and provides the corresponding kernel image for running virtualization on the RISC-V platform.
-
-Run the following command to start the compilation:
-
-```bash
-ARCH=riscv64 make run
-```
-
-The kernel module binaries for the riscv64 platform are in `tools/shyper_riscv64.ko`, corresponding to `tools/shyper.ko` as described below.
-
-> We use `Image_5.15.100-riscv-starfive` as our riscv64 kernel image. `Image_5.15.100-riscv-starfive` is a kernel image extracted based on the Ubuntu22.04 Starfive image, which has relatively complete functions and compatibility.
+At present, Rust-Shyper already supports the RISCV64 platform on QEMU, and provides a complete user manual and corresponding accessories, please refer to [Rust-Shyper for RISCV64 Documentation](./doc/RISC-V64_User_Guide.md)
 
 **RK3588 support**
 
