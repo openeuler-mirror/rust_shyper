@@ -242,7 +242,7 @@ checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 [[package]]
 name = "fdt"
 version = "0.1.0"
-source = "git+https://github.com/Zera-Algorithm/libfdt-rs?rev=61ec00#61ec003305148d00903b137a846b2bf36139f880"
+source = "git+https://github.com/Zera-Algorithm/libfdt-rs#44570fbbb5dde4b234e9b5d0e26ce08f966ad3e0"
 dependencies = [
  "bindgen",
  "cc",

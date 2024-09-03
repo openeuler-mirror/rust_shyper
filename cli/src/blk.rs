@@ -28,7 +28,7 @@ use crate::{
     util::{check_cache_address, cstr_arr_to_string, string_to_cstr_arr, virt_to_phys_user},
 };
 
-pub const HUGE_TLB_MAX: usize = 2 * 1024 * 1024;
+pub const HUGE_TLB_MAX: usize = 32 * 1024 * 1024;
 pub const BLOCK_SIZE: usize = 512;
 
 pub static SHYPER_FD: OnceCell<i32> = OnceCell::new();
@@ -194,7 +194,7 @@ pub fn mediated_blk_init() {
         .arg("-t")
         .arg("hugetlbfs")
         .arg("-o")
-        .arg("pagesize=2M")
+        .arg("pagesize=32M")
         .arg("none")
         .arg("/mnt/huge")
         .output()

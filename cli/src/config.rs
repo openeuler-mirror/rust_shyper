@@ -43,7 +43,7 @@ use crate::{
     util::{check_cache_address, file_size, string_to_u64, virt_to_phys_user},
 };
 
-const CACHE_MAX: usize = 2 * 1024 * 1024;
+const CACHE_MAX: usize = 32 * 1024 * 1024;
 const CMDLINE_MAX_LEN: usize = 1024;
 
 const PASSTHROUGH_DEV_MAX_NUM: usize = 128;
