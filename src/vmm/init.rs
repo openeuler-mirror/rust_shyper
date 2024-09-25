@@ -252,6 +252,7 @@ pub fn vmm_init_image(vm: &Vm) -> bool {
             // Init dtb for GVM.
             match create_fdt(config) {
                 Ok(dtb) => {
+                    warn!("GVM fdt {:?}", dtb);
                     let mut overlay = config.fdt_overlay.clone();
                     let offset = config.device_tree_load_ipa() - vm.config().memory_region()[0].ipa_start;
                     let target = (vm.pa_start(0) + offset) as *mut u8;
@@ -382,30 +383,42 @@ unsafe fn fdt_add_virtio_riscv64(
         panic!("fdt_create_node failed {}", node);
     }
 
-    let mut int_phandle_id = 9_u32;
-    let mut ret = 0;
     #[cfg(feature = "plic")]
     {
+        let int_phandle_id = 9_u32;
         let ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
+
+        let ret = fdt_add_property_u32(
+            dtb,
+            node,
+            "interrupt-parent\0".as_ptr(),
+            int_phandle_id, // phandle id
+        );
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
     }
     #[cfg(feature = "aia")]
     {
-        int_phandle_id = 12_u32;
+        let int_phandle_id = 12_u32;
         let mut interrupts = [irq_id, 0x04];
         let ret = fdt_add_property_u32_array(dtb, node, "interrupts\0".as_ptr(), interrupts.as_mut_ptr(), 2);
-    }
-    if ret < 0 {
-        panic!("fdt_add_property_u32 failed {}", ret);
-    }
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
 
-    let ret = fdt_add_property_u32(
-        dtb,
-        node,
-        "interrupt-parent\0".as_ptr(),
-        int_phandle_id, // phandle id
-    );
-    if ret < 0 {
-        panic!("fdt_add_property_u32 failed {}", ret);
+        let ret = fdt_add_property_u32(
+            dtb,
+            node,
+            "interrupt-parent\0".as_ptr(),
+            int_phandle_id, // phandle id
+        );
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
     }
 
     let mut regs = [base_ipa, length];
@@ -434,37 +447,48 @@ unsafe fn fdt_add_vm_service_riscv64(dtb: *mut fdt::myctypes::c_void, irq_id: u3
         panic!("fdt_add_property_string failed {}", ret);
     }
 
-    let mut int_phandle_id = 9_u32;
-    let mut ret = 0;
     #[cfg(feature = "plic")]
     {
-        ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+        let int_phandle_id = 9_u32;
+        let ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
+
+        let ret = fdt_add_property_u32(
+            dtb,
+            node,
+            "interrupt-parent\0".as_ptr(),
+            int_phandle_id, // phandle id
+        );
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
     }
     #[cfg(feature = "aia")]
     {
-        int_phandle_id = 12_u32;
+        let int_phandle_id = 12_u32;
         let mut interrupts = [irq_id, 0x04];
-        ret = fdt_add_property_u32_array(dtb, node, "interrupts\0".as_ptr(), interrupts.as_mut_ptr(), 2);
-    }
+        let ret = fdt_add_property_u32_array(dtb, node, "interrupts\0".as_ptr(), interrupts.as_mut_ptr(), 2);
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
 
-    if ret < 0 {
-        panic!("fdt_add_property_u32 failed {}", ret);
+        let ret = fdt_add_property_u32(
+            dtb,
+            node,
+            "interrupt-parent\0".as_ptr(),
+            int_phandle_id, // phandle id
+        );
+        if ret < 0 {
+            panic!("fdt_add_property_u32 failed {}", ret);
+        }
     }
 
     let mut regs = [base_ipa, length];
     let ret = fdt_add_property_u64_array(dtb, node, "reg\0".as_ptr(), regs.as_mut_ptr(), 2);
     if ret < 0 {
         panic!("fdt_add_property_u64_array failed {}", ret);
-    }
-
-    let ret = fdt_add_property_u32(
-        dtb,
-        node,
-        "interrupt-parent\0".as_ptr(),
-        int_phandle_id, // phandle id
-    );
-    if ret < 0 {
-        panic!("fdt_add_property_u32 failed {}", ret);
     }
 }
 

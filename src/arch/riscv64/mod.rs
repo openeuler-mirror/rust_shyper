@@ -39,8 +39,8 @@ pub use context_frame::*;
 pub use plic::*;
 #[cfg(feature = "aia")]
 pub use aplic::*;
-#[cfg(feature = "aia")]
-pub use imsic::*;
+// #[cfg(feature = "aia")]
+// pub use imsic::*;
 pub use regs::*;
 #[cfg(not(feature = "sbi_legacy"))]
 pub use sbicall::*;

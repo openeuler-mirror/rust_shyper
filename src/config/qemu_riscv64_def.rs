@@ -51,7 +51,7 @@ pub fn mvm_config_init() {
                 mediated: false,
             }
         },
-        // hvc2
+        // hvc1
         VmEmulatedDeviceConfig {
             name: String::from("virtio_console@40001000"),
             base_ipa: 0x4000_1000,
@@ -61,7 +61,7 @@ pub fn mvm_config_init() {
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
         },
-        // hvc1
+        // hvc0
         VmEmulatedDeviceConfig {
             name: String::from("virtio_console@40002000"),
             base_ipa: 0x4000_2000,

@@ -381,16 +381,19 @@ impl VAPlic {
             let enabled = ((value >> 8) & 0x1) != 0; // IE
             let msimode = ((value >> 2) & 0b1) != 0; // DM / MSI
             let bigendian = (value & 0b1) != 0; // Endianness
+            let vm = active_vm().unwrap();
+            // if vm.id() == 0 {
             self.set_domaincfg(bigendian, msimode, enabled);
             debug!(
                 "APLIC set domaincfg write addr@{:#x} bigendian {} msimode {} enabled {}",
                 addr, bigendian, msimode, enabled
             );
+            // }
         } else if (APLIC_SOURCECFG_BASE..=APLIC_SOURCECFG_TOP).contains(&offset) {
             // sourcecfg
             let irq = ((offset - APLIC_SOURCECFG_BASE) / 4) + 1;
             if (value >> 10) & 0b1 == 1 {
-                //delegate
+                // delegate
                 let child = value & 0x3ff;
                 self.set_sourcecfg_delegate(irq as u32, child);
                 debug!(
@@ -407,8 +410,11 @@ impl VAPlic {
                     7 => SourceModes::LevelLow,
                     _ => panic!("Unknown sourcecfg mode"),
                 };
-                self.set_sourcecfg(irq as u32, mode);
-                debug!("APLIC set sourcecfg write addr@{:#x} irq {} mode {}", addr, irq, value);
+                let vm = active_vm().unwrap();
+                //if vm.id() == 0 || vm.id() != 0 && (irq == 19 || irq == 20 || irq == 21) {
+                    self.set_sourcecfg(irq as u32, mode);
+                    debug!("APLIC set sourcecfg write addr@{:#x} irq {} mode {}", addr, irq, value);
+                //}
             }
         } else if (APLIC_S_MSIADDR_BASE..=APLIC_S_MSIADDR_TOP).contains(&offset) {
             // smsiaddrcfg
@@ -437,11 +443,14 @@ impl VAPlic {
         } else if (APLIC_CLR_ENABLE_BASE..=APLIC_CLR_ENABLE_TOP).contains(&offset) {
             // clrie
             let irqidx = (offset - APLIC_CLR_ENABLE_BASE) / 4;
-            self.set_enable(irqidx, value, false);
-            debug!(
-                "APLIC set clr_enable write addr@{:#x} irqidx {} value {}",
-                addr, irqidx, value
-            );
+            let vm = active_vm().unwrap();
+            //if vm.id() == 0 {
+                self.set_enable(irqidx, value, false);
+                debug!(
+                    "APLIC set clr_enable write addr@{:#x} irqidx {} value {}",
+                    addr, irqidx, value
+                );
+            //}
         } else if (APLIC_CLR_ENABLE_NUM_BASE..=APLIC_CLR_ENABLE_NUM_TOP).contains(&offset) {
             // clrienum
             self.clr_enable_num(value);
@@ -461,22 +470,32 @@ impl VAPlic {
             let irq = ((offset - APLIC_TARGET_BASE) / 4) as u32 + 1;
             // An error may occur when the CPU ID of a virtual machine is not 0, but it assumes its CPU ID is 0.
             let hart = (value >> 18) & 0x3F;
+            // Retrieve the actual transmitted HART
+            let vm = active_vm().unwrap();
+            let mut pcpu: usize = 0;
+            if let Some(vcpu) = vm.vcpu(hart.try_into().unwrap()) {
+                pcpu = vcpu.phys_id();
+            }
             // let hart = ((value >> 18) & 0x3F) + (current_cpu.first_cpu) as u32;
             if self.get_msimode() {
                 let guest = ((value >> 12) & 0x3F) + 1;
                 let eiid = value & 0xFFF;
-                self.set_target_msi(irq, hart, guest, eiid);
-                debug!(
-                    "APLIC set msi target write addr@{:#x} irq {} hart {} guest {} eiid {}",
-                    addr, irq, hart, guest, eiid
-                );
+                //if vm.id() == 0 || vm.id() != 0 && (irq == 19 || irq == 20 || irq == 21) {
+                    self.set_target_msi(irq, pcpu.try_into().unwrap(), guest, eiid);
+                    debug!(
+                        "APLIC set msi target write addr@{:#x} irq {} hart {} guest {} eiid {}",
+                        addr, irq, pcpu, guest, eiid
+                    );
+                //}
             } else {
                 let prio = value & 0xFF;
-                self.set_target_direct(irq, hart, prio);
-                debug!(
-                    "APLIC set direct target write addr@{:#x} irq {} hart {} prio {}",
-                    addr, irq, hart, prio
-                );
+                //if vm.id() == 0 {
+                    self.set_target_direct(irq, pcpu.try_into().unwrap(), prio);
+                    debug!(
+                        "APLIC set direct target write addr@{:#x} irq {} hart {} prio {}",
+                        addr, irq, pcpu, prio
+                    );
+                //}
             }
         } else {
             panic!("invalid plic register access: 0x{:x} offset: 0x{:x}", addr, offset);
@@ -489,9 +508,11 @@ impl VAPlic {
             unsafe { sie::clear_stimer() };
         } else if irq == IRQ_IPI {
             riscv::register::hvip::trigger_software_interrupt();
-        } 
+        }
         // else {
-        //     warn!("external_intr");
+        //     use crate::arch::imsic_trigger;
+        //     imsic_trigger(1, 1, irq.try_into().unwrap());
+        //     warn!("external_intr {}", irq);
         // }
     }
 

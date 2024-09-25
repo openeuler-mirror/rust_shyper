@@ -148,6 +148,10 @@ pub fn ldst_guest_page_fault_handler(ctx: &mut ContextFrame) {
     let mut inst: u32 = riscv::register::htinst::read() as u32;
     let inst_size;
 
+    let vm = active_vm().unwrap();
+    if vm.id() != 0  {
+        // warn!("guest page fault{:?}", addr);
+    }
     //warn!("guest page fault");
     if inst == 0 {
         // if inst does not provide info about the trap, we must read the instruction from the guest memory

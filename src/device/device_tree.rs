@@ -22,6 +22,7 @@ use crate::error::Result;
 use crate::SYSTEM_FDT;
 use crate::vmm::CPIO_RAMDISK;
 
+#[allow(unused_imports)]
 use fdt_print::Fdt;
 extern crate fdt_print;
 const PI4_DTB_ADDR: usize = 0xf0000000;
@@ -303,6 +304,10 @@ pub fn create_fdt_riscv64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     fdt.property_string("compatible", "simple-bus")?;
     fdt.property_null("ranges")?;
 
+    #[cfg(feature = "plic")]
+    let interrupt_phandle = riscv_plic_phandle(ncpu);
+    #[cfg(feature = "aia")]
+    let interrupt_phandle = riscv_aplic_phandle(ncpu);
     for emu_cfg in config.emulated_device_list() {
         match emu_cfg.emu_type {
             EmuDeviceType::EmuDeviceTVirtioBlk
@@ -314,7 +319,7 @@ pub fn create_fdt_riscv64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
                     &emu_cfg.name,
                     emu_cfg.irq_id,
                     emu_cfg.base_ipa,
-                    riscv_plic_phandle(ncpu),
+                    interrupt_phandle,
                 )?;
             }
             EmuDeviceType::EmuDeviceTShyper => {
@@ -331,9 +336,16 @@ pub fn create_fdt_riscv64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
                 info!("plic fdt node init {:x} for {}", emu_cfg.base_ipa, &emu_cfg.name);
                 create_plic_node(&mut fdt, &emu_cfg.name, emu_cfg.base_ipa, emu_cfg.length, ncpu)?;
             }
+            EmuDeviceType::EmuDeviceTAPlic => {
+                info!("aplic fdt node init {:x} for {}", emu_cfg.base_ipa, &emu_cfg.name);
+                create_aplic_node(&mut fdt, &emu_cfg.name, emu_cfg.base_ipa, emu_cfg.length, ncpu)?;
+            }
             _ => {}
         }
     }
+    
+    #[cfg(feature = "aia")]
+    create_imsics_node(&mut fdt, "imsics@28000000", 0x28000000, 0x4000, ncpu)?;
     create_clint_node(&mut fdt, "clint@2000000", 0x2000000, 0x10000, ncpu)?;
     fdt.end_node(soc)?;
 
@@ -364,6 +376,53 @@ fn create_plic_node(fdt: &mut FdtWriter, name: &str, address: usize, len: usize,
     fdt.property_u32("#address-cells", 0x00)?;
     fdt.property_u32("#interrupt-cells", 0x01)?;
     fdt.end_node(plic)?;
+
+    Ok(())
+}
+
+fn create_aplic_node(fdt: &mut FdtWriter, name: &str, address: usize, len: usize, ncpu: u32) -> FdtWriterResult<()> {
+    let aplic = fdt.begin_node(name)?;
+    let aplic_phandle = riscv_aplic_phandle(ncpu);
+    let msi_parent = riscv_imsic_phandle(ncpu);
+
+    fdt.property_u32("phandle", aplic_phandle)?;
+    fdt.property_u32("riscv,num-sources", 0x60)?;
+    fdt.property_array_u64("reg", &[address as u64, len as u64])?;
+
+    fdt.property_u32("msi-parent", msi_parent)?;
+    fdt.property_null("interrupt-controller")?;
+    fdt.property_u32("#interrupt-cells", 0x2)?;
+    fdt.property_string("compatible", "riscv,aplic")?;
+
+    fdt.end_node(aplic)?;
+
+    Ok(())
+}
+
+fn create_imsics_node(fdt: &mut FdtWriter, name: &str, address: usize, len: usize, ncpu: u32) -> FdtWriterResult<()> {
+    let imsic = fdt.begin_node(name)?;
+    let imsic_phandle = riscv_imsic_phandle(ncpu);
+    // This value is related to the 'aia-guests' startup parameter and the 'HSTATUS_VGEIN' field
+    let aia_guests = 1;
+
+    fdt.property_u32("phandle", imsic_phandle)?;
+    fdt.property_u32("riscv,guest-index-bits", aia_guests)?;
+    fdt.property_u32("riscv,num-ids", 0xff)?;
+    fdt.property_array_u64("reg", &[address as u64, len as u64])?;
+
+    let mut interrupts: Vec<u32> = Vec::new();
+    for i in 0..ncpu {
+        let cpu_phandle = riscv_cpu_intc_phandle(i, ncpu);
+        interrupts.push(cpu_phandle);
+        interrupts.push(0x09);
+    }
+
+    fdt.property_array_u32("interrupts-extended", interrupts.as_slice())?;
+    fdt.property_null("msi-controller")?;
+    fdt.property_null("interrupt-controller")?;
+    fdt.property_u32("#interrupt-cells", 0x00)?;
+    fdt.property_string("compatible", "riscv,imsics")?;
+    fdt.end_node(imsic)?;
 
     Ok(())
 }
@@ -566,6 +625,16 @@ pub fn riscv_plic_phandle(ncpu: u32) -> u32 {
     ncpu * 2 + 1
 }
 
+// acquire the aplic phandle id
+pub fn riscv_aplic_phandle(ncpu: u32) -> u32 {
+    ncpu * 2 + 4
+}
+
+// acquire the imsic phandle id
+pub fn riscv_imsic_phandle(ncpu: u32) -> u32 {
+    ncpu * 2 + 2
+}
+
 /// Creates the CPU node in the Device Tree for the VM based on the provided configuration.
 fn create_cpu_node_riscv(fdt: &mut FdtWriter, config: &VmConfigEntry) -> FdtWriterResult<()> {
     let cpus = fdt.begin_node("cpus")?;
@@ -586,12 +655,17 @@ fn create_cpu_node_riscv(fdt: &mut FdtWriter, config: &VmConfigEntry) -> FdtWrit
         // keep qemu host's all extensions except H-extension
 
         // delete sstc, zicboz
+        #[cfg(feature = "plic")]
         fdt.property_string(
             "riscv,isa",
             "rv64imafdc_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_svadu",
         )?;
+        #[cfg(feature = "aia")]
+        fdt.property_string(
+            "riscv,isa",
+            "rv64imafdch_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_smaia_ssaia_svadu",
+        )?;
         fdt.property_string("mmu-type", "riscv,sv57")?;
-        fdt.property_string("compatible", "riscv")?;
 
         let intc = fdt.begin_node("interrupt-controller")?;
         fdt.property_u32("#interrupt-cells", 0x01)?;
@@ -697,7 +771,10 @@ fn create_virtio_node_riscv64(
     plic_phandle: u32,
 ) -> FdtWriterResult<()> {
     let virtio = fdt.begin_node(name)?;
+    #[cfg(feature = "plic")]
     fdt.property_array_u32("interrupts", &[irq as u32])?;
+    #[cfg(feature = "aia")]
+    fdt.property_array_u32("interrupts", &[irq as u32, 0x04])?;
     fdt.property_u32("interrupt-parent", plic_phandle)?;
     fdt.property_array_u64("reg", &[address as u64, 0x1000])?;
     fdt.property_string("compatible", "virtio,mmio")?;

@@ -1,4 +1,4 @@
-use crate::{arch::VmContextTrait, csrr, csrw};
+use crate::{ csrr, csrw};
 /* AIA Extension */
 pub const CSR_VSISELECT: usize = 0x250;
 pub const CSR_VSIREG: usize = 0x251;
@@ -17,6 +17,7 @@ pub const fn imsic_vs(hart: usize) -> usize {
     IMSIC_VS + IMSIC_VS_HART_STRIDE * hart
 }
 pub fn imsic_write(reg: usize, val: usize) {
+    #[allow(unused_unsafe)]
     unsafe {
         match reg {
             CSR_VSISELECT => csrw!(0x250, val),
@@ -32,6 +33,7 @@ pub fn imsic_write(reg: usize, val: usize) {
 
 fn imsic_read(reg: usize) -> u64 {
     let ret: u64;
+    #[allow(unused_unsafe)]
     unsafe {
         ret = match reg {
             CSR_VSISELECT => csrr!(0x250),
