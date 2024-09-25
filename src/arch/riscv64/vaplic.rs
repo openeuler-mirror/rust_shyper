@@ -217,6 +217,13 @@ impl APLICTrait for VAPlic {
         inner.in_clrip[irqidx]
     }
 
+    fn set_in_clrip(&self, irqidx: usize, value: u32) {
+        assert!(irqidx < 32);
+        GLOBAL_APLIC.lock().set_in_clrip(irqidx, value);
+        let mut inner = self.inner.lock();
+        inner.in_clrip[irqidx] = value;
+    }
+
     fn get_enable(&self, irqidx: usize) -> u32 {
         assert!(irqidx < 32);
         let inner = self.inner.lock();
@@ -415,7 +422,7 @@ impl VAPlic {
             // setipnum
             panic!("setipnum Unexpected addr {:#x}", addr);
         } else if (APLIC_CLR_PENDING_BASE..=APLIC_CLR_PENDING_TOP).contains(&offset) {
-            // clrip
+            // inclrip
             panic!("clrip Unexpected addr {:#x}", addr);
         } else if (APLIC_CLR_PENDING_NUM_BASE..=APLIC_CLR_PENDING_NUM_TOP).contains(&offset) {
             // clripnum
@@ -482,9 +489,10 @@ impl VAPlic {
             unsafe { sie::clear_stimer() };
         } else if irq == IRQ_IPI {
             riscv::register::hvip::trigger_software_interrupt();
-        } else {
-            warn!("external_intr");
-        }
+        } 
+        // else {
+        //     warn!("external_intr");
+        // }
     }
 
     // // Check and inject a APLIC interrupt to VM

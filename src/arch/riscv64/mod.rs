@@ -11,6 +11,8 @@ mod page_table;
 mod plic;
 #[cfg(feature = "aia")]
 mod aplic;
+#[cfg(feature = "aia")]
+mod imsic;
 pub mod power;
 pub mod regs;
 #[cfg(not(feature = "sbi_legacy"))]
@@ -37,6 +39,8 @@ pub use context_frame::*;
 pub use plic::*;
 #[cfg(feature = "aia")]
 pub use aplic::*;
+#[cfg(feature = "aia")]
+pub use imsic::*;
 pub use regs::*;
 #[cfg(not(feature = "sbi_legacy"))]
 pub use sbicall::*;

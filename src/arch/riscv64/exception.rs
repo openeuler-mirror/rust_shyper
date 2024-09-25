@@ -3,8 +3,7 @@ use alloc::string::String;
 use riscv::register::hstatus::{self, VirtualizationMode};
 use rustsbi::spec::hsm::{EID_HSM, HART_STOP};
 use spin::Once;
-/* 
-use crate::csrr;
+/* use crate::csrr;
 use super::page_fault::read_inst_from_guest_mem;
 use riscv_decode::Instruction; */
 
@@ -164,8 +163,8 @@ pub fn exception_rust_handler(ctx: &mut ContextFrame) {
 
     let is_intr = ((scause >> 63) & 1) == 1;
     let cause = scause & 0xfff;
-    /* 
-    let raw_inst = read_inst_from_guest_mem(sepc as u64);
+    
+    /* let raw_inst = read_inst_from_guest_mem(sepc as u64);
     let inst: Result<Instruction, riscv_decode::DecodingError> = riscv_decode::decode(raw_inst);
     debug!("is_intr: {:?}", is_intr);
     debug!("cause: {:#x}", cause);

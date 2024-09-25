@@ -382,7 +382,18 @@ unsafe fn fdt_add_virtio_riscv64(
         panic!("fdt_create_node failed {}", node);
     }
 
-    let ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+    let mut int_phandle_id = 9_u32;
+    let mut ret = 0;
+    #[cfg(feature = "plic")]
+    {
+        let ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+    }
+    #[cfg(feature = "aia")]
+    {
+        int_phandle_id = 12_u32;
+        let mut interrupts = [irq_id, 0x04];
+        let ret = fdt_add_property_u32_array(dtb, node, "interrupts\0".as_ptr(), interrupts.as_mut_ptr(), 2);
+    }
     if ret < 0 {
         panic!("fdt_add_property_u32 failed {}", ret);
     }
@@ -391,7 +402,7 @@ unsafe fn fdt_add_virtio_riscv64(
         dtb,
         node,
         "interrupt-parent\0".as_ptr(),
-        9_u32, // plic phandle id
+        int_phandle_id, // phandle id
     );
     if ret < 0 {
         panic!("fdt_add_property_u32 failed {}", ret);
@@ -423,7 +434,19 @@ unsafe fn fdt_add_vm_service_riscv64(dtb: *mut fdt::myctypes::c_void, irq_id: u3
         panic!("fdt_add_property_string failed {}", ret);
     }
 
-    let ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+    let mut int_phandle_id = 9_u32;
+    let mut ret = 0;
+    #[cfg(feature = "plic")]
+    {
+        ret = fdt_add_property_u32(dtb, node, "interrupts\0".as_ptr(), irq_id);
+    }
+    #[cfg(feature = "aia")]
+    {
+        int_phandle_id = 12_u32;
+        let mut interrupts = [irq_id, 0x04];
+        ret = fdt_add_property_u32_array(dtb, node, "interrupts\0".as_ptr(), interrupts.as_mut_ptr(), 2);
+    }
+
     if ret < 0 {
         panic!("fdt_add_property_u32 failed {}", ret);
     }
@@ -438,7 +461,7 @@ unsafe fn fdt_add_vm_service_riscv64(dtb: *mut fdt::myctypes::c_void, irq_id: u3
         dtb,
         node,
         "interrupt-parent\0".as_ptr(),
-        9_u32, // plic phandle id
+        int_phandle_id, // phandle id
     );
     if ret < 0 {
         panic!("fdt_add_property_u32 failed {}", ret);
@@ -547,7 +570,7 @@ pub unsafe fn vmm_setup_fdt(config: &VmConfigEntry, dtb: *mut fdt::myctypes::c_v
     debug!("after dtb size {}", fdt_size(dtb));
     // Print the device_tree after adding new nodes
     let host_fdt = unsafe { fdt_print::Fdt::from_ptr(dtb as *const u8) }.unwrap();
-    debug!("fdt: {:?}", host_fdt);
+    debug!("after add fdt: \n{:?}", host_fdt);
 }
 
 /* Setup VM Configuration before boot.

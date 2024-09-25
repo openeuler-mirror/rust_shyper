@@ -42,7 +42,7 @@ pub fn mvm_config_init() {
         #[cfg(feature = "aia")]{
             // Defines the start address and length of the APLIC device
             VmEmulatedDeviceConfig {
-                name: String::from("aia"),
+                name: String::from("aplic"),
                 base_ipa: 0xd000000,
                 length: 0x8000,
                 irq_id: 0,
@@ -74,7 +74,7 @@ pub fn mvm_config_init() {
         // virtual eth0
         VmEmulatedDeviceConfig {
             name: String::from("virtio_net@40003000"),
-            base_ipa: 0x40003000,
+            base_ipa: 0x4000_3000,
             length: 0x1000,
             irq_id: 48,
             cfg_list: vec![0x74, 0x56, 0xaa, 0x0f, 0x47, 0xd0],
@@ -91,7 +91,7 @@ pub fn mvm_config_init() {
             mediated: false,
         }
     ];
-    debug!("\n {:#?}", emu_dev_config[0]); 
+    // debug!("\n {:#?}", emu_dev_config[0]); 
     // vm0 passthrough
     let pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig {
         regions: vec![

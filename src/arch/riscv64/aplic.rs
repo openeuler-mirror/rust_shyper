@@ -137,6 +137,7 @@ pub trait APLICTrait {
     fn set_pending(&self, irqidx: usize, value: u32, pending: bool);
     fn set_pending_num(&self, value: u32);
     fn get_in_clrip(&self, irqidx: usize) -> u32;
+    fn set_in_clrip(&self, irqidx: usize, value: u32);
     fn get_enable(&self, irqidx: usize) -> u32;
     fn get_clr_enable(&self, irqidx: usize) -> u32;
     fn set_enable(&self, irqidx: usize, value: u32, enabled: bool);
@@ -255,6 +256,14 @@ impl APLICTrait for APLIC {
         assert!(irqidx < 32);
         let addr = self.base + APLIC_CLR_PENDING_BASE + irqidx * 4;
         unsafe { read_volatile(addr as *const u32) }
+    }
+
+    fn set_in_clrip(&self, irqidx: usize, value: u32) {
+        assert!(irqidx < 32);
+        let addr = self.base + APLIC_CLR_PENDING_BASE + irqidx * 4;
+        unsafe {
+            write_volatile(addr as *mut u32, value);
+        }
     }
 
     fn get_enable(&self, irqidx: usize) -> u32 {

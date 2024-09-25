@@ -63,19 +63,14 @@ impl InterruptController for IntCtrl {
         #[cfg(feature = "plic")]
         {
             let locked = GLOBAL_PLIC.lock();
-            let first_value = locked.get_threshold(crate::arch::PLICMode::Machine, current_cpu().id);
-            warn!("first_value: {:x}", first_value);
             locked.set_threshold(crate::arch::PLICMode::Machine, current_cpu().id, 0);
-            let read_value = locked.get_threshold(crate::arch::PLICMode::Machine, current_cpu().id);
-            warn!("read_value: {:x}", read_value);
+            // SAFETY: Enable external interrupt
+            unsafe { riscv::register::sie::set_sext() };
         }
         #[cfg(feature = "aia")]
-        {
+        {       
             info!("The platform does not need to init AIA here");
         }
-
-        // SAFETY: Enable external interrupt
-        unsafe { riscv::register::sie::set_sext() };
     }
 
     fn enable(int_id: usize, en: bool) {

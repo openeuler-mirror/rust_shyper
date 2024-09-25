@@ -198,8 +198,8 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     #[cfg(target_arch = "riscv64")]
     {
         // Print the device_tree after init
-        let host_fdt = unsafe { Fdt::from_ptr(dtb as *const u8) }.unwrap();
-        debug!("fdt: {:?}", host_fdt);
+        // let host_fdt = unsafe { Fdt::from_ptr(dtb as *const u8) }.unwrap();
+        // debug!("first fdt: \n{:?}", host_fdt);
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
@@ -218,6 +218,7 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         assert_eq!(fdt_remove_node(dtb, "/flash@20000000\0".as_ptr()), 0);
         // Delete the previous memory and edit it again later
         assert_eq!(fdt_remove_node(dtb, "/memory@80000000\0".as_ptr()), 0);
+        assert_eq!(fdt_remove_node(dtb, "/reserved-memory\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/soc/pci@30000000\0".as_ptr()), 0);
 
         // modify the isa given by fdt
@@ -227,7 +228,6 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         let isa = cstr_to_rust_string(pstr, str_len);
         info!("riscv isa = {}", isa);
         let isa = remove_riscv_ext(isa, String::from("h"));
-        let isa = remove_riscv_ext(isa, String::from("zicbom"));
         let isa = remove_riscv_ext(isa, String::from("zicbom"));
         let isa = remove_riscv_ext(isa, String::from("zicboz"));
         let isa = remove_riscv_ext(isa, String::from("sstc"));
@@ -240,13 +240,14 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@2\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@3\0".as_ptr()), 0);
         assert_eq!(fdt_remove_node(dtb, "/cpus/cpu-map\0".as_ptr()), 0);
-        
+
         // Delete unused nodes in the AIA Device Tree
-        #[cfg(feature = "aia")]{
+        #[cfg(feature = "aia")]
+        {
             assert_eq!(fdt_remove_node(dtb, "/soc/aplic@c000000\0".as_ptr()), 0);
             assert_eq!(fdt_remove_node(dtb, "/soc/imsics@24000000\0".as_ptr()), 0);
         }
-        
+
         let len = fdt_size(dtb) as usize;
         info!("fdt patched size {}", len);
         // Print the device_tree after deleting nodes
@@ -583,9 +584,12 @@ fn create_cpu_node_riscv(fdt: &mut FdtWriter, config: &VmConfigEntry) -> FdtWrit
         fdt.property_string("status", "okay")?;
         fdt.property_string("compatible", "riscv")?;
         // keep qemu host's all extensions except H-extension
-                
+
         // delete sstc, zicboz
-        fdt.property_string("riscv,isa", "rv64imafdc_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_svadu")?;
+        fdt.property_string(
+            "riscv,isa",
+            "rv64imafdc_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_svadu",
+        )?;
         fdt.property_string("mmu-type", "riscv,sv57")?;
         fdt.property_string("compatible", "riscv")?;
 
