@@ -154,18 +154,18 @@ pub struct VmContext {
 }
 
 const HSTATUS_SPV: u64 = 1 << 7;
+const HSTATUS_VGEIN: u64 = 1 << 12;
 
 impl Default for VmContext {
     fn default() -> Self {
         let hstatus_mem: u64;
         csrr!(hstatus_mem, hstatus);
-
         // Set **initial values** for each privilege level register
         // of the VM to prevent Linux startup errors
         Self {
             fpsimd: VmCtxFpsimd::default(),
             hvip: 0,
-            hstatus: hstatus_mem | HSTATUS_SPV,
+            hstatus: hstatus_mem | HSTATUS_SPV | HSTATUS_VGEIN,
             vsstatus: SSTATUS_FS | SSTATUS_VS | SSTATUS_SD,
             vsip: 0,
             vsie: 0,

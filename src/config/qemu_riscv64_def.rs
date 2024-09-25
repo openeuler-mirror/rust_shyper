@@ -27,15 +27,29 @@ pub fn mvm_config_init() {
 
     // vm0 emu
     let emu_dev_config = vec![
-        // Defines the start address and length of the PLIC device
-        VmEmulatedDeviceConfig {
-            name: String::from("plic"),
-            base_ipa: 0xc000000,
-            length: 0x600000,
-            irq_id: 0,
-            cfg_list: Vec::new(),
-            emu_type: EmuDeviceType::EmuDeviceTPlic,
-            mediated: false,
+        #[cfg(feature = "plic")]{
+            // Defines the start address and length of the PLIC device
+            VmEmulatedDeviceConfig {
+                name: String::from("plic"),
+                base_ipa: 0xc000000,
+                length: 0x600000,
+                irq_id: 0,
+                cfg_list: Vec::new(),
+                emu_type: EmuDeviceType::EmuDeviceTPlic,
+                mediated: false,
+            }
+        },
+        #[cfg(feature = "aia")]{
+            // Defines the start address and length of the APLIC device
+            VmEmulatedDeviceConfig {
+                name: String::from("aia"),
+                base_ipa: 0xd000000,
+                length: 0x8000,
+                irq_id: 0,
+                cfg_list: Vec::new(),
+                emu_type: EmuDeviceType::EmuDeviceTAPlic,
+                mediated: false,
+            }
         },
         // hvc2
         VmEmulatedDeviceConfig {
@@ -77,7 +91,7 @@ pub fn mvm_config_init() {
             mediated: false,
         }
     ];
-
+    debug!("\n {:#?}", emu_dev_config[0]); 
     // vm0 passthrough
     let pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig {
         regions: vec![

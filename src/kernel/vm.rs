@@ -14,8 +14,10 @@ use spin::{Mutex, Once};
 
 #[cfg(target_arch = "aarch64")]
 use crate::arch::Vgic;
-#[cfg(target_arch = "riscv64")]
+#[cfg(all(feature = "plic", target_arch = "riscv64"))]
 use crate::arch::VPlic;
+#[cfg(all(feature = "aia", target_arch = "riscv64"))]
+use crate::arch::VAPlic;
 use crate::arch::{PAGE_SIZE, emu_intc_init, PageTable};
 use crate::config::VmConfigEntry;
 use crate::device::{EmuDev, emu_virtio_mmio_init};
@@ -183,8 +185,10 @@ struct VmInnerConst {
     int_bitmap: BitAlloc4K,
     #[cfg(target_arch = "aarch64")]
     arch_intc_dev: Option<Arc<Vgic>>,
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(all(feature = "plic", target_arch = "riscv64"))]
     arch_intc_dev: Option<Arc<VPlic>>,
+    #[cfg(all(feature = "aia", target_arch = "riscv64"))]
+    arch_intc_dev: Option<Arc<VAPlic>>,
     // Emul devs config
     emu_devs: Vec<Arc<dyn EmuDev>>,
 }
@@ -237,12 +241,20 @@ impl VmInnerConst {
                         vgic
                     })
                 }
-                #[cfg(target_arch = "riscv64")]
+                #[cfg(all(feature = "plic", target_arch = "riscv64"))]
                 EmuDeviceTPlic => {
                     self.intc_type = IntCtrlType::Emulated;
                     emu_intc_init(emu_cfg, &self.vcpu_list).map(|vplic| {
                         self.arch_intc_dev = vplic.clone().into_any_arc().downcast::<VPlic>().ok();
                         vplic
+                    })
+                }
+                #[cfg(all(feature = "aia", target_arch = "riscv64"))]
+                EmuDeviceTAPlic => {
+                    self.intc_type = IntCtrlType::Emulated;
+                    emu_intc_init(emu_cfg, &self.vcpu_list).map(|vaplic| {
+                        self.arch_intc_dev = vaplic.clone().into_any_arc().downcast::<VAPlic>().ok();
+                        vaplic
                     })
                 }
                 #[cfg(feature = "gicv3")]
@@ -515,7 +527,7 @@ impl Vm {
         self.inner_const.arch_intc_dev.is_some()
     }
 
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(all(feature = "plic", target_arch = "riscv64"))]
     pub fn vplic(&self) -> &VPlic {
         if let Some(vplic) = self.inner_const.arch_intc_dev.as_ref() {
             return vplic;
@@ -523,8 +535,21 @@ impl Vm {
         panic!("vm{} cannot find vgic", self.id());
     }
 
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(all(feature = "plic", target_arch = "riscv64"))]
     pub fn has_vplic(&self) -> bool {
+        self.inner_const.arch_intc_dev.is_some()
+    }
+
+    #[cfg(all(feature = "aia", target_arch = "riscv64"))]
+    pub fn vaplic(&self) -> &VAPlic {
+        if let Some(vaplic) = self.inner_const.arch_intc_dev.as_ref() {
+            return vaplic;
+        }
+        panic!("vm{} cannot find vaplic", self.id());
+    }
+
+    #[cfg(all(feature = "aia", target_arch = "riscv64"))]
+    pub fn has_vaplic(&self) -> bool {
         self.inner_const.arch_intc_dev.is_some()
     }
 

@@ -1,8 +1,16 @@
 use sbi::HartMask;
 use crate::arch::psci_vcpu_on;
 use crate::arch::InterruptController;
+#[cfg(feature = "plic")]
 use crate::arch::PLIC;
+#[cfg(feature = "plic")]
 use crate::arch::PLICTrait;
+
+#[cfg(feature = "aia")]
+use crate::arch::APLIC;
+// #[cfg(feature = "aia")]
+// use crate::arch::APLICTrait;
+
 use crate::kernel::vm;
 use crate::kernel::IpiInnerMsg;
 use crate::kernel::IpiMessage;
@@ -21,13 +29,19 @@ pub const IRQ_HYPERVISOR_TIMER: usize = 61; // for clint, not plic
 pub const IRQ_GUEST_TIMER: usize = 62; // not valid
 
 pub const PLIC_BASE_ADDR: u64 = 0x0C00_0000;
+pub const APLIC_BASE_ADDR: u64 = 0x0D00_0000;
+pub const APLIC_SIZE: u64 = 0x8000;
 
 const UART0_IRQ: usize = 10;
 const VIRTIO_IRQ: usize = 1;
 
 pub struct IntCtrl;
 
+//test @CHonghao
+#[cfg(all(feature = "plic", target_arch = "riscv64"))]
 pub static GLOBAL_PLIC: Mutex<PLIC> = Mutex::new(PLIC::new(PLIC_BASE_ADDR as usize));
+#[cfg(all(feature = "aia", target_arch = "riscv64"))]
+pub static GLOBAL_APLIC: Mutex<APLIC> = Mutex::new(APLIC::new(APLIC_BASE_ADDR as usize, APLIC_SIZE as usize));
 
 // True PLIC
 impl InterruptController for IntCtrl {
@@ -46,8 +60,19 @@ impl InterruptController for IntCtrl {
         crate::utils::barrier();
 
         // Set interrupt threshold for current cpu
-        let locked = GLOBAL_PLIC.lock();
-        locked.set_threshold(crate::arch::PLICMode::Machine, current_cpu().id, 0);
+        #[cfg(feature = "plic")]
+        {
+            let locked = GLOBAL_PLIC.lock();
+            let first_value = locked.get_threshold(crate::arch::PLICMode::Machine, current_cpu().id);
+            warn!("first_value: {:x}", first_value);
+            locked.set_threshold(crate::arch::PLICMode::Machine, current_cpu().id, 0);
+            let read_value = locked.get_threshold(crate::arch::PLICMode::Machine, current_cpu().id);
+            warn!("read_value: {:x}", read_value);
+        }
+        #[cfg(feature = "aia")]
+        {
+            info!("The platform does not need to init AIA here");
+        }
 
         // SAFETY: Enable external interrupt
         unsafe { riscv::register::sie::set_sext() };
@@ -68,9 +93,11 @@ impl InterruptController for IntCtrl {
                     panic!("enable intr {} not supported", int_id);
                 }
             } else {
+                #[cfg(feature = "plic")]
                 GLOBAL_PLIC
                     .lock()
                     .set_enable(int_id, crate::arch::PLICMode::Machine, current_cpu().id);
+                trace!("set_enable");
             }
         } else if int_id >= CLINT_IRQ_BASE {
             if int_id == IRQ_HYPERVISOR_TIMER {
@@ -83,9 +110,11 @@ impl InterruptController for IntCtrl {
                 panic!("enable intr {} not supported", int_id);
             }
         } else {
+            #[cfg(feature = "plic")]
             GLOBAL_PLIC
                 .lock()
                 .clear_enable(int_id, crate::arch::PLICMode::Machine, current_cpu().id);
+            trace!("clear_enable");
         }
     }
 
@@ -97,22 +126,28 @@ impl InterruptController for IntCtrl {
     fn clear() {
         // loop until no pending intr
         loop {
-            let irq = GLOBAL_PLIC.lock().get_claim(super::PLICMode::Machine, current_cpu().id);
-            if irq == 0 {
-                // TODO: not clearing sip，maybe no need?
-                break;
-            } else {
-                GLOBAL_PLIC
-                    .lock()
-                    .set_complete(super::PLICMode::Machine, current_cpu().id, irq);
+            #[cfg(feature = "plic")]
+            {
+                let irq = GLOBAL_PLIC.lock().get_claim(super::PLICMode::Machine, current_cpu().id);
+                if irq == 0 {
+                    // TODO: not clearing sip，maybe no need?
+                    break;
+                } else {
+                    GLOBAL_PLIC
+                        .lock()
+                        .set_complete(super::PLICMode::Machine, current_cpu().id, irq);
+                }
             }
+            trace!("clear");
         }
     }
 
     fn finish(int_id: usize) {
+        #[cfg(feature = "plic")]
         GLOBAL_PLIC
             .lock()
             .set_complete(super::PLICMode::Machine, current_cpu().id, int_id);
+        trace!("finish int_id {:?}", int_id);
     }
 
     #[allow(unused_variables)]
@@ -123,12 +158,18 @@ impl InterruptController for IntCtrl {
 
     fn vm_inject(vm: &crate::kernel::Vm, vcpu: &crate::kernel::Vcpu, int_id: usize) {
         // Inject interrupt through virtual plic
+        #[cfg(feature = "plic")]
         let vplic = vm.vplic();
+        #[cfg(feature = "aia")]
+        let vaplic = vm.vaplic();
         if let Some(cur_vcpu) = current_cpu().active_vcpu.clone() {
             if cur_vcpu.vm_id() == vcpu.vm_id() {
                 // Note: trigger a timer intr, external intr, or soft intr
                 // if external intr, inject to vplic
+                #[cfg(feature = "plic")]
                 vplic.inject_intr(int_id);
+                #[cfg(feature = "aia")]
+                vaplic.inject_intr(int_id);
                 return;
             }
         }
@@ -179,14 +220,22 @@ pub fn riscv_get_pending_irqs(int_cause: usize) -> Option<usize> {
         CAUSE_INTR_TIMER => Some(IRQ_HYPERVISOR_TIMER),
         CAUSE_INTR_EXTERNAL => {
             // Get intr from PLIC
-            let irq = GLOBAL_PLIC.lock().get_claim(super::PLICMode::Machine, current_cpu().id);
-            if irq == 0 {
+            #[cfg(feature = "plic")]
+            {
+                let irq = GLOBAL_PLIC.lock().get_claim(super::PLICMode::Machine, current_cpu().id);
+                if irq == 0 {
+                    None
+                } else {
+                    GLOBAL_PLIC
+                        .lock()
+                        .set_complete(super::PLICMode::Machine, current_cpu().id, irq);
+                    Some(irq)
+                }
+            }
+            #[cfg(feature = "aia")]
+            {
+                trace!("set_complete");
                 None
-            } else {
-                GLOBAL_PLIC
-                    .lock()
-                    .set_complete(super::PLICMode::Machine, current_cpu().id, irq);
-                Some(irq)
             }
         }
         _ => {

@@ -26,7 +26,7 @@ MVM是用于对其他虚拟机进行管理的管理VM，运行Linux，可以通�
 
 本项目使用的Linux rootfs是以Ubuntu base image为基础，通过在riscv64平台Linux（如Qemu + riscv64裸Linux）上chroot进入镜像经过一系列安装配置来构建的。如果对这些操作不熟悉的话，可以使用现成的镜像：
 
-* https://ubuntu.com/download/risc-vhttps://bhpan.buaa.edu.cn/link/AAF36D01FF739449A19B7D28CC5639F555
+* https://bhpan.buaa.edu.cn/link/AAF36D01FF739449A19B7D28CC5639F555
 * 文件名：vm0_ubuntu_gvm.img
 * 有效期限：2040-01-01 20:11
 * 提取码：2Axz

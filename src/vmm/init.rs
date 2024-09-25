@@ -545,6 +545,9 @@ pub unsafe fn vmm_setup_fdt(config: &VmConfigEntry, dtb: *mut fdt::myctypes::c_v
         }
     }
     debug!("after dtb size {}", fdt_size(dtb));
+    // Print the device_tree after adding new nodes
+    let host_fdt = unsafe { fdt_print::Fdt::from_ptr(dtb as *const u8) }.unwrap();
+    debug!("fdt: {:?}", host_fdt);
 }
 
 /* Setup VM Configuration before boot.

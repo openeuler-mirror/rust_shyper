@@ -97,6 +97,7 @@ pub enum EmuDeviceType {
     EmuDeviceTGICR = 11,
     EmuDeviceTMeta = 12,
     EmuDeviceTPlic = 13,
+    EmuDeviceTAPlic = 14,
 }
 
 impl Display for EmuDeviceType {
@@ -115,6 +116,7 @@ impl Display for EmuDeviceType {
             EmuDeviceType::EmuDeviceTGICR => write!(f, "interrupt controller gicr"),
             EmuDeviceType::EmuDeviceTMeta => write!(f, "meta device"),
             EmuDeviceType::EmuDeviceTPlic => write!(f, "platform level interrupt controller"),
+            EmuDeviceType::EmuDeviceTAPlic => write!(f, "Advanced Platform-Level Interrupt Controller"),
         }
     }
 }
@@ -150,6 +152,7 @@ impl EmuDeviceType {
             11 => EmuDeviceType::EmuDeviceTGICR,
             12 => EmuDeviceType::EmuDeviceTMeta,
             13 => EmuDeviceType::EmuDeviceTPlic,
+            14 => EmuDeviceType::EmuDeviceTAPlic,
             _ => panic!("Unknown  EmuDeviceType value: {}", value),
         }
     }
