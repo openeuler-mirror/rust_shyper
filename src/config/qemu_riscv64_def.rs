@@ -108,8 +108,8 @@ pub fn mvm_config_init() {
             PassthroughRegion { ipa: 0x10000000, pa: 0x10000000, length: 0x1000, dev_property: true },
             // RTC
             PassthroughRegion { ipa: 0x101000, pa: 0x101000, length: 0x1000, dev_property: true },
-            // IMSIC
-            PassthroughRegion { ipa: 0x28000000, pa: 0x28000000, length: 0x10000, dev_property: true },
+            // IMSIC（When using multi-hart startup）
+            // PassthroughRegion { ipa: 0x28000000, pa: 0x28001000, length: 0x1000, dev_property: true },
         ],
         irqs: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,],
         streams_ids: vec![]

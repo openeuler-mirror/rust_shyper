@@ -499,7 +499,7 @@ impl VAPlic {
             }
             // let hart = ((value >> 18) & 0x3F) + (current_cpu.first_cpu) as u32;
             if self.get_msimode() {
-                let mut guest = ((value >> 12) & 0x3F) + vm_id + 1;
+                let guest = ((value >> 12) & 0x3F) + vm_id + 1;
                 let eiid = value & 0xFFF;
                 if (vm_id == 0) || (vm_id == 1 && (irq == 79 || irq == 80 || irq == 81)) || (vm_id == 2 && (irq == 89 || irq == 90 || irq == 91)) {
                     self.set_target_msi(irq, pcpu.try_into().unwrap(), guest, eiid);
@@ -530,10 +530,12 @@ impl VAPlic {
         } else if irq == IRQ_IPI {
             riscv::register::hvip::trigger_software_interrupt();
         } else {
-            //
-            let target = self.get_target(irq) as usize;
+            // Using IMSIC for Interrupt Injection
+            let target = self.get_target(irq) as u32;
+            let hart = (target >> 18) & 0x3F;
+            let guest = (target >> 12) & 0x3F;
             let eiid = target & 0xFFF;
-            imsic_trigger(eiid);
+            imsic_trigger(hart, guest, eiid);
         }
     }
 }

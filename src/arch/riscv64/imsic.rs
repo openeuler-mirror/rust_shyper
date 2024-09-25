@@ -1,12 +1,12 @@
-use crate::{ csrr, csrw};
+use crate::{csrr, csrw};
 /* AIA Extension */
 pub const CSR_VSISELECT: usize = 0x250;
 pub const CSR_VSIREG: usize = 0x251;
 pub const CSR_VSTOPI: usize = 0xEB0;
 pub const CSR_VSTOPEI: usize = 0x25C;
 
-pub const IMSIC_VS: usize = 0x2800_1000;
-const IMSIC_VS_HART_STRIDE: usize = 0x2000;
+pub const IMSIC_VS: usize = 0x2800_0000;
+const IMSIC_VS_HART_STRIDE: usize = 0x4000;
 
 const XLEN: usize = usize::BITS as usize;
 const XLEN_STRIDE: usize = XLEN / 32;
@@ -46,22 +46,27 @@ fn imsic_read(reg: usize) -> u64 {
     ret
 }
 
-pub fn imsic_trigger(which: usize) {
-    let eipbyte = EIP + XLEN_STRIDE * which / XLEN;
-    let bit = which % XLEN;   
-    imsic_write(CSR_VSISELECT, eipbyte);
-    let reg = imsic_read(CSR_VSIREG);
-    imsic_write(CSR_VSIREG, (reg | 1 << bit).try_into().unwrap());
-}
-/* pub fn imsic_trigger(hart: u32, guest: u32, eiid: u32) {
-    if guest == 1{
-        unsafe {
-            core::ptr::write_volatile(imsic_vs(hart as usize) as *mut u32, eiid);
+// pub fn imsic_trigger(which: usize) {
+//     let eipbyte = EIP + XLEN_STRIDE * which / XLEN;
+//     let bit = which % XLEN;
+//     imsic_write(CSR_VSISELECT, eipbyte);
+//     let reg = imsic_read(CSR_VSIREG);
+//     imsic_write(CSR_VSIREG, (reg | 1 << bit).try_into().unwrap());
+// }
+pub fn imsic_trigger(hart: u32, guest: u32, eiid: u32) {
+    #[warn(unused_assignments)]
+    let mut addr_base = 0x2800_0000;
+    match hart {
+        0 => addr_base = 0x2800_0000,
+        1 => addr_base = 0x2800_4000,
+        2 => addr_base = 0x2800_8000,
+        3 => addr_base = 0x2800_c000,
+        _ => {
+            panic!("Unknown imsic set hart {} guest {} eiid {}", hart, guest, eiid);
         }
-    } else {
-        panic!(
-            "Unknown imsic set hart {} guest {} eiid {}",
-            hart, guest, eiid
-        );
     }
-} */
+    let addr = addr_base + 0x1000 * guest;
+    unsafe {
+        core::ptr::write_volatile(addr as *mut u32, eiid);
+    }
+}
