@@ -345,7 +345,7 @@ pub fn create_fdt_riscv64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     }
     
     #[cfg(feature = "aia")]
-    create_imsics_node(&mut fdt, "imsics@28000000", 0x28000000, 0x4000, ncpu)?;
+    create_imsics_node(&mut fdt, "imsics@28000000", 0x28000000, 0x10000, ncpu)?;
     create_clint_node(&mut fdt, "clint@2000000", 0x2000000, 0x10000, ncpu)?;
     fdt.end_node(soc)?;
 
@@ -402,8 +402,8 @@ fn create_aplic_node(fdt: &mut FdtWriter, name: &str, address: usize, len: usize
 fn create_imsics_node(fdt: &mut FdtWriter, name: &str, address: usize, len: usize, ncpu: u32) -> FdtWriterResult<()> {
     let imsic = fdt.begin_node(name)?;
     let imsic_phandle = riscv_imsic_phandle(ncpu);
-    // This value is related to the 'aia-guests' startup parameter and the 'HSTATUS_VGEIN' field
-    let aia_guests = 1;
+    // This value is related to the 'aia-guests' startup parameter
+    let aia_guests = 2;
 
     fdt.property_u32("phandle", imsic_phandle)?;
     fdt.property_u32("riscv,guest-index-bits", aia_guests)?;

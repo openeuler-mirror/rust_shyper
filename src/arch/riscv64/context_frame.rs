@@ -154,7 +154,6 @@ pub struct VmContext {
 }
 
 const HSTATUS_SPV: u64 = 1 << 7;
-const HSTATUS_VGEIN: u64 = 1 << 12;
 
 impl Default for VmContext {
     fn default() -> Self {
@@ -165,7 +164,7 @@ impl Default for VmContext {
         Self {
             fpsimd: VmCtxFpsimd::default(),
             hvip: 0,
-            hstatus: hstatus_mem | HSTATUS_SPV | HSTATUS_VGEIN,
+            hstatus: hstatus_mem | HSTATUS_SPV,
             vsstatus: SSTATUS_FS | SSTATUS_VS | SSTATUS_SD,
             vsip: 0,
             vsie: 0,

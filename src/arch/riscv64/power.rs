@@ -1,6 +1,6 @@
 use crate::{
     arch::get_trapframe_for_hart,
-    kernel::{current_cpu, CpuState, Scheduler, Vcpu, Vm},
+    kernel::{current_cpu, vcpu_set_vgein, CpuState, Scheduler, Vcpu, Vm},
 };
 use riscv::register::hstatus;
 use sbi::{
@@ -81,6 +81,7 @@ pub fn psci_vcpu_on(vcpu: &Vcpu, entry: usize, ctx: usize) {
         current_cpu().ctx_mut().unwrap().sscratch = get_trapframe_for_hart(current_cpu().id);
     }
 
+    vcpu_set_vgein();
     info!(
         "(Secondary vcpu start) vcpu on cpu {} begins running: \nhstatus: {:#x}, entry: {:#x}, use ctx:\n{}",
         current_cpu().id,

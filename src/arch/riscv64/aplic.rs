@@ -146,6 +146,7 @@ pub trait APLICTrait {
     fn setipnum_le(&self, value: u32);
     fn set_target_msi(&self, irq: u32, hart: u32, guest: u32, eiid: u32);
     fn set_target_direct(&self, irq: u32, hart: u32, prio: u32);
+    fn get_target(&self, irq: usize) -> u32;
 }
 
 #[allow(dead_code)]
@@ -328,5 +329,10 @@ impl APLICTrait for APLIC {
         unsafe {
             write_volatile(addr as *mut u32, src);
         }
+    }
+    
+    fn get_target(&self, irq: usize) -> u32 {
+        let addr = self.base + APLIC_TARGET_BASE + (irq as usize - 1) * 4;
+        unsafe { read_volatile(addr as *const u32) }
     }
 }

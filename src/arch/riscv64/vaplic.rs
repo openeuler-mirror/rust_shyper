@@ -5,6 +5,7 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use crate::arch::SourceModes;
 use crate::arch::riscv64::aplic::APLICTrait;
+use crate::arch::riscv64::imsic_trigger;
 
 use super::{GLOBAL_APLIC, IRQ_GUEST_TIMER, IRQ_IPI};
 use super::aplic::{
@@ -106,13 +107,19 @@ impl APLICTrait for VAPlic {
     }
 
     fn get_domaincfg(&self) -> u32 {
-        let inner = self.inner.lock();
-        inner.domaincfg
+        // When starting GVM and reading domaincfg, the value is 0, errors may occur.
+        // let inner = self.inner.lock();
+        // let domaincfg = inner.domaincfg;
+        // Need to re-acquire the domaincfg value from the aplic's register
+        let domaincfg = GLOBAL_APLIC.lock().get_domaincfg();
+        domaincfg
     }
 
     fn get_msimode(&self) -> bool {
-        let inner: spin::MutexGuard<VAPlicInner> = self.inner.lock();
-        ((inner.domaincfg >> 2) & 0b11) != 0
+        // let inner: spin::MutexGuard<VAPlicInner> = self.inner.lock();
+        // let domaincfg = inner.domaincfg;
+        let domaincfg = GLOBAL_APLIC.lock().get_domaincfg();
+        ((domaincfg >> 2) & 0b1) != 0
     }
 
     /// # Overview
@@ -308,6 +315,11 @@ impl APLICTrait for VAPlic {
         let mut inner = self.inner.lock();
         inner.target[irq as usize - 1] = (hart << 18) | (prio & 0xFF);
     }
+
+    fn get_target(&self, irq: usize) -> u32 {
+        let inner = self.inner.lock();
+        inner.target[irq - 1]
+    }
 }
 
 impl VAPlic {
@@ -319,7 +331,14 @@ impl VAPlic {
         if (APLIC_DOMAINCFG_BASE..=APLIC_DOMAINCFG_TOP).contains(&offset) {
             // domaincfg
             let value = self.get_domaincfg();
-            debug!("APLIC read domaincfg addr@{:#x} value {}", addr, value);
+            debug!(
+                "APLIC read domaincfg addr@{:#x} value {} bigendian {} msimode {} enabled {}",
+                addr,
+                value,
+                (value & 0b1) != 0,
+                ((value >> 2) & 0b1) != 0,
+                ((value >> 8) & 0x1) != 0,
+            );
             value
         /* } else if (APLIC_SOURCECFG_BASE..=APLIC_SOURCECFG_TOP).contains(&offset) {
             // sourcecfg
@@ -382,13 +401,13 @@ impl VAPlic {
             let msimode = ((value >> 2) & 0b1) != 0; // DM / MSI
             let bigendian = (value & 0b1) != 0; // Endianness
             let vm = active_vm().unwrap();
-            // if vm.id() == 0 {
-            self.set_domaincfg(bigendian, msimode, enabled);
-            debug!(
-                "APLIC set domaincfg write addr@{:#x} bigendian {} msimode {} enabled {}",
-                addr, bigendian, msimode, enabled
-            );
-            // }
+            if vm.id() == 0 {
+                self.set_domaincfg(bigendian, msimode, enabled);
+                debug!(
+                    "APLIC set domaincfg write addr@{:#x} bigendian {} msimode {} enabled {}",
+                    addr, bigendian, msimode, enabled
+                );
+            }
         } else if (APLIC_SOURCECFG_BASE..=APLIC_SOURCECFG_TOP).contains(&offset) {
             // sourcecfg
             let irq = ((offset - APLIC_SOURCECFG_BASE) / 4) + 1;
@@ -411,10 +430,11 @@ impl VAPlic {
                     _ => panic!("Unknown sourcecfg mode"),
                 };
                 let vm = active_vm().unwrap();
-                //if vm.id() == 0 || vm.id() != 0 && (irq == 19 || irq == 20 || irq == 21) {
+                let vm_id = vm.id();
+                if (vm_id == 0) || (vm_id == 1 && (irq == 79 || irq == 80 || irq == 81)) || (vm_id == 2 && (irq == 89 || irq == 90 || irq == 91)) {
                     self.set_sourcecfg(irq as u32, mode);
                     debug!("APLIC set sourcecfg write addr@{:#x} irq {} mode {}", addr, irq, value);
-                //}
+                }
             }
         } else if (APLIC_S_MSIADDR_BASE..=APLIC_S_MSIADDR_TOP).contains(&offset) {
             // smsiaddrcfg
@@ -444,13 +464,13 @@ impl VAPlic {
             // clrie
             let irqidx = (offset - APLIC_CLR_ENABLE_BASE) / 4;
             let vm = active_vm().unwrap();
-            //if vm.id() == 0 {
+            if vm.id() == 0 {
                 self.set_enable(irqidx, value, false);
                 debug!(
                     "APLIC set clr_enable write addr@{:#x} irqidx {} value {}",
                     addr, irqidx, value
                 );
-            //}
+            }
         } else if (APLIC_CLR_ENABLE_NUM_BASE..=APLIC_CLR_ENABLE_NUM_TOP).contains(&offset) {
             // clrienum
             self.clr_enable_num(value);
@@ -472,30 +492,31 @@ impl VAPlic {
             let hart = (value >> 18) & 0x3F;
             // Retrieve the actual transmitted HART
             let vm = active_vm().unwrap();
+            let vm_id = vm.id() as u32;
             let mut pcpu: usize = 0;
             if let Some(vcpu) = vm.vcpu(hart.try_into().unwrap()) {
                 pcpu = vcpu.phys_id();
             }
             // let hart = ((value >> 18) & 0x3F) + (current_cpu.first_cpu) as u32;
             if self.get_msimode() {
-                let guest = ((value >> 12) & 0x3F) + 1;
+                let mut guest = ((value >> 12) & 0x3F) + vm_id + 1;
                 let eiid = value & 0xFFF;
-                //if vm.id() == 0 || vm.id() != 0 && (irq == 19 || irq == 20 || irq == 21) {
+                if (vm_id == 0) || (vm_id == 1 && (irq == 79 || irq == 80 || irq == 81)) || (vm_id == 2 && (irq == 89 || irq == 90 || irq == 91)) {
                     self.set_target_msi(irq, pcpu.try_into().unwrap(), guest, eiid);
                     debug!(
                         "APLIC set msi target write addr@{:#x} irq {} hart {} guest {} eiid {}",
                         addr, irq, pcpu, guest, eiid
                     );
-                //}
+                }
             } else {
                 let prio = value & 0xFF;
-                //if vm.id() == 0 {
+                if vm_id == 0 {
                     self.set_target_direct(irq, pcpu.try_into().unwrap(), prio);
                     debug!(
                         "APLIC set direct target write addr@{:#x} irq {} hart {} prio {}",
                         addr, irq, pcpu, prio
                     );
-                //}
+                }
             }
         } else {
             panic!("invalid plic register access: 0x{:x} offset: 0x{:x}", addr, offset);
@@ -508,16 +529,13 @@ impl VAPlic {
             unsafe { sie::clear_stimer() };
         } else if irq == IRQ_IPI {
             riscv::register::hvip::trigger_software_interrupt();
+        } else {
+            //
+            let target = self.get_target(irq) as usize;
+            let eiid = target & 0xFFF;
+            imsic_trigger(eiid);
         }
-        // else {
-        //     use crate::arch::imsic_trigger;
-        //     imsic_trigger(1, 1, irq.try_into().unwrap());
-        //     warn!("external_intr {}", irq);
-        // }
     }
-
-    // // Check and inject a APLIC interrupt to VM
-    // fn inject_external_intr(&self, irq: usize) {}
 }
 
 #[allow(unused_variables)]

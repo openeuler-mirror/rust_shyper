@@ -16,6 +16,7 @@ const EIP: usize = 0x80;
 pub const fn imsic_vs(hart: usize) -> usize {
     IMSIC_VS + IMSIC_VS_HART_STRIDE * hart
 }
+
 pub fn imsic_write(reg: usize, val: usize) {
     #[allow(unused_unsafe)]
     unsafe {
@@ -30,7 +31,6 @@ pub fn imsic_write(reg: usize, val: usize) {
 }
 
 // Read from an IMSIC CSR
-
 fn imsic_read(reg: usize) -> u64 {
     let ret: u64;
     #[allow(unused_unsafe)]
@@ -45,10 +45,15 @@ fn imsic_read(reg: usize) -> u64 {
     }
     ret
 }
-// VS-Mode IMSIC CSRs
 
-
-pub fn imsic_trigger(hart: u32, guest: u32, eiid: u32) {
+pub fn imsic_trigger(which: usize) {
+    let eipbyte = EIP + XLEN_STRIDE * which / XLEN;
+    let bit = which % XLEN;   
+    imsic_write(CSR_VSISELECT, eipbyte);
+    let reg = imsic_read(CSR_VSIREG);
+    imsic_write(CSR_VSIREG, (reg | 1 << bit).try_into().unwrap());
+}
+/* pub fn imsic_trigger(hart: u32, guest: u32, eiid: u32) {
     if guest == 1{
         unsafe {
             core::ptr::write_volatile(imsic_vs(hart as usize) as *mut u32, eiid);
@@ -59,5 +64,4 @@ pub fn imsic_trigger(hart: u32, guest: u32, eiid: u32) {
             hart, guest, eiid
         );
     }
-}
-
+} */

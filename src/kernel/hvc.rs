@@ -132,7 +132,7 @@ pub const HVC_IRQ: usize = 32 + 0x10;
 #[cfg(all(feature = "qemu", target_arch = "aarch64"))]
 pub const HVC_IRQ: usize = 32 + 0x20;
 #[cfg(all(feature = "qemu", target_arch = "riscv64"))]
-pub const HVC_IRQ: usize = 51;
+pub const HVC_IRQ: usize = 69;
 #[cfg(feature = "rk3588")]
 pub const HVC_IRQ: usize = 32 + 0x10;
 

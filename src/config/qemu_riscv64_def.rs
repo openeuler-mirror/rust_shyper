@@ -56,7 +56,7 @@ pub fn mvm_config_init() {
             name: String::from("virtio_console@40001000"),
             base_ipa: 0x4000_1000,
             length: 0x1000,
-            irq_id: 46,
+            irq_id: 66,
             cfg_list: vec![1, 0x40001000],
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
@@ -66,7 +66,7 @@ pub fn mvm_config_init() {
             name: String::from("virtio_console@40002000"),
             base_ipa: 0x4000_2000,
             length: 0x1000,
-            irq_id: 47,
+            irq_id: 67,
             cfg_list: vec![2, 0x4000_2000], // Address of the peer vm and the peer virtio-console
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
@@ -76,7 +76,7 @@ pub fn mvm_config_init() {
             name: String::from("virtio_net@40003000"),
             base_ipa: 0x4000_3000,
             length: 0x1000,
-            irq_id: 48,
+            irq_id: 68,
             cfg_list: vec![0x74, 0x56, 0xaa, 0x0f, 0x47, 0xd0],
             emu_type: EmuDeviceType::EmuDeviceTVirtioNet,
             mediated: false,
@@ -108,6 +108,8 @@ pub fn mvm_config_init() {
             PassthroughRegion { ipa: 0x10000000, pa: 0x10000000, length: 0x1000, dev_property: true },
             // RTC
             PassthroughRegion { ipa: 0x101000, pa: 0x101000, length: 0x1000, dev_property: true },
+            // IMSIC
+            PassthroughRegion { ipa: 0x28000000, pa: 0x28000000, length: 0x10000, dev_property: true },
         ],
         irqs: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,],
         streams_ids: vec![]
