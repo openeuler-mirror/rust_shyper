@@ -131,8 +131,13 @@ pub const HVC_IRQ: usize = 32 + 0x20;
 pub const HVC_IRQ: usize = 32 + 0x10;
 #[cfg(all(feature = "qemu", target_arch = "aarch64"))]
 pub const HVC_IRQ: usize = 32 + 0x20;
+// The reason for modifying the IRQs of virtio_net and virtio_console devices:
+// When using the original IRQ numbers, virtual instruction exceptions were encountered.
+// By printing the available range of interrupt numbers obtained within QEMU,
+// it was found that the original IRQ numbers were not within this range.
+// Therefore, the IRQs were modified (The available IRQ range is: 1-11; 16-18; 32-35; 64-95).
 #[cfg(all(feature = "qemu", target_arch = "riscv64"))]
-pub const HVC_IRQ: usize = 51;
+pub const HVC_IRQ: usize = 69;
 #[cfg(feature = "rk3588")]
 pub const HVC_IRQ: usize = 32 + 0x10;
 

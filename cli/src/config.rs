@@ -78,6 +78,7 @@ pub enum EmuDeviceType {
     EMU_DEVICE_T_GICR,
     EMU_DEVICE_T_META,
     EMU_DEVICE_T_PLIC,
+    EMU_DEVICE_T_APLIC,
 }
 
 #[allow(non_camel_case_types)]
@@ -88,6 +89,7 @@ pub enum DtbDeviceType {
     DTB_DEVICE_T_GICC,
     DTB_DEVICE_T_GICR,
     DTB_DEVICE_T_PLIC,
+    DTB_DEVICE_T_APLIC,
 }
 
 // parse hex string to u64, like: "0x8000" -> 32768

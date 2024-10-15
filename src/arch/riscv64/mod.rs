@@ -6,6 +6,12 @@ pub mod interface;
 pub mod interrupt;
 mod page_fault;
 mod page_table;
+// test @CHonghao
+#[cfg(feature = "aia")]
+mod aplic;
+#[cfg(feature = "aia")]
+mod imsic;
+#[cfg(feature = "plic")]
 mod plic;
 pub mod power;
 pub mod regs;
@@ -17,8 +23,11 @@ mod smmu;
 mod start;
 pub mod timer;
 pub mod tlb;
+#[cfg(feature = "aia")]
+mod vaplic;
 mod vcpu;
 mod vm;
+#[cfg(feature = "plic")]
 mod vplic;
 
 use alloc::sync::Arc;
@@ -26,7 +35,12 @@ pub use cache::*;
 pub use interface::*;
 pub use interrupt::*;
 pub use context_frame::*;
+#[cfg(feature = "plic")]
 pub use plic::*;
+#[cfg(feature = "aia")]
+pub use aplic::*;
+#[cfg(feature = "aia")]
+pub use imsic::*;
 pub use regs::*;
 #[cfg(not(feature = "sbi_legacy"))]
 pub use sbicall::*;
@@ -35,7 +49,10 @@ pub use sbicall_legacy::*;
 pub use start::*;
 pub use timer::*;
 pub use tlb::*;
+#[cfg(feature = "plic")]
 pub use vplic::*;
+#[cfg(feature = "aia")]
+pub use vaplic::*;
 pub use page_table::*;
 pub use power::*;
 pub use cpu::*;

@@ -392,6 +392,7 @@ pub fn vcpu_run(announce: bool) -> ! {
         trace!("Prepare to enter context vm entry...");
         let sepc = current_cpu().ctx_mut().unwrap().sepc;
         let sscratch = current_cpu().ctx_mut().unwrap().sscratch;
+        vcpu_set_vgein();
         trace!(
             "sepc: {:#x}, sscratch: {:#x}, hgatp: {:#x}, hstatus: {:#x}, sstatus: {:#x}, sie: {:#x}",
             sepc,
@@ -417,4 +418,12 @@ pub fn vcpu_run(announce: bool) -> ! {
     unsafe {
         context_vm_entry(current_cpu().ctx as usize);
     }
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn vcpu_set_vgein() {
+    let vm_id = active_vm_id();
+    let vgein = (vm_id + 1) << 12;
+    let hstatusval = hstatus::read();
+    hstatus::write(hstatusval & 0xFFFFC0FFF | vgein);
 }

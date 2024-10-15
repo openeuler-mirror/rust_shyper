@@ -17,7 +17,7 @@ ifeq ($(ARCH), aarch64)
 else ifeq ($(ARCH), riscv64)
 	CROSS_COMPILE := riscv64-linux-gnu-
 	TEXT_START := 0x80200000
-	VM0_IMAGE_PATH := "./image/Image_5.15.100-riscv-starfive"
+	VM0_IMAGE_PATH := "./image/Image-6.10-rc1"
 else
 $(error bad arch: $(ARCH))
 endif
@@ -37,6 +37,15 @@ else ifneq ($(GIC_VERSION),2)
 $(error Bad gic version)
 endif
 
+IRQ ?= plic
+AIA_GUESTS ?= 3
+
+ifeq ($(IRQ), plic)
+FEATURES += plic
+else ifeq ($(IRQ), aia)
+FEATURES += aia
+endif
+
 TEXT_START ?= 0x83000000
 VM0_IMAGE_PATH ?= "./image/L4T"
 
@@ -54,8 +63,13 @@ QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-
 MKIMAGE_ARCH = arm64
 else ifeq (${ARCH}, riscv64)
 # -global virtio-mmio.force-legacy=false option for disable legacy，i.e. using the latest virtio version
-QEMU_COMMON_OPTIONS = -machine virt\
-	-m 8g -smp 4 -display none -bios default \
+
+ifeq ($(IRQ), plic)
+QEMU_COMMON_OPTIONS = -machine virt
+else ifeq ($(IRQ), aia)
+QEMU_COMMON_OPTIONS = -machine virt,aia=aplic-imsic,aia-guests=$(AIA_GUESTS)
+endif
+QEMU_COMMON_OPTIONS += -m 8g -smp 4 -display none -bios default \
 	-kernel ${TARGET_DIR}/${IMAGE}.bin
 QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,netdev=n0
 QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
@@ -86,7 +100,7 @@ else ifeq ($(ARCH), riscv64)
 		  -ffreestanding
 endif
 
-export BOARD CROSS_COMPILE CFLAGS
+export BOARD CROSS_COMPILE CFLAGS AIA_GUESTS = $(AIA_GUESTS)
 
 CARGO_ACTION ?= build
 

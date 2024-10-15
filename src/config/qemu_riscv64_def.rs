@@ -27,32 +27,51 @@ pub fn mvm_config_init() {
 
     // vm0 emu
     let emu_dev_config = vec![
-        // Defines the start address and length of the PLIC device
-        VmEmulatedDeviceConfig {
-            name: String::from("plic"),
-            base_ipa: 0xc000000,
-            length: 0x600000,
-            irq_id: 0,
-            cfg_list: Vec::new(),
-            emu_type: EmuDeviceType::EmuDeviceTPlic,
-            mediated: false,
+        #[cfg(feature = "plic")]{
+            // Defines the start address and length of the PLIC device
+            VmEmulatedDeviceConfig {
+                name: String::from("plic"),
+                base_ipa: 0xc000000,
+                length: 0x600000,
+                irq_id: 0,
+                cfg_list: Vec::new(),
+                emu_type: EmuDeviceType::EmuDeviceTPlic,
+                mediated: false,
+            }
         },
-        // hvc2
+        #[cfg(feature = "aia")]{
+            // Defines the start address and length of the APLIC device
+            VmEmulatedDeviceConfig {
+                name: String::from("aplic"),
+                base_ipa: 0xd000000,
+                length: 0x8000,
+                irq_id: 0,
+                cfg_list: Vec::new(),
+                emu_type: EmuDeviceType::EmuDeviceTAPlic,
+                mediated: false,
+            }
+        },
+        // The reason for modifying the IRQs of virtio_net and virtio_console devices: 
+        // When using the original IRQ numbers, virtual instruction exceptions were encountered. 
+        // By printing the available range of interrupt numbers obtained within QEMU, 
+        // it was found that the original IRQ numbers were not within this range. 
+        // Therefore, the IRQs were modified (The available IRQ range is: 1-11; 16-18; 32-35; 64-95).
+        // hvc1
         VmEmulatedDeviceConfig {
             name: String::from("virtio_console@40001000"),
             base_ipa: 0x4000_1000,
             length: 0x1000,
-            irq_id: 46,
+            irq_id: 66,
             cfg_list: vec![1, 0x40001000],
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
         },
-        // hvc1
+        // hvc0
         VmEmulatedDeviceConfig {
             name: String::from("virtio_console@40002000"),
             base_ipa: 0x4000_2000,
             length: 0x1000,
-            irq_id: 47,
+            irq_id: 67,
             cfg_list: vec![2, 0x4000_2000], // Address of the peer vm and the peer virtio-console
             emu_type: EmuDeviceType::EmuDeviceTVirtioConsole,
             mediated: false,
@@ -60,9 +79,9 @@ pub fn mvm_config_init() {
         // virtual eth0
         VmEmulatedDeviceConfig {
             name: String::from("virtio_net@40003000"),
-            base_ipa: 0x40003000,
+            base_ipa: 0x4000_3000,
             length: 0x1000,
-            irq_id: 48,
+            irq_id: 68,
             cfg_list: vec![0x74, 0x56, 0xaa, 0x0f, 0x47, 0xd0],
             emu_type: EmuDeviceType::EmuDeviceTVirtioNet,
             mediated: false,

@@ -249,6 +249,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fdt"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "784a4df722dc6267a04af36895398f59d21d07dce47232adf31ec0ff2fa45e67"
+
+[[package]]
 name = "fdt-rs"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -577,6 +583,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "riscv-decode"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bec7a6dc0b0bb96a4d23271864a45c0d24dcd9dde2a1b630a35f79fa29c588bf"
+
+[[package]]
 name = "rust_shyper"
 version = "0.1.0"
 dependencies = [
@@ -585,12 +597,14 @@ dependencies = [
  "built",
  "cfg-if",
  "chrono",
- "fdt",
+ "fdt 0.1.0",
+ "fdt 0.1.5",
  "fdt-rs",
  "gethostname",
  "log",
  "memoffset 0.8.0",
  "riscv 0.10.1 (git+https://github.com/Zera-Algorithm/riscv)",
+ "riscv-decode",
  "rustsbi",
  "sbi",
  "smccc",

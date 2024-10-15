@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 /// For some SBI operations, Hypervisor emulation is required instead of
 /// directly invoking the M-state SBI software.
 use rustsbi::{
-    init_hsm, init_ipi, init_pmu, init_remote_fence, init_reset, init_timer,
+    init_hsm, init_ipi, /*init_pmu,*/ init_remote_fence, init_reset, init_timer,
     spec::{
         base::{impl_id::KVM, EID_BASE, GET_MARCHID, GET_MIMPID, GET_MVENDORID},
         binary::SbiRet,
@@ -355,7 +355,7 @@ pub fn init_ecall_handler() {
     init_remote_fence(&RFNC);
     init_hsm(&HSM);
     init_reset(&SRST);
-    init_pmu(&PMU);
+    //init_pmu(&PMU);
     init_legacy_stdio(&STDIO);
 }
 

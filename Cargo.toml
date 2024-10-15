@@ -34,6 +34,8 @@ built = { version = "0.6.1", features = [] }
 gethostname = "0.4.3"
 
 [dependencies]
+riscv-decode = "0.2.1"
+fdt_print = { package = "fdt", version = "0.1.5", features =["pretty-printing"] }
 vm-fdt = { git = "https://github.com/OhmR/vm-fdt" }
 fdt = { git = "https://github.com/Zera-Algorithm/libfdt-rs" }
 log = { version = "0.4", features = [
@@ -69,6 +71,7 @@ version = "x"
 default-features = false
 
 [features]
+default = ["aia", "sbi_legacy"]
 tx2 = ["ns16550"]
 qemu = ["pl011"]
 pi4 = ["pl011"]
@@ -85,3 +88,5 @@ unilib = []
 memrsv = []
 doc = []
 sbi_legacy = []
+plic = []
+aia = []

@@ -159,7 +159,6 @@ impl Default for VmContext {
     fn default() -> Self {
         let hstatus_mem: u64;
         csrr!(hstatus_mem, hstatus);
-
         // Set **initial values** for each privilege level register
         // of the VM to prevent Linux startup errors
         Self {
