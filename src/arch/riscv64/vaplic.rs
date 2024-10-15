@@ -95,10 +95,7 @@ impl APLICTrait for VAPlic {
     fn set_domaincfg(&self, bigendian: bool, msimode: bool, enabled: bool) {
         // Rust library assures that converting a bool into u32 will use
         // 1 for true and 0 for false
-
-        // test @ CHonghao
         GLOBAL_APLIC.lock().set_domaincfg(bigendian, msimode, enabled);
-
         let mut inner = self.inner.lock();
         let enabled = u32::from(enabled);
         let msimode = u32::from(msimode);
@@ -167,18 +164,6 @@ impl APLICTrait for VAPlic {
     /// * `addr` the physical address for messages. This MUST be page aligned.
     fn set_msiaddr(&self, addr: usize) {
         let mut inner = self.inner.lock();
-        // match mode {
-        //     APLICMode::Machine => {
-        //         GLOBAL_APLIC.lock().set_msiaddr(addr);
-        //         inner.mmsiaddrcfg = (addr >> 12) as u32;
-        //         inner.mmsiaddrcfgh = 0;
-        //     }
-        //     APLICMode::Supervisor => {
-        //         GLOBAL_APLIC.lock().set_msiaddr(addr);
-        //         inner.smsiaddrcfg = (addr >> 12) as u32;
-        //         inner.smsiaddrcfgh = 0;
-        //     }
-        // }
         GLOBAL_APLIC.lock().set_msiaddr(addr);
         inner.smsiaddrcfg = (addr >> 12) as u32;
         inner.smsiaddrcfgh = 0;
@@ -196,10 +181,6 @@ impl APLICTrait for VAPlic {
     /// * `irq` the interrupt number
     /// * `pending` true: set the bit to 1, false: clear the bit to 0
     fn set_pending(&self, irqidx: usize, value: u32, pending: bool) {
-        // (&mut self, irq: u32, pending: bool) {
-        // assert!(irq > 0 && irq < 1024);
-        // let irqidx = irq as usize / 32;
-        // let irqbit = irq as usize % 32;
         assert!(irqidx < 32);
         GLOBAL_APLIC.lock().set_pending(irqidx, value, pending);
         let mut inner = self.inner.lock();
@@ -249,18 +230,12 @@ impl APLICTrait for VAPlic {
     /// * `irq` the interrupt number
     /// * `enabled` true: enable interrupt, false: disable interrupt
     fn set_enable(&self, irqidx: usize, value: u32, enabled: bool) {
-        //  (&mut self, irq: u32, enabled: bool) {
-        //  assert!(irq > 0 && irq < 1024);
-        //  let irqidx = irq as usize / 32;
-        //  let irqbit = irq as usize % 32;
         assert!(irqidx < 32);
         GLOBAL_APLIC.lock().set_enable(irqidx, value, enabled);
         let mut inner = self.inner.lock();
         if enabled {
-            // self.setienum = irq;
             inner.setie[irqidx] = value;
         } else {
-            // self.clrienum = irq;
             inner.clrie[irqidx] = value;
         }
     }
@@ -332,7 +307,7 @@ impl VAPlic {
             // domaincfg
             let value = self.get_domaincfg();
             debug!(
-                "APLIC read domaincfg addr@{:#x} value {} bigendian {} msimode {} enabled {}",
+                "APLIC read domaincfg addr@{:#x} value 0x{:x} bigendian {} msimode {} enabled {}",
                 addr,
                 value,
                 (value & 0b1) != 0,
@@ -340,6 +315,7 @@ impl VAPlic {
                 ((value >> 8) & 0x1) != 0,
             );
             value
+        // When adapting to other versions of the Linux kernel, if you need to set other registers, you can uncomment the corresponding comments below for addition.
         /* } else if (APLIC_SOURCECFG_BASE..=APLIC_SOURCECFG_TOP).contains(&offset) {
             // sourcecfg
             panic!("sourcecfg Unexpected addr {:#x}", addr);
@@ -430,8 +406,7 @@ impl VAPlic {
                     _ => panic!("Unknown sourcecfg mode"),
                 };
                 let vm = active_vm().unwrap();
-                let vm_id = vm.id();
-                if (vm_id == 0) || (vm_id == 1 && (irq == 79 || irq == 80 || irq == 81)) || (vm_id == 2 && (irq == 89 || irq == 90 || irq == 91)) {
+                if vm.has_interrupt(irq) {
                     self.set_sourcecfg(irq as u32, mode);
                     debug!("APLIC set sourcecfg write addr@{:#x} irq {} mode {}", addr, irq, value);
                 }
@@ -501,7 +476,7 @@ impl VAPlic {
             if self.get_msimode() {
                 let guest = ((value >> 12) & 0x3F) + vm_id + 1;
                 let eiid = value & 0xFFF;
-                if (vm_id == 0) || (vm_id == 1 && (irq == 79 || irq == 80 || irq == 81)) || (vm_id == 2 && (irq == 89 || irq == 90 || irq == 91)) {
+                if vm.has_interrupt(irq as usize) {
                     self.set_target_msi(irq, pcpu.try_into().unwrap(), guest, eiid);
                     debug!(
                         "APLIC set msi target write addr@{:#x} irq {} hart {} guest {} eiid {}",
@@ -531,7 +506,7 @@ impl VAPlic {
             riscv::register::hvip::trigger_software_interrupt();
         } else {
             // Using IMSIC for Interrupt Injection
-            let target = self.get_target(irq) as u32;
+            let target = self.get_target(irq);
             let hart = (target >> 18) & 0x3F;
             let guest = (target >> 12) & 0x3F;
             let eiid = target & 0xFFF;

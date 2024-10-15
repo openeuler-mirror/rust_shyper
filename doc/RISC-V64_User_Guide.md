@@ -8,9 +8,11 @@
 
 * Rust
 * riscv64-linux-gnu-gcc 交叉编译工具链
+
     ```shell
     sudo apt install gcc-riscv64-linux-gnu
     ```
+
 * cargo-binutils(可选)
 * qemu-system-riscv64 8.2.0 及以上版本（低版本不支持riscv的虚拟化扩展）
 
@@ -26,7 +28,7 @@ MVM是用于对其他虚拟机进行管理的管理VM，运行Linux，可以通�
 
 本项目使用的Linux rootfs是以Ubuntu base image为基础，通过在riscv64平台Linux（如Qemu + riscv64裸Linux）上chroot进入镜像经过一系列安装配置来构建的。如果对这些操作不熟悉的话，可以使用现成的镜像：
 
-* https://bhpan.buaa.edu.cn/link/AAF36D01FF739449A19B7D28CC5639F555
+* <https://bhpan.buaa.edu.cn/link/AAF36D01FF739449A19B7D28CC5639F555>
 * 文件名：vm0_ubuntu_gvm.img
 * 有效期限：2040-01-01 20:11
 * 提取码：2Axz
@@ -183,7 +185,7 @@ GVM的启动需要依赖内核模块（`tools/shyper_riscv64.ko`）和CLI程序�
 
 在RISC-V64环境下，编译CLI程序，得到 `shyper` 可执行文件。
 
-> 可参考 https://ubuntu.com/download/risc-v 配置一个只运行Linux的RISC-V虚拟机，然后在这个环境下编译RISC-V的依赖项。
+> 可参考 <https://ubuntu.com/download/risc-v> 配置一个只运行Linux的RISC-V虚拟机，然后在这个环境下编译RISC-V的依赖项。
 
 **Step 1**: 安装内核模块
 
@@ -321,7 +323,7 @@ chmod +x shyper
     "dtb_device" : {
         "num": 0,
         "dtb_device_list": [
-	    ]
+     ]
     }
 }
 ```
@@ -367,3 +369,110 @@ MVM绑定的网卡地址为10.0.0.1(eth0，作为GVM的网关)和10.0.2.15(eth1,
 MVM可以通过10.0.0.0/24网段与GVM通信，并通过10.0.2.2网关与外网通信。具体的网络拓扑图如下图所示：
 
 ![alt text](img/network-topo.png)
+
+## 通过AIA启动Rust-Shyper
+
+> 本章节主要说明通过AIA启动的方法以及有关的配置（与PLIC不同）
+
+* 软件依赖：升级qemu版本至9.0.2版本
+* 通过AIA启动的现成rootfs镜像：
+  * 链接：<https://pan.baidu.com/s/1UXlWRf0WFmFndFUj2-bUpQ?pwd=skst>
+  * 提取码：skst
+* 使用AIA运行Rust-Shyper的运行demo：<https://asciinema.org/a/efUFEcW7VID11SQFJP3T919xl>
+
+### Rust-Shyper的启动
+
+使用如下命令编译使用AIA的RISC-V版本的Rust-Shyper：
+
+```shell
+ARCH=riscv64 IRQ=aia AIA_GUESTS=3 make
+```
+
+使用如下命令运行：
+
+```shell
+ARCH=riscv64 IRQ=aia AIA_GUESTS=3 make run
+```
+
+参数解析：
+
+* IRQ==[plic|aia]：选择中断的方式，当没有输入该参数时，默认是plic
+
+* AIA_GUESTS=nnn：需要为每个HART模拟的interrupt file的数量，也是将要运行VM的数量，当没有输入该参数时，默认是3
+
+### 启动GVM时的配置
+
+本目录下（`./vm1_config_riscv_aia.json`）提供了配置文件的示例，与PLIC不同的配置是需要将模拟中断的设备替换为APLIC：
+
+```json
+            {
+                "name": "aplic@d000000",
+                "base_ipa": "0xd000000",
+                "length": "0x8000",
+                "cfg_num": 2,
+                "cfg_list": [
+                    0,
+                    0
+                ],
+                "type": "EMU_DEVICE_T_APLIC"
+            },
+```
+
+### VM多核启动时，关于IMSIC的地址映射
+
+由于在多核启动时，会向不同的hart中写IPI中断号，但由于GuestOS不认为自己处于虚拟化模式下，会访问每个hart的S-mode的interrupt file，所以需要建立地址映射，以便可以找到正确的guest interrupt file。
+
+若当前hart的分配情况为：
+
+* MVM：hart0
+* GVM：hart1、2、3
+* GVM：hart2、3
+
+由于MVM是单核启动，所以无需建立地址映射。
+
+GVM1应建立以下映射：
+
+* 由于使用的是hart1、2、3，其正确的guest interrupt file地址应为0x28006000、0x2800a000、0x2800e000，但VM会认为自己的所用的是hart0、1、2，他会访问的地址是0x28000000、0x28004000、0x28008000，所以应建立以下映射关系，VM才会正确访问到对应的interrupt file
+
+```json
+ "passthrough_device": {
+        "passthrough_device_list": [
+            {
+                "base_ipa": "0x28000000",
+                "base_pa": "0x28006000",
+                "length": "0x1000"
+            },
+            {
+                "base_ipa": "0x28004000",
+                "base_pa": "0x2800a000",
+                "length": "0x1000"
+            },
+            {
+                "base_ipa": "0x28008000",
+                "base_pa": "0x2800e000",
+                "length": "0x1000"
+            }
+        ]
+    },
+```
+
+GVM2:
+
+  ```json
+   "passthrough_device": {
+          "passthrough_device_list": [
+              {
+                  "base_ipa": "0x28000000",
+                  "base_pa": "0x2800b000",
+                  "length": "0x1000"
+              },
+              {
+                  "base_ipa": "0x28004000",
+                  "base_pa": "0x2800f000",
+                  "length": "0x1000"
+              },
+          ]
+      },
+  ```
+
+> 注：以上映射地址会随aia-guests的值变化而变化

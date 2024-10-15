@@ -330,9 +330,9 @@ impl APLICTrait for APLIC {
             write_volatile(addr as *mut u32, src);
         }
     }
-    
+
     fn get_target(&self, irq: usize) -> u32 {
-        let addr = self.base + APLIC_TARGET_BASE + (irq as usize - 1) * 4;
+        let addr = self.base + APLIC_TARGET_BASE + (irq - 1) * 4;
         unsafe { read_volatile(addr as *const u32) }
     }
 }

@@ -8,6 +8,7 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+#[cfg(target_arch = "riscv64")]
 use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
 use alloc::string::String;
@@ -42,7 +43,7 @@ pub fn cstr_to_rust_string(s: *mut myctypes::c_char, len: i32) -> String {
         ret.push(c);
         unsafe { s = s.add(1) };
     }
-    return ret;
+    ret
 }
 
 // Remove ext from riscv isa, return the modified isa
@@ -53,7 +54,7 @@ pub fn cstr_to_rust_string(s: *mut myctypes::c_char, len: i32) -> String {
 pub fn remove_riscv_ext(isa: String, ext: String) -> String {
     let res = isa;
     if ext.len() == 1 {
-        if let Some(pos) = res.find("_") {
+        if let Some(pos) = res.find('_') {
             String::from(&res[0..4]) + &res[4..pos].replace(ext.as_str(), "") + &res[pos..]
         } else {
             String::from(&res[0..4]) + &res[4..].replace(ext.as_str(), "")
@@ -198,9 +199,6 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
     // #[cfg(all(feature = "qemu", target_arch = "riscv64"))]
     #[cfg(target_arch = "riscv64")]
     {
-        // Print the device_tree after init
-        // let host_fdt = unsafe { Fdt::from_ptr(dtb as *const u8) }.unwrap();
-        // debug!("first fdt: \n{:?}", host_fdt);
         fdt_pack(dtb);
         fdt_enlarge(dtb);
         fdt_clear_initrd(dtb);
@@ -224,7 +222,12 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
 
         // modify the isa given by fdt
         let str_len: i32 = 0;
-        let pstr: *mut myctypes::c_char = fdt_get_property_string(dtb, "/cpus/cpu@0\0".as_ptr(), "riscv,isa\0".as_ptr(), &str_len as *const myctypes::c_int as *mut myctypes::c_int);
+        let pstr: *mut myctypes::c_char = fdt_get_property_string(
+            dtb,
+            "/cpus/cpu@0\0".as_ptr(),
+            "riscv,isa\0".as_ptr(),
+            &str_len as *const myctypes::c_int as *mut myctypes::c_int,
+        );
         assert_ne!(pstr as u64, 0);
         let isa = cstr_to_rust_string(pstr, str_len);
         info!("riscv isa = {}", isa);
@@ -234,7 +237,12 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         let isa = remove_riscv_ext(isa, String::from("sstc"));
         info!("modified riscv isa = {}", isa);
         let node = fdt_find_node(dtb, "/cpus/cpu@0\0".as_ptr());
-        fdt_add_property_string(dtb, node, "riscv,isa\0".as_ptr(), (isa.as_str().to_owned() + "\0").as_ptr());
+        fdt_add_property_string(
+            dtb,
+            node,
+            "riscv,isa\0".as_ptr(),
+            (isa.as_str().to_owned() + "\0").as_ptr(),
+        );
 
         // Delete unused hart of MVM (MVM only owns hart 0)
         assert_eq!(fdt_remove_node(dtb, "/cpus/cpu@1\0".as_ptr()), 0);
@@ -343,7 +351,7 @@ pub fn create_fdt_riscv64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
             _ => {}
         }
     }
-    
+
     #[cfg(feature = "aia")]
     create_imsics_node(&mut fdt, "imsics@28000000", 0x28000000, 0x10000, ncpu)?;
     create_clint_node(&mut fdt, "clint@2000000", 0x2000000, 0x10000, ncpu)?;
@@ -663,7 +671,7 @@ fn create_cpu_node_riscv(fdt: &mut FdtWriter, config: &VmConfigEntry) -> FdtWrit
         #[cfg(feature = "aia")]
         fdt.property_string(
             "riscv,isa",
-            "rv64imafdch_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_smaia_ssaia_svadu",
+            "rv64imafdc_zicntr_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zca_zcd_zba_zbb_zbc_zbs_smaia_ssaia_svadu",
         )?;
         fdt.property_string("mmu-type", "riscv,sv57")?;
 

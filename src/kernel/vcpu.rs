@@ -27,7 +27,6 @@ use crate::kernel::{current_cpu, interrupt_vm_inject, vm_if_set_state};
 use crate::kernel::{active_vcpu_id, active_vm_id};
 use crate::utils::memcpy;
 
-
 use super::{CpuState, Vm, VmType};
 
 #[derive(Clone, Copy, Debug)]
@@ -421,6 +420,7 @@ pub fn vcpu_run(announce: bool) -> ! {
     }
 }
 
+#[cfg(target_arch = "riscv64")]
 pub fn vcpu_set_vgein() {
     let vm_id = active_vm_id();
     let vgein = (vm_id + 1) << 12;

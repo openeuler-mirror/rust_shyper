@@ -1,3 +1,4 @@
+use crate::alloc::string::ToString;
 use crate::{csrr, csrw};
 /* AIA Extension */
 pub const CSR_VSISELECT: usize = 0x250;
@@ -7,6 +8,7 @@ pub const CSR_VSTOPEI: usize = 0x25C;
 
 pub const IMSIC_VS: usize = 0x2800_0000;
 const IMSIC_VS_HART_STRIDE: usize = 0x4000;
+const IMSIC_MMIO_PAGE_SIZE: usize = 0x1000;
 
 const XLEN: usize = usize::BITS as usize;
 const XLEN_STRIDE: usize = XLEN / 32;
@@ -46,25 +48,26 @@ fn imsic_read(reg: usize) -> u64 {
     ret
 }
 
-// pub fn imsic_trigger(which: usize) {
-//     let eipbyte = EIP + XLEN_STRIDE * which / XLEN;
-//     let bit = which % XLEN;
-//     imsic_write(CSR_VSISELECT, eipbyte);
-//     let reg = imsic_read(CSR_VSIREG);
-//     imsic_write(CSR_VSIREG, (reg | 1 << bit).try_into().unwrap());
-// }
-pub fn imsic_trigger(hart: u32, guest: u32, eiid: u32) {
-    #[warn(unused_assignments)]
-    let mut addr_base = 0x2800_0000;
-    match hart {
-        0 => addr_base = 0x2800_0000,
-        1 => addr_base = 0x2800_4000,
-        2 => addr_base = 0x2800_8000,
-        3 => addr_base = 0x2800_c000,
-        _ => {
-            panic!("Unknown imsic set hart {} guest {} eiid {}", hart, guest, eiid);
-        }
+// Calculate how many bits are needed to represent all interrupt files.
+fn imsic_num_bits(count: u32) -> u32 {
+    let mut ret = 0;
+    while (1 << ret) < count {
+        ret += 1;
     }
+    ret
+}
+
+pub fn imsic_trigger(hart: u32, guest: u32, eiid: u32) {
+    let mut aia_guests: u32 = 3;
+    // get the value of aia-guests from environment variables
+    let arg = env!("AIA_GUESTS").to_string();
+    match arg.parse::<u32>() {
+        Ok(num) => aia_guests = num,
+        Err(e) => warn!("Failed to parse: {}", e),
+    }
+    let guest_bits = imsic_num_bits(aia_guests + 1);
+    let hart_stride = (1 << guest_bits) * IMSIC_MMIO_PAGE_SIZE as u32;
+    let addr_base = IMSIC_VS as u32 + hart * hart_stride;
     let addr = addr_base + 0x1000 * guest;
     unsafe {
         core::ptr::write_volatile(addr as *mut u32, eiid);

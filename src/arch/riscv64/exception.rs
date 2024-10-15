@@ -3,9 +3,6 @@ use alloc::string::String;
 use riscv::register::hstatus::{self, VirtualizationMode};
 use rustsbi::spec::hsm::{EID_HSM, HART_STOP};
 use spin::Once;
-/* use crate::csrr;
-use super::page_fault::read_inst_from_guest_mem;
-use riscv_decode::Instruction; */
 
 use crate::arch::{
     hypervisor_handle_ecall, ldst_guest_page_fault_handler, A0_NUM, A1_NUM, A2_NUM, A3_NUM, A4_NUM, A5_NUM, A6_NUM,
@@ -163,14 +160,7 @@ pub fn exception_rust_handler(ctx: &mut ContextFrame) {
 
     let is_intr = ((scause >> 63) & 1) == 1;
     let cause = scause & 0xfff;
-    
-    /* let raw_inst = read_inst_from_guest_mem(sepc as u64);
-    let inst: Result<Instruction, riscv_decode::DecodingError> = riscv_decode::decode(raw_inst);
-    debug!("is_intr: {:?}", is_intr);
-    debug!("cause: {:#x}", cause);
-    debug!("CSR_SEPC: {:#x}", sepc);
-    debug!("trap ins: {:#x}  {:?}", raw_inst, inst);
-    debug!("sepc instruction: 0x{:08x}", sepc); */
+
     if is_intr {
         if let Some(id) = riscv_get_pending_irqs(cause as usize) {
             interrupt_handler(id);
@@ -200,20 +190,6 @@ pub fn exception_rust_handler(ctx: &mut ContextFrame) {
                 panic!("illegal instruction: 0x{:08x}", sepc);
             }
             _ => {
-                /*                 
-                debug!("CSR_scause: {:#x}", scause);
-                let trap_value = riscv::register::htval::read();
-                debug!("CSR_HTVAL: {:#x}", trap_value);
-                let trap_ins = riscv::register::htinst::read();
-                debug!("CSR_HTINST: {:#x}", trap_ins);
-                let trap_pc = riscv::register::sepc::read();
-                debug!("CSR_SEPC: {:#x}", trap_pc);
-                let hstatus = riscv::register::hstatus::read();
-                debug!("CSR_hstatus: 0x{:x}", hstatus);
-                debug!("trap info: {} {:#x} {:#x}", scause, trap_value, trap_ins);
-                let raw_inst = read_inst_from_guest_mem(trap_pc as u64);
-                let inst = riscv_decode::decode(raw_inst);
-                debug!("trap instruction: {:#x}  {:?}", raw_inst, inst); */
                 panic!(
                     "unhandled exception: id = {}, {}\ncpu_id = {}\n{}Previous mode = {}",
                     cause,

@@ -51,6 +51,11 @@ pub fn mvm_config_init() {
                 mediated: false,
             }
         },
+        // The reason for modifying the IRQs of virtio_net and virtio_console devices: 
+        // When using the original IRQ numbers, virtual instruction exceptions were encountered. 
+        // By printing the available range of interrupt numbers obtained within QEMU, 
+        // it was found that the original IRQ numbers were not within this range. 
+        // Therefore, the IRQs were modified (The available IRQ range is: 1-11; 16-18; 32-35; 64-95).
         // hvc1
         VmEmulatedDeviceConfig {
             name: String::from("virtio_console@40001000"),
@@ -91,7 +96,7 @@ pub fn mvm_config_init() {
             mediated: false,
         }
     ];
-    // debug!("\n {:#?}", emu_dev_config[0]); 
+
     // vm0 passthrough
     let pt_dev_config: VmPassthroughDeviceConfig = VmPassthroughDeviceConfig {
         regions: vec![
@@ -108,8 +113,6 @@ pub fn mvm_config_init() {
             PassthroughRegion { ipa: 0x10000000, pa: 0x10000000, length: 0x1000, dev_property: true },
             // RTC
             PassthroughRegion { ipa: 0x101000, pa: 0x101000, length: 0x1000, dev_property: true },
-            // IMSIC（When using multi-hart startup）
-            // PassthroughRegion { ipa: 0x28000000, pa: 0x28001000, length: 0x1000, dev_property: true },
         ],
         irqs: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,],
         streams_ids: vec![]

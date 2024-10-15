@@ -252,7 +252,6 @@ pub fn vmm_init_image(vm: &Vm) -> bool {
             // Init dtb for GVM.
             match create_fdt(config) {
                 Ok(dtb) => {
-                    // warn!("GVM fdt {:?}", dtb);
                     let mut overlay = config.fdt_overlay.clone();
                     let offset = config.device_tree_load_ipa() - vm.config().memory_region()[0].ipa_start;
                     let target = (vm.pa_start(0) + offset) as *mut u8;

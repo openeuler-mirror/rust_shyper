@@ -8,8 +8,6 @@ use crate::arch::PLICTrait;
 
 #[cfg(feature = "aia")]
 use crate::arch::APLIC;
-// #[cfg(feature = "aia")]
-// use crate::arch::APLICTrait;
 
 use crate::kernel::vm;
 use crate::kernel::IpiInnerMsg;
@@ -68,7 +66,7 @@ impl InterruptController for IntCtrl {
             unsafe { riscv::register::sie::set_sext() };
         }
         #[cfg(feature = "aia")]
-        {       
+        {
             info!("The platform does not need to init AIA here");
         }
     }

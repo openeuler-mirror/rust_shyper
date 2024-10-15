@@ -17,7 +17,7 @@ ifeq ($(ARCH), aarch64)
 else ifeq ($(ARCH), riscv64)
 	CROSS_COMPILE := riscv64-linux-gnu-
 	TEXT_START := 0x80200000
-	VM0_IMAGE_PATH := "./image/Image-aia"
+	VM0_IMAGE_PATH := "./image/Image-6.10-rc1"
 else
 $(error bad arch: $(ARCH))
 endif
@@ -38,6 +38,7 @@ $(error Bad gic version)
 endif
 
 IRQ ?= plic
+AIA_GUESTS ?= 3
 
 ifeq ($(IRQ), plic)
 FEATURES += plic
@@ -66,7 +67,7 @@ else ifeq (${ARCH}, riscv64)
 ifeq ($(IRQ), plic)
 QEMU_COMMON_OPTIONS = -machine virt
 else ifeq ($(IRQ), aia)
-QEMU_COMMON_OPTIONS = -machine virt,aia=aplic-imsic,aia-guests=1
+QEMU_COMMON_OPTIONS = -machine virt,aia=aplic-imsic,aia-guests=$(AIA_GUESTS)
 endif
 QEMU_COMMON_OPTIONS += -m 8g -smp 4 -display none -bios default \
 	-kernel ${TARGET_DIR}/${IMAGE}.bin
@@ -99,7 +100,7 @@ else ifeq ($(ARCH), riscv64)
 		  -ffreestanding
 endif
 
-export BOARD CROSS_COMPILE CFLAGS
+export BOARD CROSS_COMPILE CFLAGS AIA_GUESTS = $(AIA_GUESTS)
 
 CARGO_ACTION ?= build
 
