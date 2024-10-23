@@ -201,7 +201,7 @@ pub fn unilib_fs_append(mmio_ipa: usize) -> Result<usize, ()> {
 
 /// Finished one unilib fs operation.
 /// Currently this function is unused, cause we use a loop for polling.
-/// We may need to design a nofity mechanism in the future.
+/// We may need to design a notify mechanism in the future.
 /// ## Arguments
 /// * `vm_id`        - The target GVM's VM id of this unilib fs operation.
 pub fn unilib_fs_finished(vm_id: usize) -> Result<usize, ()> {
@@ -273,7 +273,7 @@ pub fn unilib_fs_open(path_start_ipa: usize, path_length: usize, flags: usize) -
 /// HVC_UNILIB | HVC_UNILIB_FS_CLOSE
 /// This function performs the close operation by send a HvcGuestMsg to MVM.
 /// It's a synchronous process trigger by GVM.
-/// If success, returns the return value of close opreation passed from MVM's C lib, wrapped by `Result` structure.
+/// If success, returns the return value of close operation passed from MVM's C lib, wrapped by `Result` structure.
 /// ## Arguments
 /// * `fd`  - The file descriptor of file to be closed.
 pub fn unilib_fs_close(fd: usize) -> Result<usize, ()> {
