@@ -56,7 +56,7 @@ The kernel module on NVIDIA L4T 32.6.1 (for Jestion TX2), Linux 4.9.140/5.10.160
 
 ## How to Run Guest VM
 
-When starting Rust-Shyper, the MVM will boot automatically. Logging on to the MVM (a Linux priviledged VM), take the QEMU configuration as an example, then can we configure and start the Guest VMs.
+When starting Rust-Shyper, the MVM will boot automatically. Logging on to the MVM (a Linux privileged VM), take the QEMU configuration as an example, then can we configure and start the Guest VMs.
 
 **Step 1**: Install the kernel module
 

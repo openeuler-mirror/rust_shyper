@@ -6,7 +6,7 @@ DISK = vm0.img
 ARCH ?= aarch64
 PROFILE ?= release
 BOARD ?= tx2
-# features, seperate with comma `,`
+# features, separate with comma `,`
 FEATURES ?=
 
 # Toolchain
