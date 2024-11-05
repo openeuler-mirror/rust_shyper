@@ -8,13 +8,10 @@ use sbi_spec::base::{impl_id::KVM, EID_BASE, PROBE_EXTENSION};
 use sbi_spec::hsm::{HART_START, HART_STOP};
 
 use spin::Mutex;
-use timer::timer_arch_get_counter;
+// use timer::timer_arch_get_counter;
 
 use crate::{
-    arch::{
-        power_arch_cpu_on,
-        timer,
-    },
+    arch::power_arch_cpu_on,
     kernel::{
         active_vm, current_cpu, ipi_send_msg, CpuState, IpiInnerMsg, IpiIntInjectMsg, IpiPowerMessage,
         IpiType, PowerEvent, StartReason, VcpuState, Vm, CPU_IF_LIST,
@@ -48,8 +45,7 @@ struct VTimer {}
 
 impl Timer for VTimer {
     fn set_timer(&self, stime_value: u64) {
-        info!("set_timer: {}, current_time: {}", stime_value, timer_arch_get_counter());
-
+        // info!("set_timer: {}, current_time: {}", stime_value, timer_arch_get_counter());
         // Clear the current hart clock interrupt (triggered by setting the next timer)
         riscv::register::hvip::clear_timing_interrupt();
 
@@ -371,9 +367,8 @@ pub struct ShyperSBI {
     timer: VTimer,
     ipi: VIpi,
     hsm: VHsm,
-    reset: VSrst,
     fence: VRfnc,
-    pmu: VPmu,
+    reset: VSrst,
     info: VInfo,
 }
 
@@ -388,7 +383,6 @@ impl VmHart {
                 fence: VRfnc::default(),
                 hsm: VHsm::default(),
                 reset: VSrst::default(),
-                pmu: VPmu::default(),
                 info: VInfo::default(),
             }),
         }
