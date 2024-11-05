@@ -1,4 +1,3 @@
-use sbi;
 use riscv;
 use spin::Mutex;
 
@@ -38,7 +37,7 @@ pub fn timer_arch_set(num_ms: usize) {
     let slice_lock = TIMER_SLICE.lock();
     let val = *slice_lock * num_ms;
     drop(slice_lock);
-    let _ = sbi::timer::set_timer((timer_arch_get_counter() + val) as u64);
+    let _ = sbi_rt::set_timer((timer_arch_get_counter() + val) as u64);
 }
 
 pub fn timer_arch_init() {

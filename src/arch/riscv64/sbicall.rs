@@ -1,40 +1,46 @@
-/// This file is temporarily abandoned and is currently in use sbicall_legacy.rs
-use core::{arch::asm, panic};
-
 use alloc::vec::Vec;
 /// This file provides the interface that the VM accesses to the upper-layer SBI.
 /// For some SBI operations, Hypervisor emulation is required instead of
 /// directly invoking the M-state SBI software.
-use rustsbi::{
-    spec::{
-        binary::SbiRet,
-        hsm::{HART_STATE_STARTED, HART_STATE_STOPPED},
-    },
-    Hsm, Ipi, MachineInfo, Pmu, Reset, RustSBI, Timer,
-};
-use sbi::HartMask;
+use rustsbi::{RustSBI, Console, Hsm, Ipi, Pmu, Reset, Timer, EnvInfo, HartMask};
+use sbi_spec::binary::{Physical, SbiRet};
+use sbi_spec::base::{impl_id::KVM, EID_BASE, PROBE_EXTENSION};
+use sbi_spec::hsm::{HART_START, HART_STOP};
+
 use spin::Mutex;
 use timer::timer_arch_get_counter;
 
 use crate::{
     arch::{
         power_arch_cpu_on,
-        riscv64::{cpu, vcpu},
         timer,
     },
     kernel::{
-        active_vm, current_cpu, ipi_send_msg, CpuState, IpiInnerMsg, IpiIntInjectMsg, IpiMessage, IpiPowerMessage,
+        active_vm, current_cpu, ipi_send_msg, CpuState, IpiInnerMsg, IpiIntInjectMsg, IpiPowerMessage,
         IpiType, PowerEvent, StartReason, VcpuState, Vm, CPU_IF_LIST,
     },
 };
 use crate::kernel::IpiType::IpiTIntInject;
 use crate::kernel::IpiInnerMsg::IntInjectMsg;
 
-use super::{IRQ_IPI, NUM_CORE};
+use super::IRQ_IPI;
 use crate::kernel::Scheduler;
 
-pub struct VmHart {
-    pub env: Mutex<RustSBI<VTimer, VIpi, VRfnc, VHsm, VSrst, VPmu>>,
+#[derive(Default)]
+struct  VConsole {}
+
+impl Console for VConsole {
+    fn write(&self, bytes: Physical<&[u8]>) -> SbiRet {
+        sbi_rt::console_write(bytes)
+    }
+
+    fn read(&self, bytes: Physical<&mut [u8]>) -> SbiRet {
+        sbi_rt::console_read(bytes)
+    }
+
+    fn write_byte(&self, byte: u8) -> SbiRet {
+        sbi_rt::console_write_byte(byte)
+    }
 }
 
 #[derive(Default)]
@@ -69,11 +75,11 @@ impl Timer for VTimer {
 struct VIpi {}
 
 impl Ipi for VIpi {
-    fn send_ipi(&self, hart_mask: rustsbi::HartMask) -> rustsbi::spec::binary::SbiRet {
+    fn send_ipi(&self, hart_mask: HartMask) -> SbiRet {
         info!("sbi_send_ipi: {:?}", hart_mask);
         let vm = current_cpu().active_vcpu.as_ref().unwrap().vm().unwrap();
         let vm_id = vm.id();
-        let (pcpu_ids, valid) = get_pcpu_ids(vm, hart_mask);
+        let (pcpu_ids, valid) = get_pcpu_ids(&vm, hart_mask);
 
         if !valid {
             SbiRet::invalid_param()
@@ -96,9 +102,10 @@ impl Ipi for VIpi {
 }
 
 #[inline(always)]
-fn get_pcpu_ids(vm: Vm, hart_mask: rustsbi::HartMask) -> (Vec<usize>, bool) {
+fn get_pcpu_ids(vm: &Vm, hart_mask: HartMask) -> (Vec<usize>, bool) {
     let mut ret: Vec<usize> = Vec::new();
-    let nvcpu = vm.inner().lock().vcpu_list.len();
+    // let nvcpu = vm.inner().lock().vcpu_list.len();
+    let nvcpu = vm.cpu_num();
     let mut valid = true;
 
     for i in 0..64 {
@@ -117,72 +124,56 @@ fn get_pcpu_ids(vm: Vm, hart_mask: rustsbi::HartMask) -> (Vec<usize>, bool) {
     (ret, valid)
 }
 
+// Converts the vCPU-based hart mask to the hart mask of the pcpu corresponding to the vcpu of the current vm
+// If an error occurs (for example, the vcpu core number exceeds the number of Vcpus on the vm), return an empty HartMask
+#[inline(always)]
+fn vcpu_hart_mask_to_pcpu_mask(hart_mask: HartMask) -> HartMask {
+    let (pcpus, valid) = get_pcpu_ids(&active_vm().unwrap(), hart_mask.clone());
+    if valid {
+        let mut mask: usize = 0;
+        for pcpu in pcpus {
+            mask |= 1 << pcpu;
+        }
+        HartMask::from_mask_base(mask, 0)
+    } else {
+        // no core selected
+        warn!(
+            "vcpu_hart_mask_to_pcpu_mask: no core selected since invalid hart_mask: {:?}!",
+            hart_mask
+        );
+        HartMask::from_mask_base(0,0)
+    }
+}
+
 #[derive(Default)]
 struct VRfnc {}
 
-#[inline(always)]
-fn rustsbi_hart_mask_to_sbi(hart_mask: rustsbi::HartMask) -> sbi::HartMask {
-    let mut base: usize = 0;
-    for i in 0..64 {
-        if hart_mask.has_bit(i) {
-            base = i;
-            break;
-        }
-    }
-
-    let mask = sbi::HartMask::new(base);
-    for i in 0..64 {
-        if hart_mask.has_bit(i) {
-            mask.with(i);
-        }
-    }
-
-    mask
-}
 
 impl rustsbi::Fence for VRfnc {
-    fn remote_fence_i(&self, hart_mask: rustsbi::HartMask) -> rustsbi::spec::binary::SbiRet {
-        sbi::rfence::remote_fence_i(rustsbi_hart_mask_to_sbi(hart_mask)).map_or_else(
-            |err| SbiRet {
-                error: (-(err as isize)) as usize,
-                value: 0,
-            },
-            |x| SbiRet { error: 0, value: 0 },
-        )
+    fn remote_fence_i(&self, hart_mask: HartMask) -> SbiRet {
+        sbi_rt::remote_fence_i(vcpu_hart_mask_to_pcpu_mask(hart_mask))
     }
 
     fn remote_sfence_vma(
         &self,
-        hart_mask: rustsbi::HartMask,
+        hart_mask: HartMask,
         start_addr: usize,
         size: usize,
-    ) -> rustsbi::spec::binary::SbiRet {
-        let sbi_mask = rustsbi_hart_mask_to_sbi(hart_mask);
+    ) -> SbiRet {
+        let sbi_mask = vcpu_hart_mask_to_pcpu_mask(hart_mask);
         // On harts specified by hart_mask，execute hfence.vvma(vmid, start_addr, size) （vmid is from current cpu's hgatp）
-        sbi::rfence::remote_hfence_vvma(sbi_mask, start_addr, size).map_or_else(
-            |err| SbiRet {
-                error: (-(err as isize)) as usize,
-                value: 0,
-            },
-            |x| SbiRet { error: 0, value: 0 },
-        )
+        sbi_rt::remote_hfence_vvma(sbi_mask, start_addr, size)
     }
 
     fn remote_sfence_vma_asid(
         &self,
-        hart_mask: rustsbi::HartMask,
+        hart_mask: HartMask,
         start_addr: usize,
         size: usize,
         asid: usize,
-    ) -> rustsbi::spec::binary::SbiRet {
-        let sbi_mask = rustsbi_hart_mask_to_sbi(hart_mask);
-        sbi::rfence::remote_hfence_vvma_asid(sbi_mask, start_addr, size, asid).map_or_else(
-            |err| SbiRet {
-                error: (-(err as isize)) as usize,
-                value: 0,
-            },
-            |x| SbiRet { error: 0, value: 0 },
-        )
+    ) -> SbiRet {
+        let sbi_mask = vcpu_hart_mask_to_pcpu_mask(hart_mask);
+        sbi_rt::remote_hfence_vvma_asid(sbi_mask, start_addr, size, asid)
     }
 }
 
@@ -193,7 +184,9 @@ impl Hsm for VHsm {
     // TODO: needs to handle the cpu hart stop restart. This is not a real stop,
     // but into the sleep state, need to call PsciIpiCpuOn
     // similar to psci guest cpu on this function (in fact, it is also copied from the aarch64 function)
-    fn hart_start(&self, hartid: usize, start_addr: usize, opaque: usize) -> rustsbi::spec::binary::SbiRet {
+    fn hart_start(&self, hartid: usize, start_addr: usize, opaque: usize) -> SbiRet {
+        info!("hart_start: {}, {:08x}, {}", hartid, start_addr, opaque);
+
         let vm = active_vm().unwrap();
         let physical_linear_id = vm.vcpuid_to_pcpuid(hartid);
 
@@ -203,8 +196,6 @@ impl Hsm for VHsm {
         }
 
         let cpu_idx = physical_linear_id.unwrap();
-
-        debug!("[hart_start] {}, {}", hartid, start_addr);
 
         // Get physical cpu's current status
         let state = CPU_IF_LIST.lock().get(cpu_idx).unwrap().state_for_start;
@@ -260,7 +251,7 @@ impl Hsm for VHsm {
         }
     }
 
-    fn hart_stop(&self) -> rustsbi::spec::binary::SbiRet {
+    fn hart_stop(&self) -> SbiRet {
         // Note: copy from aarch64 code
         // save the vcpu context for resume
         current_cpu().active_vcpu.clone().unwrap().reset_context();
@@ -275,18 +266,18 @@ impl Hsm for VHsm {
         SbiRet::success(0)
     }
 
-    fn hart_get_status(&self, hartid: usize) -> rustsbi::spec::binary::SbiRet {
+    fn hart_get_status(&self, hartid: usize) -> SbiRet {
         let vm = active_vm().unwrap();
         let vcpu_ = vm.vcpu(hartid);
         if let Some(vcpu) = vcpu_ {
             let state = vcpu.state();
             match state {
                 // Both the running state and the ready state are HART_STATE_STARTED
-                VcpuState::Running => SbiRet::success(HART_STATE_STARTED),
-                VcpuState::Ready => SbiRet::success(HART_STATE_STARTED),
+                VcpuState::Running => SbiRet::success(HART_START),
+                VcpuState::Ready => SbiRet::success(HART_START),
                 // The inactive state and the sleep state (which is no longer functioning) are both HART_STATE_STOPPED
-                VcpuState::Invalid => SbiRet::success(HART_STATE_STOPPED),
-                VcpuState::Sleep => SbiRet::success(HART_STATE_STOPPED),
+                VcpuState::Invalid => SbiRet::success(HART_STOP),
+                VcpuState::Sleep => SbiRet::success(HART_STOP),
             }
         } else {
             SbiRet::invalid_param()
@@ -297,8 +288,9 @@ impl Hsm for VHsm {
 #[derive(Default)]
 struct VSrst {}
 
+#[allow(unused_variables)]
 impl Reset for VSrst {
-    fn system_reset(&self, reset_type: u32, reset_reason: u32) -> rustsbi::spec::binary::SbiRet {
+    fn system_reset(&self, reset_type: u32, reset_reason: u32) -> SbiRet {
         todo!()
     }
 }
@@ -306,12 +298,13 @@ impl Reset for VSrst {
 #[derive(Default)]
 struct VPmu {}
 
+#[allow(unused_variables)]
 impl Pmu for VPmu {
     fn num_counters(&self) -> usize {
         todo!()
     }
 
-    fn counter_get_info(&self, counter_idx: usize) -> rustsbi::spec::binary::SbiRet {
+    fn counter_get_info(&self, counter_idx: usize) -> SbiRet {
         todo!()
     }
 
@@ -322,7 +315,7 @@ impl Pmu for VPmu {
         config_flags: usize,
         event_idx: usize,
         event_data: u64,
-    ) -> rustsbi::spec::binary::SbiRet {
+    ) -> SbiRet {
         todo!()
     }
 
@@ -332,7 +325,7 @@ impl Pmu for VPmu {
         counter_idx_mask: usize,
         start_flags: usize,
         initial_value: u64,
-    ) -> rustsbi::spec::binary::SbiRet {
+    ) -> SbiRet {
         todo!()
     }
 
@@ -341,39 +334,99 @@ impl Pmu for VPmu {
         counter_idx_base: usize,
         counter_idx_mask: usize,
         stop_flags: usize,
-    ) -> rustsbi::spec::binary::SbiRet {
+    ) -> SbiRet {
         todo!()
     }
 
-    fn counter_fw_read(&self, counter_idx: usize) -> rustsbi::spec::binary::SbiRet {
+    fn counter_fw_read(&self, counter_idx: usize) -> SbiRet {
         todo!()
     }
 }
 
-// The mutual exclusion of SBICALL is maintained by the **underlying function**, and the Hypervisor does not hold the lock
+#[derive(Default)]
+struct VInfo {}
+
+impl EnvInfo for VInfo {
+    fn mvendorid(&self) -> usize {
+        0x0
+    }
+
+    fn marchid(&self) -> usize {
+        0x0
+    }
+
+    fn mimpid(&self) -> usize {
+        KVM
+    }
+}
+
+
+pub struct VmHart {
+    pub env: Mutex<ShyperSBI>,
+}
+
+#[derive(RustSBI, Default)]
+pub struct ShyperSBI {
+    console: VConsole,
+    timer: VTimer,
+    ipi: VIpi,
+    hsm: VHsm,
+    reset: VSrst,
+    fence: VRfnc,
+    pmu: VPmu,
+    info: VInfo,
+}
+
+
 impl VmHart {
     pub fn new() -> Self {
-        let info = MachineInfo {
-            mvendorid: 0,
-            marchid: 0,
-            mimpid: 0,
-        };
         VmHart {
-            env: Mutex::new(RustSBI::with_machine_info(
-                VTimer::default(),
-                VIpi::default(),
-                VRfnc::default(),
-                VHsm::default(),
-                VSrst::default(),
-                VPmu::default(),
-                info,
-            )),
+            env: Mutex::new(ShyperSBI{
+                console: VConsole::default(),
+                timer: VTimer::default(),
+                ipi: VIpi::default(),
+                fence: VRfnc::default(),
+                hsm: VHsm::default(),
+                reset: VSrst::default(),
+                pmu: VPmu::default(),
+                info: VInfo::default(),
+            }),
         }
     }
 
     /// ecall dispatch function
     #[inline(always)]
+    #[allow(unused_mut)]
     pub fn handle_ecall(&self, extension: usize, function: usize, param: [usize; 6]) -> SbiRet {
-        self.env.lock().handle_ecall(extension, function, param)
+        use sbi_spec::legacy::{LEGACY_CONSOLE_GETCHAR, LEGACY_CONSOLE_PUTCHAR};
+        match extension {
+            EID_BASE => {
+                match function {
+                    PROBE_EXTENSION => {
+                        if matches!(param[0], LEGACY_CONSOLE_GETCHAR | LEGACY_CONSOLE_PUTCHAR) {
+                            SbiRet::success(1)
+                        } else {
+                            self.env.lock().handle_ecall(extension, function, param)
+                        }
+                    }
+                    _ => { self.env.lock().handle_ecall(extension, function, param) }
+                }
+            }
+            LEGACY_CONSOLE_GETCHAR => {
+                let mut ch: u8 = 0;
+                let byte = Physical::new(1, 0, &ch as *const u8 as usize);
+                sbi_rt::console_read(byte);
+                let mut sbi_ret = SbiRet::success(0);
+                sbi_ret.error = ch as usize;
+                sbi_ret
+            }
+            LEGACY_CONSOLE_PUTCHAR => {
+                sbi_rt::console_write_byte(param[0] as u8)
+            }
+            _ => {
+                self.env.lock().handle_ecall(extension,function, param)
+            }
+
+        }
     }
 }

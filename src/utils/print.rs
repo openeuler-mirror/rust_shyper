@@ -21,7 +21,7 @@ impl Write for Writer {
             #[cfg(target_arch = "aarch64")]
             crate::driver::putc(b);
             #[cfg(target_arch = "riscv64")]
-            sbi::legacy::console_putchar(b);
+            sbi_rt::console_write_byte(b);
         }
         Ok(())
     }

@@ -1,4 +1,4 @@
-use sbi::HartMask;
+use sbi_spec::binary::HartMask;
 use crate::arch::psci_vcpu_on;
 use crate::arch::InterruptController;
 #[cfg(feature = "plic")]
@@ -146,7 +146,7 @@ impl InterruptController for IntCtrl {
     #[allow(unused_variables)]
     fn ipi_send(cpu_id: usize, ipi_id: usize) {
         // TODO: can't specify ipi_id
-        let _ = sbi::ipi::send_ipi(HartMask::from(cpu_id));
+        sbi_rt::send_ipi(HartMask::from_mask_base(1, cpu_id));
     }
 
     fn vm_inject(vm: &crate::kernel::Vm, vcpu: &crate::kernel::Vcpu, int_id: usize) {

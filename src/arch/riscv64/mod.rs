@@ -15,10 +15,7 @@ mod imsic;
 mod plic;
 pub mod power;
 pub mod regs;
-#[cfg(not(feature = "sbi_legacy"))]
 mod sbicall;
-#[cfg(feature = "sbi_legacy")]
-mod sbicall_legacy;
 mod smmu;
 mod start;
 pub mod timer;
@@ -42,10 +39,7 @@ pub use aplic::*;
 #[cfg(feature = "aia")]
 pub use imsic::*;
 pub use regs::*;
-#[cfg(not(feature = "sbi_legacy"))]
 pub use sbicall::*;
-#[cfg(feature = "sbi_legacy")]
-pub use sbicall_legacy::*;
 pub use start::*;
 pub use timer::*;
 pub use tlb::*;

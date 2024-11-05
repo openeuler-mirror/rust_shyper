@@ -260,7 +260,7 @@ pub fn arch_boot_secondary_cores(dtb: &mut fdt::myctypes::c_void) {
         if (BOOTED_CORES.load(SeqCst) & (1 << i)) != 0 {
             continue;
         }
-        let result = sbi::hsm::hart_start(i, _secondary_start as usize, dtb as *mut _ as usize);
+        let result = sbi_rt::hart_start(i, _secondary_start as usize, dtb as *mut _ as usize).into_result();
         if let Err(err) = result {
             println!("An error happens when booting core {}: {:?}", i, err);
         }

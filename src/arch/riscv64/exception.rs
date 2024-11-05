@@ -5,16 +5,13 @@ use rustsbi::spec::hsm::{EID_HSM, HART_STOP};
 use spin::Once;
 
 use crate::arch::{
-    hypervisor_handle_ecall, ldst_guest_page_fault_handler, A0_NUM, A1_NUM, A2_NUM, A3_NUM, A4_NUM, A5_NUM, A6_NUM,
+    VmHart, ldst_guest_page_fault_handler, A0_NUM, A1_NUM, A2_NUM, A3_NUM, A4_NUM, A5_NUM, A6_NUM,
     A7_NUM,
 };
 use crate::kernel::{current_cpu, hvc_guest_handler, interrupt_handler};
 use super::interface::ContextFrame;
-use super::{init_ecall_handler, riscv_get_pending_irqs};
+use super::riscv_get_pending_irqs;
 use riscv::register::{sstatus, vsstatus};
-
-#[cfg(not(feature = "sbi_legacy"))]
-use super::VmHart;
 
 pub const INTR_CAUSE: [&str; 16] = [
     "Reserved",
@@ -68,9 +65,7 @@ const STORE_PAGE_FAULT: usize = 15;
 
 const ECALL_FROM_VS: usize = 10;
 // spin::Once<Mutex<SmmuV2>> = spin::Once::new();
-#[cfg(feature = "sbi_legacy")]
-static SBI_VM_HART: Once = Once::new();
-#[cfg(not(feature = "sbi_legacy"))]
+
 static SBI_VM_HART: Once<VmHart> = Once::new();
 
 fn ecall_handler(ctx: &mut ContextFrame) {
@@ -103,18 +98,7 @@ fn ecall_handler(ctx: &mut ContextFrame) {
         return;
     }
 
-    #[cfg(not(feature = "sbi_legacy"))]
-    {
-        ret =
-            SBI_VM_HART
-                .call_once(|| VmHart::new())
-                .handle_ecall(eid as usize, fid as usize, [x0, x1, x2, x3, x4, x5]);
-    }
-    #[cfg(feature = "sbi_legacy")]
-    {
-        SBI_VM_HART.call_once(init_ecall_handler);
-        ret = hypervisor_handle_ecall(eid as usize, fid as usize, [x0, x1, x2, x3, x4, x5]);
-    }
+    ret = SBI_VM_HART.call_once(|| VmHart::new()).handle_ecall(eid as usize, fid as usize, [x0, x1, x2, x3, x4, x5]);
 
     if eid == EID_HSM as u64 && fid == HART_STOP as u64 {
         // hart_stop，no need to move elr
