@@ -490,6 +490,7 @@ pub fn config_vm_info(vm_cfg: VmConfigEntry, vm_id: u64, fd: i32) -> Result<(), 
             irq_list_addr: dtb_device.irq_list.as_ptr() as *const u64 as u64,
             irq_list_length: dtb_device.irq_list.len() as u64,
             addr_region_ipa: dtb_device.addr_region_ipa,
+            addr_region_length: dtb_device.addr_region_length,
         };
         ioctl_send_config(fd, fd_event, &dtb_cfg_arg as *const _ as *const c_void)
             .map_err(|_| String::from("failed to send vm_dtb_device_config_arg"))?;

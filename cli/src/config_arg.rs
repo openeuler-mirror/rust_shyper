@@ -88,6 +88,7 @@ pub struct VmAddDtbDeviceConfigArg {
     pub irq_list_addr: u64,
     pub irq_list_length: u64,
     pub addr_region_ipa: u64,
+    pub addr_region_length: u64,
 }
 
 #[repr(C)]
