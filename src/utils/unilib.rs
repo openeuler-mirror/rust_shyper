@@ -34,13 +34,13 @@ pub struct UnilibFSCfg {
     name: [u8; 32],
     /// The "client" VM who owns this `UnilibFSCfg`, currently it should be our Unishyper.
     vmid: usize,
-    /// Size of FS opration buffer, it's provided by the MVM with HUGE_TLB enabled.
+    /// Size of FS operation buffer, it's provided by the MVM with HUGE_TLB enabled.
     cache_size: usize,
-    /// Virtual address of FS opration buffer, it's provided by the MVM with HUGE_TLB enabled.
+    /// Virtual address of FS operation buffer, it's provided by the MVM with HUGE_TLB enabled.
     buf_va: usize,
-    /// Intermediate physical address of FS opration buffer, it's provided by the MVM with HUGE_TLB enabled.
+    /// Intermediate physical address of FS operation buffer, it's provided by the MVM with HUGE_TLB enabled.
     buf_ipa: usize,
-    /// Acutal physical address of FS opration buffer, it's set by the hypervisor during `unilib_fs_append` process.
+    /// Acutal physical address of FS operation buffer, it's set by the hypervisor during `unilib_fs_append` process.
     buf_pa: usize,
 }
 
