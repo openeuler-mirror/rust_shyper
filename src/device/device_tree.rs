@@ -133,7 +133,7 @@ pub unsafe fn init_vm0_dtb(dtb: *mut fdt::myctypes::c_void) -> Result<()> {
         use crate::arch::PAGE_SIZE;
         let pi_fdt = PI4_DTB_ADDR as *mut fdt::myctypes::c_void;
         let len = round_up(fdt_size(pi_fdt) as usize, PAGE_SIZE) + PAGE_SIZE;
-        info!("fdt orignal size {}", len);
+        info!("fdt original size {}", len);
         let slice = core::slice::from_raw_parts(pi_fdt as *const u8, len as usize);
         SYSTEM_FDT.call_once(|| slice.to_vec());
     }
