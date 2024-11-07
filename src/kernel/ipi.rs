@@ -157,7 +157,7 @@ pub struct IpiMessage {
 
 const IPI_HANDLER_MAX: usize = 16;
 
-/// ipi handler entry, scanning the received ipi list and call the corresponding handler
+/// ipi handler entry, scanning the received ipi list and call the coresponding handler
 pub fn ipi_irq_handler() {
     let cpu_id = current_cpu().id;
     let mut cpu_if_list = CPU_IF_LIST.lock();
