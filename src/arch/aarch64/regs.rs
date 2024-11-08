@@ -41,7 +41,7 @@ macro_rules! mrs {
         {
             let r;
             unsafe {
-                // TODO: If use 'nomem' option, the system will staff may beacuse of no assign type here
+                // TODO: If use 'nomem' option, the system will staff may because of no assign type here
                 core::arch::asm!(concat!("mrs {0}, ", stringify!($reg)), out(reg) r, options(pure,readonly, nostack));
             }
             r
