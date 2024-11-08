@@ -11,10 +11,9 @@ use spin::Mutex;
 // use timer::timer_arch_get_counter;
 
 use crate::{
-    arch::power_arch_cpu_on,
     kernel::{
-        active_vm, current_cpu, ipi_send_msg, CpuState, IpiInnerMsg, IpiIntInjectMsg, IpiPowerMessage,
-        IpiType, PowerEvent, StartReason, VcpuState, Vm, CPU_IF_LIST,
+        active_vm, current_cpu, ipi_send_msg, IpiInnerMsg, IpiIntInjectMsg, IpiPowerMessage, IpiType, PowerEvent,
+        VcpuState, Vm,
     },
 };
 use crate::kernel::IpiType::IpiTIntInject;
@@ -24,7 +23,7 @@ use super::IRQ_IPI;
 use crate::kernel::Scheduler;
 
 #[derive(Default)]
-struct  VConsole {}
+struct VConsole {}
 
 impl Console for VConsole {
     fn write(&self, bytes: Physical<&[u8]>) -> SbiRet {
@@ -137,37 +136,25 @@ fn vcpu_hart_mask_to_pcpu_mask(hart_mask: HartMask) -> HartMask {
             "vcpu_hart_mask_to_pcpu_mask: no core selected since invalid hart_mask: {:?}!",
             hart_mask
         );
-        HartMask::from_mask_base(0,0)
+        HartMask::from_mask_base(0, 0)
     }
 }
 
 #[derive(Default)]
 struct VRfnc {}
 
-
 impl rustsbi::Fence for VRfnc {
     fn remote_fence_i(&self, hart_mask: HartMask) -> SbiRet {
         sbi_rt::remote_fence_i(vcpu_hart_mask_to_pcpu_mask(hart_mask))
     }
 
-    fn remote_sfence_vma(
-        &self,
-        hart_mask: HartMask,
-        start_addr: usize,
-        size: usize,
-    ) -> SbiRet {
+    fn remote_sfence_vma(&self, hart_mask: HartMask, start_addr: usize, size: usize) -> SbiRet {
         let sbi_mask = vcpu_hart_mask_to_pcpu_mask(hart_mask);
         // On harts specified by hart_mask，execute hfence.vvma(vmid, start_addr, size) （vmid is from current cpu's hgatp）
         sbi_rt::remote_hfence_vvma(sbi_mask, start_addr, size)
     }
 
-    fn remote_sfence_vma_asid(
-        &self,
-        hart_mask: HartMask,
-        start_addr: usize,
-        size: usize,
-        asid: usize,
-    ) -> SbiRet {
+    fn remote_sfence_vma_asid(&self, hart_mask: HartMask, start_addr: usize, size: usize, asid: usize) -> SbiRet {
         let sbi_mask = vcpu_hart_mask_to_pcpu_mask(hart_mask);
         sbi_rt::remote_hfence_vvma_asid(sbi_mask, start_addr, size, asid)
     }
@@ -287,12 +274,7 @@ impl Pmu for VPmu {
         todo!()
     }
 
-    fn counter_stop(
-        &self,
-        counter_idx_base: usize,
-        counter_idx_mask: usize,
-        stop_flags: usize,
-    ) -> SbiRet {
+    fn counter_stop(&self, counter_idx_base: usize, counter_idx_mask: usize, stop_flags: usize) -> SbiRet {
         todo!()
     }
 
@@ -318,7 +300,6 @@ impl EnvInfo for VInfo {
     }
 }
 
-
 pub struct VmHart {
     pub env: Mutex<ShyperSBI>,
 }
@@ -334,11 +315,10 @@ pub struct ShyperSBI {
     info: VInfo,
 }
 
-
 impl VmHart {
     pub fn new() -> Self {
         VmHart {
-            env: Mutex::new(ShyperSBI{
+            env: Mutex::new(ShyperSBI {
                 console: VConsole::default(),
                 timer: VTimer::default(),
                 ipi: VIpi::default(),
@@ -356,33 +336,33 @@ impl VmHart {
     pub fn handle_ecall(&self, extension: usize, function: usize, param: [usize; 6]) -> SbiRet {
         use sbi_spec::legacy::{LEGACY_CONSOLE_GETCHAR, LEGACY_CONSOLE_PUTCHAR};
         match extension {
-            EID_BASE => {
-                match function {
-                    PROBE_EXTENSION => {
-                        if matches!(param[0], LEGACY_CONSOLE_GETCHAR | LEGACY_CONSOLE_PUTCHAR) {
-                            SbiRet::success(1)
-                        } else {
-                            self.env.lock().handle_ecall(extension, function, param)
-                        }
+            EID_BASE => match function {
+                PROBE_EXTENSION => {
+                    if matches!(param[0], LEGACY_CONSOLE_GETCHAR | LEGACY_CONSOLE_PUTCHAR) {
+                        SbiRet::success(1)
+                    } else {
+                        self.env.lock().handle_ecall(extension, function, param)
                     }
-                    _ => { self.env.lock().handle_ecall(extension, function, param) }
                 }
-            }
+                _ => self.env.lock().handle_ecall(extension, function, param),
+            },
             LEGACY_CONSOLE_GETCHAR => {
                 let mut ch: u8 = 0;
-                let byte = Physical::new(1, 0, &ch as *const u8 as usize);
+                let byte = Physical::new(1, &ch as *const u8 as usize, 0);
                 sbi_rt::console_read(byte);
-                let mut sbi_ret = SbiRet::success(0);
-                sbi_ret.error = ch as usize;
-                sbi_ret
+                SbiRet {
+                    error: ch as usize,
+                    value: param[1],
+                }
             }
             LEGACY_CONSOLE_PUTCHAR => {
-                sbi_rt::console_write_byte(param[0] as u8)
+                sbi_rt::console_write_byte(param[0] as u8);
+                SbiRet {
+                    error: 0,
+                    value: param[1],
+                }
             }
-            _ => {
-                self.env.lock().handle_ecall(extension,function, param)
-            }
-
+            _ => self.env.lock().handle_ecall(extension, function, param),
         }
     }
 }

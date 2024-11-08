@@ -4,10 +4,7 @@ use riscv::register::hstatus::{self, VirtualizationMode};
 use rustsbi::spec::hsm::{EID_HSM, HART_STOP};
 use spin::Once;
 
-use crate::arch::{
-    VmHart, ldst_guest_page_fault_handler, A0_NUM, A1_NUM, A2_NUM, A3_NUM, A4_NUM, A5_NUM, A6_NUM,
-    A7_NUM,
-};
+use crate::arch::{VmHart, ldst_guest_page_fault_handler, A0_NUM, A1_NUM, A2_NUM, A3_NUM, A4_NUM, A5_NUM, A6_NUM, A7_NUM};
 use crate::kernel::{current_cpu, hvc_guest_handler, interrupt_handler};
 use super::interface::ContextFrame;
 use super::riscv_get_pending_irqs;
@@ -98,7 +95,9 @@ fn ecall_handler(ctx: &mut ContextFrame) {
         return;
     }
 
-    ret = SBI_VM_HART.call_once(|| VmHart::new()).handle_ecall(eid as usize, fid as usize, [x0, x1, x2, x3, x4, x5]);
+    ret = SBI_VM_HART
+        .call_once(|| VmHart::new())
+        .handle_ecall(eid as usize, fid as usize, [x0, x1, x2, x3, x4, x5]);
 
     if eid == EID_HSM as u64 && fid == HART_STOP as u64 {
         // hart_stop，no need to move elr

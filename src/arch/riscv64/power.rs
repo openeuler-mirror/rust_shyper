@@ -3,7 +3,7 @@ use crate::{
     kernel::{current_cpu, vcpu_set_vgein, CpuState, Scheduler, Vcpu, Vm},
 };
 use riscv::register::hstatus;
-use sbi_rt::{hart_start, hart_stop, system_reset, ColdReboot, NoReason,  Shutdown};
+use sbi_rt::{hart_start, hart_stop, system_reset, ColdReboot, NoReason, Shutdown};
 
 use super::{A0_NUM, A1_NUM};
 
