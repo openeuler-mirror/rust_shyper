@@ -72,7 +72,7 @@ struct VIpi {}
 
 impl Ipi for VIpi {
     fn send_ipi(&self, hart_mask: HartMask) -> SbiRet {
-        info!("sbi_send_ipi: {:?}", hart_mask);
+        // info!("sbi_send_ipi: {:?}", hart_mask);
         let vm = current_cpu().active_vcpu.as_ref().unwrap().vm().unwrap();
         let vm_id = vm.id();
         let (pcpu_ids, valid) = get_pcpu_ids(&vm, hart_mask);
@@ -183,68 +183,30 @@ impl Hsm for VHsm {
     fn hart_start(&self, hartid: usize, start_addr: usize, opaque: usize) -> SbiRet {
         info!("hart_start: {}, {:08x}, {}", hartid, start_addr, opaque);
 
+        let vcpu_id = hartid;
         let vm = active_vm().unwrap();
-        let physical_linear_id = vm.vcpuid_to_pcpuid(hartid);
+        let physical_linear_id = vm.vcpuid_to_pcpuid(vcpu_id);
 
-        if hartid > vm.cpu_num() || physical_linear_id.is_err() {
-            warn!("hart_start: invalid hartid {}", hartid);
+        if vcpu_id >= vm.cpu_num() || physical_linear_id.is_err() {
+            warn!("hart_start: target vcpu {} not exist", vcpu_id);
             return SbiRet::invalid_param();
         }
 
-        let cpu_idx = physical_linear_id.unwrap();
+        let m = IpiPowerMessage {
+            src: vm.id(),
+            vcpuid: 0,
+            event: PowerEvent::PsciIpiCpuOn,
+            entry: start_addr,
+            context: opaque,
+        };
 
-        // Get physical cpu's current status
-        let state = CPU_IF_LIST.lock().get(cpu_idx).unwrap().state_for_start;
-
-        let mut r = 0;
-        if state == CpuState::CpuInv {
-            // If a pcpu is in the closed state, schedule a vcpu to start the pcpu
-            let mut cpu_if_list = CPU_IF_LIST.lock();
-            if let Some(cpu_if) = cpu_if_list.get_mut(cpu_idx) {
-                cpu_if.ctx = opaque as u64;
-                cpu_if.entry = start_addr as u64;
-                cpu_if.vm_id = vm.id();
-                cpu_if.state_for_start = CpuState::CpuIdle;
-                cpu_if.vcpuid = hartid;
-                cpu_if.start_reason = StartReason::SecondaryCore;
-            }
-            drop(cpu_if_list);
-
-            let entry_point = crate::arch::_secondary_start as usize;
-
-            // SAFETY:
-            // It attempts to power on the CPU specified by the cpu_idx parameter.
-            // The entry is the address of function _secondary_start.
-            // The ctx here is the cpu_idx.
-            unsafe {
-                r = power_arch_cpu_on(hartid, entry_point, cpu_idx);
-            }
-            debug!(
-                "start to power_arch_cpu_on! hartid={:X}, entry_point={:X}",
-                hartid, entry_point
-            );
-        } else {
-            // Pass a message so that the corresponding core is started
-            // Predetermined assumption: The corresponding core has been started (non-secondary start)
-            let m = IpiPowerMessage {
-                src: vm.id(),
-                vcpuid: hartid,
-                event: PowerEvent::PsciIpiVcpuAssignAndCpuOn,
-                entry: start_addr,
-                context: opaque,
-            };
-
-            if !ipi_send_msg(physical_linear_id.unwrap(), IpiType::IpiTPower, IpiInnerMsg::Power(m)) {
-                warn!("psci_guest_cpu_on: fail to send msg");
-                return SbiRet::failed();
-            }
+        // Receiver and handler are in psci_ipi_handler function of `interrupt.rs`
+        if !ipi_send_msg(physical_linear_id.unwrap(), IpiType::IpiTPower, IpiInnerMsg::Power(m)) {
+            warn!("psci_guest_cpu_on: fail to send msg");
+            return SbiRet::failed();
         }
 
-        if r == 0 {
-            SbiRet::success(0)
-        } else {
-            SbiRet::failed()
-        }
+        SbiRet::success(0)
     }
 
     fn hart_stop(&self) -> SbiRet {
