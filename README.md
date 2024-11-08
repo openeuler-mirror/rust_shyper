@@ -6,7 +6,7 @@ A Reliable Embedded Hypervisor Supporting VM Migration and Hypervisor Live-Updat
 
 ## Introduction
 
-**Rust-Shyper** is an embedded type-1 hypervisor built with Rust, which has both high performance and high reliability. Designed for embedded platform, Rust-Shyper provides a small TCB and ensures isolation between different VMs. Furthermore, it can offer differentiated services for VMs such that the real-time performance of critical VMs are guaranteed. We have proposed low overhead VM migration and hypervisor live-update mechanisms to enable Rust-Shyper to tolerate hardware faults at runtime and dynamically fix hypervisor bugs.
+**Rust-Shyper** is an embedded type-1 hypervisor built with Rust, which has both high performance and high reliability. Designed for embedded platform, Rust-Shyper provides a small TCB and ensures isolation between different VMs. Furthermore, it can offer differentiated services for VMs such that the real-time performance of critical VMs is guaranteed. We have proposed low overhead VM migration and hypervisor live-update mechanisms to enable Rust-Shyper to tolerate hardware faults at runtime and dynamically fix hypervisor bugs.
 
 Rust-Shyper was developed by the OS research team of the School of Computer Science and Engineering(SCSE), Beihang University(BUAA) with a funding of Huawei Technologies Co.,Ltd.
 
