@@ -3,10 +3,7 @@ use crate::{
     kernel::{current_cpu, vcpu_set_vgein, CpuState, Scheduler, Vcpu, Vm},
 };
 use riscv::register::hstatus;
-use sbi::{
-    system_reset::{ResetType, ResetReason},
-    hart_state_management::{hart_stop, hart_start},
-};
+use sbi_rt::{hart_start, hart_stop, system_reset, ColdReboot, NoReason, Shutdown};
 
 use super::{A0_NUM, A1_NUM};
 
@@ -16,8 +13,8 @@ use super::{A0_NUM, A1_NUM};
 /// 2. 'entry' must be a valid address for cpu to jump.
 pub unsafe fn power_arch_cpu_on(hart_id: usize, entry: usize, ctx: usize) -> usize {
     // a1 = ctx
-    if let Err(e) = hart_start(hart_id, entry, ctx) {
-        warn!("hart {} start failed! {}", hart_id, e);
+    if let Err(e) = hart_start(hart_id, entry, ctx).into_result() {
+        warn!("hart {} start failed! {:?}", hart_id, e);
         // use non-0 number when error happens
         1
     } else {
@@ -27,10 +24,10 @@ pub unsafe fn power_arch_cpu_on(hart_id: usize, entry: usize, ctx: usize) -> usi
 
 pub fn power_arch_cpu_shutdown() {
     // TODO: Maybe just leave the cpu idle?
-    match hart_stop() {
+    match hart_stop().into_result() {
         Ok(_) => {}
         Err(e) => {
-            panic!("hart_stop failed! {}", e);
+            panic!("hart_stop failed! {:?}", e);
         }
     }
 }
@@ -39,11 +36,11 @@ pub fn power_arch_cpu_shutdown() {
 /// # Safety:
 /// The platform must support reset operation.
 pub unsafe fn power_arch_sys_reset() {
-    sbi::system_reset::system_reset(ResetType::ColdReboot, ResetReason::NoReason).unwrap();
+    system_reset(ColdReboot, NoReason).unwrap();
 }
 
 pub fn power_arch_sys_shutdown() {
-    let _ = sbi::system_reset::system_reset(ResetType::Shutdown, ResetReason::NoReason);
+    let _ = system_reset(Shutdown, NoReason);
 }
 
 #[allow(unused_variables)]

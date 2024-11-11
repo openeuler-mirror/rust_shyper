@@ -74,7 +74,6 @@ QEMU_COMMON_OPTIONS += -m 8g -smp 4 -display none -bios default \
 QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,netdev=n0
 QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 MKIMAGE_ARCH = riscv
-FEATURES += ,sbi_legacy,
 else
 $(error bad qemu arch: $(ARCH))
 endif
