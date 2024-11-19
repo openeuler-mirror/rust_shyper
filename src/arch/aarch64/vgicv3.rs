@@ -1566,7 +1566,7 @@ impl Vgic {
         let gic_lrs = gic_lrs();
         // ICH_ELRSR_EL2:locate a usable List register when the hypervisor is delivering an interrupt to a Guest OS.
         let mut lr_idx_opt = bitmap_find_nth(GICH.elrsr(), 0, gic_lrs, 1, true);
-        // flag indicates that is no pending or not true:no pending flase:have pending,the we will look up active and pend
+        // flag indicates that is no pending or not true:no pending false:have pending,the we will look up active and pend
         let mut new_flags = flag;
         while lr_idx_opt.is_some() {
             match self.vgic_highest_proi_spilled(vcpu, new_flags) {
