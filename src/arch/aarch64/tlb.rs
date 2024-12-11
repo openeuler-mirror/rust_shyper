@@ -10,7 +10,7 @@
 
 use crate::arch::{dsb, isb};
 
-// Translation Look-a-side Buffer Instrution ('TLBI') operations.
+// Translation Look-a-side Buffer Instruction ('TLBI') operations.
 // SAFETY:
 // TLBI operations can't trigger any side effects on the safety of the system.
 pub mod tlbi {

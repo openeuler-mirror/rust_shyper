@@ -356,7 +356,7 @@ impl SmmuV2 {
         /* Enable IOMMU. */
         let mut cr0 = rs0.CR0.get() as usize;
         cr0 &= (0x3 << 30) | (0x1 << 11);
-        // fault and interrupt configration
+        // fault and interrupt configuration
         cr0 |= SMMUV2_CR0_USFCFG | SMMUV2_CR0_SMCFCFG;
         cr0 |= SMMUV2_CR0_GFRE | SMMUV2_CR0_GFIE | SMMUV2_CR0_GCFGFRE | SMMUV2_CR0_GCFGFIE;
         cr0 &= !SMMUV2_CR0_CLIENTPD;
