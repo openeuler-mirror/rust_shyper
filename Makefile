@@ -40,10 +40,12 @@ endif
 IRQ ?= plic
 AIA_GUESTS ?= 3
 
-ifeq ($(IRQ), plic)
-FEATURES += plic
-else ifeq ($(IRQ), aia)
-FEATURES += aia
+ifeq ($(ARCH), riscv64)
+	ifeq ($(IRQ), plic)
+	FEATURES += plic
+	else ifeq ($(IRQ), aia)
+	FEATURES += aia
+	endif
 endif
 
 TEXT_START ?= 0x83000000
@@ -55,25 +57,26 @@ IMAGE=rust_shyper
 TARGET_DIR=target/${ARCH}/${PROFILE}
 
 ifeq (${ARCH}, aarch64)
-QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=$(GIC_VERSION)\
-	-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
-	-kernel ${TARGET_DIR}/${IMAGE}.bin
-QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=n0
-QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.25
-MKIMAGE_ARCH = arm64
+	QEMU_COMMON_OPTIONS = -machine virt,virtualization=on,gic-version=$(GIC_VERSION)\
+		-m 8g -cpu cortex-a57 -smp 4 -display none -global virtio-mmio.force-legacy=false\
+		-kernel ${TARGET_DIR}/${IMAGE}.bin
+	QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,bus=virtio-mmio-bus.24,netdev=n0
+	QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.25
+	MKIMAGE_ARCH = arm64
 else ifeq (${ARCH}, riscv64)
 # -global virtio-mmio.force-legacy=false option for disable legacy，i.e. using the latest virtio version
 
-ifeq ($(IRQ), plic)
-QEMU_COMMON_OPTIONS = -machine virt
-else ifeq ($(IRQ), aia)
-QEMU_COMMON_OPTIONS = -machine virt,aia=aplic-imsic,aia-guests=$(AIA_GUESTS)
-endif
-QEMU_COMMON_OPTIONS += -m 8g -smp 4 -display none -bios default \
-	-kernel ${TARGET_DIR}/${IMAGE}.bin
-QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,netdev=n0
-QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
-MKIMAGE_ARCH = riscv
+	ifeq ($(IRQ), plic)
+		QEMU_COMMON_OPTIONS = -machine virt
+	else ifeq ($(IRQ), aia)
+		QEMU_COMMON_OPTIONS = -machine virt,aia=aplic-imsic,aia-guests=$(AIA_GUESTS)
+	endif
+	
+	QEMU_COMMON_OPTIONS += -m 8g -smp 4 -display none -bios default \
+		-kernel ${TARGET_DIR}/${IMAGE}.bin
+	QEMU_NETWORK_OPTIONS = -netdev user,id=n0,hostfwd=tcp::5555-:22 -device virtio-net-device,netdev=n0
+	QEMU_DISK_OPTIONS = -drive file=${DISK},if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+	MKIMAGE_ARCH = riscv
 else
 $(error bad qemu arch: $(ARCH))
 endif

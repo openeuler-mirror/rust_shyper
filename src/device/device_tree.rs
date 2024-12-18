@@ -289,6 +289,7 @@ pub fn create_fdt(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     }
 }
 
+#[cfg(target_arch = "riscv64")]
 pub fn create_fdt_riscv64(config: &VmConfigEntry) -> FdtWriterResult<Vec<u8>> {
     let mut fdt = FdtWriter::new()?;
     let ncpu = config.cpu_allocated_bitmap().count_ones();
