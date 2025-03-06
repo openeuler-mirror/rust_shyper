@@ -32,7 +32,7 @@ pub const VIRTIO_BLK_F_SEG_MAX: usize = 1 << 2;
 /* BLOCK PARAMETERS*/
 pub const SECTOR_BSIZE: usize = 512;
 pub const BLOCKIF_SIZE_MAX: usize = 128 * PAGE_SIZE;
-pub const BLOCKIF_IOV_MAX: usize = 512;
+pub const BLOCKIF_IOV_MAX: usize = 254;
 
 /* BLOCK REQUEST TYPE*/
 pub const VIRTIO_BLK_T_IN: usize = 0;
