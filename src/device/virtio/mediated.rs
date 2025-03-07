@@ -235,8 +235,6 @@ pub fn mediated_ipi_handler(msg: IpiMessage) {
     if let IpiInnerMsg::MediatedMsg(mediated_msg) = msg.ipi_message {
         // generate IO request in `virtio_blk_notify_handler`
         virtio_blk_notify_handler(mediated_msg.vq, mediated_msg.blk, mediated_msg.src_vm);
-        // mark the ipi task as finish (pop it from the ipi queue)
-        finish_async_task(true);
         // invoke the executor to do IO request
         async_task_exe();
     }

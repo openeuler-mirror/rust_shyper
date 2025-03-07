@@ -401,7 +401,7 @@ pub fn async_task_exe() {
         }
         drop(ipi_list);
         drop(io_list);
-        if task.handle() || (ipi && active_vm_id() == 0) {
+        if task.handle() || ipi {
             // task finish
             finish_async_task(ipi);
         } else {
