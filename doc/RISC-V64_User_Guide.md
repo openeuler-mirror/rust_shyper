@@ -177,7 +177,7 @@ ARCH=riscv64 make run
 
 ## GVM的启动与配置
 
-GVM的启动需要依赖内核模块（`tools/shyper_riscv64.ko`）和CLI程序（由`cli/`编译得到）。
+GVM的启动需要依赖内核模块（`tools/shyper_riscv64_v6.10-rc1.ko`）和CLI程序（由`cli/`编译得到）。
 
 登录到MVM中，按照如下步骤，就可以配置并启动客户虚拟机。
 
@@ -190,7 +190,7 @@ GVM的启动需要依赖内核模块（`tools/shyper_riscv64.ko`）和CLI程序�
 **Step 1**: 安装内核模块
 
 ```shell
-insmod shyper_riscv64.ko
+insmod tools/shyper_riscv64_v6.10-rc1.ko
 ```
 
 **Step 2**: 启动shyper-cli守护进程
